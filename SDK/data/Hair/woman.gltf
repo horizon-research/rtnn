@@ -1,0 +1,93 @@
+{
+    "asset" : {
+        "version" : "2.0"
+    },
+    "scene" : 0,
+    "scenes" : [
+        {
+            "name" : "Scene",
+            "nodes" : [
+                0
+            ]
+        }
+    ],
+    "nodes" : [
+        {
+            "mesh" : 0,
+            "name" : "woman",
+            "rotation" : [
+                0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        }
+    ],
+    "meshes" : [
+        {
+            "name" : "woman",
+            "primitives" : [
+                {
+                    "attributes" : {
+                        "POSITION" : 0,
+                        "NORMAL" : 1
+                    },
+                    "indices" : 2
+                }
+            ]
+        }
+    ],
+    "accessors" : [
+        {
+            "bufferView" : 0,
+            "componentType" : 5126,
+            "count" : 31326,
+            "max" : [
+                37.4716796875,
+                48.062747955322266,
+                60.134830474853516
+            ],
+            "min" : [
+                -48.471412658691406,
+                -48.249229431152344,
+                -59.86256790161133
+            ],
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 1,
+            "componentType" : 5126,
+            "count" : 31326,
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 2,
+            "componentType" : 5123,
+            "count" : 182640,
+            "type" : "SCALAR"
+        }
+    ],
+    "bufferViews" : [
+        {
+            "buffer" : 0,
+            "byteLength" : 375912,
+            "byteOffset" : 0
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 375912,
+            "byteOffset" : 375912
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 365280,
+            "byteOffset" : 751824
+        }
+    ],
+    "buffers" : [
+        {
+            "byteLength" : 1117104,
+            "uri" : "woman.bin"
+        }
+    ]
+}
