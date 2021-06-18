@@ -61,6 +61,14 @@ typedef SbtRecord<RayGenData>     RayGenSbtRecord;
 typedef SbtRecord<MissData>       MissSbtRecord;
 typedef SbtRecord<HitGroupData>   HitGroupSbtRecord;
 
+const uint32_t OBJ_COUNT = 2;
+
+struct rsState
+{
+    OptixDeviceContext          context                   = 0;
+    OptixTraversableHandle      gas_handle                = {};
+    CUdeviceptr                 d_gas_output_buffer       = {};
+}
 
 void configureCamera( sutil::Camera& cam, const uint32_t width, const uint32_t height )
 {
@@ -88,9 +96,172 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
     << message << "\n";
 }
 
+const Sphere g_sphere1 = {
+    { 2.0f, 1.5f, -2.5f }, // center
+    1.5f                   // radius
+};
+
+const Sphere g_sphere2 = {
+    { l.0f, 1.0f, -1.5f }, // center
+    1.5f                   // radius
+};
+
+static void sphere_bound(float3 center, float radius, float result[6])
+{
+    OptixAabb *aabb = reinterpret_cast<OptixAabb*>(result);
+
+    float3 m_min = center - radius;
+    float3 m_max = center + radius;
+
+    *aabb = {
+        m_min.x, m_min.y, m_min.z,
+        m_max.x, m_max.y, m_max.z
+    };
+}
+
+static void buildGas(
+    const rsState &state,
+    const OptixAccelBuildOptions &accel_options,
+    const OptixBuildInput &build_input,
+    OptixTraversableHandle &gas_handle,
+    CUdeviceptr &d_gas_output_buffer
+    )
+{
+    OptixAccelBufferSizes gas_buffer_sizes;
+    CUdeviceptr d_temp_buffer_gas;
+
+    OPTIX_CHECK( optixAccelComputeMemoryUsage(
+        state.context,
+        &accel_options,
+        &build_input,
+        1,
+        &gas_buffer_sizes));
+
+    CUDA_CHECK( cudaMalloc(
+        reinterpret_cast<void**>( &d_temp_buffer_gas ),
+        gas_buffer_sizes.tempSizeInBytes));
+
+    // non-compacted output and size of compacted GAS
+    CUdeviceptr d_buffer_temp_output_gas_and_compacted_size;
+    size_t compactedSizeOffset = roundUp<size_t>( gas_buffer_sizes.outputSizeInBytes, 8ull );
+    CUDA_CHECK( cudaMalloc(
+                reinterpret_cast<void**>( &d_buffer_temp_output_gas_and_compacted_size ),
+                compactedSizeOffset + 8
+                ) );
+
+    OptixAccelEmitDesc emitProperty = {};
+    emitProperty.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
+    emitProperty.result = (CUdeviceptr)((char*)d_buffer_temp_output_gas_and_compacted_size + compactedSizeOffset);
+
+    OPTIX_CHECK( optixAccelBuild(
+        state.context,
+        0,
+        &accel_options,
+        &build_input,
+        1,
+        d_temp_buffer_gas,
+        gas_buffer_sizes.tempSizeInBytes,
+        d_buffer_temp_output_gas_and_compacted_size,
+        gas_buffer_sizes.outputSizeInBytes,
+        &gas_handle,
+        &emitProperty,
+        1) );
+
+    CUDA_CHECK( cudaFree( (void*)d_temp_buffer_gas ) );
+
+    size_t compacted_gas_size;
+    CUDA_CHECK( cudaMemcpy( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost ) );
+
+    if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
+    {
+        CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
+
+        // use handle as input and output
+        OPTIX_CHECK( optixAccelCompact( state.context, 0, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
+
+        CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
+    }
+    else
+    {
+        d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
+    }
+}
+
+void createGeometry( rsState &state  )
+{
+    //
+    // Build Custom Primitives
+    //
+
+    // Load AABB into device memory
+    OptixAabb   aabb[OBJ_COUNT];
+    CUdeviceptr d_aabb;
+
+    sphere_bound(
+        g_sphere1.center, g_sphere1.radius,
+        reinterpret_cast<float*>(&aabb[0]));
+    sphere_bound(
+        g_sphere2.center, g_sphere2.radius,
+        reinterpret_cast<float*>(&aabb[1]));
+
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
+        ), OBJ_COUNT * sizeof( OptixAabb ) ) );
+    CUDA_CHECK( cudaMemcpy(
+                reinterpret_cast<void*>( d_aabb ),
+                &aabb,
+                OBJ_COUNT * sizeof( OptixAabb ),
+                cudaMemcpyHostToDevice
+                ) );
+
+    // Setup AABB build input
+    uint32_t aabb_input_flags[] = {
+        /* flags for sphere 1 */
+        OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
+        /* flags for sphere 2 */
+        OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
+    };
+    /* TODO: This API cannot control flags for different ray type */
+
+    const uint32_t sbt_index[] = { 0, 1 };
+    CUdeviceptr    d_sbt_index;
+
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), sizeof(sbt_index) ) );
+    CUDA_CHECK( cudaMemcpy(
+        reinterpret_cast<void*>( d_sbt_index ),
+        sbt_index,
+        sizeof( sbt_index ),
+        cudaMemcpyHostToDevice ) );
+
+    OptixBuildInput aabb_input = {};
+    aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
+    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
+    aabb_input.customPrimitiveArray.numSbtRecords = OBJ_COUNT;
+    aabb_input.customPrimitiveArray.numPrimitives = OBJ_COUNT;
+    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = d_sbt_index;
+    aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
+    aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
+
+
+    OptixAccelBuildOptions accel_options = {
+        OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
+        OPTIX_BUILD_OPERATION_BUILD         // operation
+    };
+
+
+    buildGas(
+        state.context,
+        accel_options,
+        aabb_input,
+        state.gas_handle,
+        state.d_gas_output_buffer);
+
+    CUDA_CHECK( cudaFree( (void*)d_aabb) );
+}
 
 int main( int argc, char* argv[] )
 {
+    rsState state;
     std::string outfile;
     int         width  = 1024;
     int         height =  768;
@@ -152,83 +323,84 @@ int main( int argc, char* argv[] )
         //
         OptixTraversableHandle gas_handle;
         CUdeviceptr            d_gas_output_buffer;
-        {
-            OptixAccelBuildOptions accel_options = {};
-            accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-            accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
+        createGeometry  ( state );
+        //{
+        //    OptixAccelBuildOptions accel_options = {};
+        //    accel_options.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+        //    accel_options.operation  = OPTIX_BUILD_OPERATION_BUILD;
 
-            // AABB build input
-            OptixAabb   aabb = {-1.5f, -1.5f, -1.5f, 1.5f, 1.5f, 1.5f};
-            CUdeviceptr d_aabb_buffer;
-            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb_buffer ), sizeof( OptixAabb ) ) );
-            CUDA_CHECK( cudaMemcpy(
-                        reinterpret_cast<void*>( d_aabb_buffer ),
-                        &aabb,
-                        sizeof( OptixAabb ),
-                        cudaMemcpyHostToDevice
-                        ) );
+        //    // AABB build input
+        //    OptixAabb   aabb = {-1.5f, -1.5f, -1.5f, 1.5f, 1.5f, 1.5f};
+        //    CUdeviceptr d_aabb_buffer;
+        //    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb_buffer ), sizeof( OptixAabb ) ) );
+        //    CUDA_CHECK( cudaMemcpy(
+        //                reinterpret_cast<void*>( d_aabb_buffer ),
+        //                &aabb,
+        //                sizeof( OptixAabb ),
+        //                cudaMemcpyHostToDevice
+        //                ) );
 
-            OptixBuildInput aabb_input = {};
+        //    OptixBuildInput aabb_input = {};
 
-            aabb_input.type                               = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-            aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb_buffer;
-            aabb_input.customPrimitiveArray.numPrimitives = 1;
+        //    aabb_input.type                               = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+        //    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb_buffer;
+        //    aabb_input.customPrimitiveArray.numPrimitives = 1;
 
-            uint32_t aabb_input_flags[1]                  = {OPTIX_GEOMETRY_FLAG_NONE};
-            aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
-            aabb_input.customPrimitiveArray.numSbtRecords = 1;
+        //    uint32_t aabb_input_flags[1]                  = {OPTIX_GEOMETRY_FLAG_NONE};
+        //    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
+        //    aabb_input.customPrimitiveArray.numSbtRecords = 1;
 
-            OptixAccelBufferSizes gas_buffer_sizes;
-            OPTIX_CHECK( optixAccelComputeMemoryUsage( context, &accel_options, &aabb_input, 1, &gas_buffer_sizes ) );
-            CUdeviceptr d_temp_buffer_gas;
-            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_temp_buffer_gas ), gas_buffer_sizes.tempSizeInBytes ) );
+        //    OptixAccelBufferSizes gas_buffer_sizes;
+        //    OPTIX_CHECK( optixAccelComputeMemoryUsage( context, &accel_options, &aabb_input, 1, &gas_buffer_sizes ) );
+        //    CUdeviceptr d_temp_buffer_gas;
+        //    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_temp_buffer_gas ), gas_buffer_sizes.tempSizeInBytes ) );
 
-            // non-compacted output
-            CUdeviceptr d_buffer_temp_output_gas_and_compacted_size;
-            size_t      compactedSizeOffset = roundUp<size_t>( gas_buffer_sizes.outputSizeInBytes, 8ull );
-            CUDA_CHECK( cudaMalloc(
-                        reinterpret_cast<void**>( &d_buffer_temp_output_gas_and_compacted_size ),
-                        compactedSizeOffset + 8
-                        ) );
+        //    // non-compacted output
+        //    CUdeviceptr d_buffer_temp_output_gas_and_compacted_size;
+        //    size_t      compactedSizeOffset = roundUp<size_t>( gas_buffer_sizes.outputSizeInBytes, 8ull );
+        //    CUDA_CHECK( cudaMalloc(
+        //                reinterpret_cast<void**>( &d_buffer_temp_output_gas_and_compacted_size ),
+        //                compactedSizeOffset + 8
+        //                ) );
 
-            OptixAccelEmitDesc emitProperty = {};
-            emitProperty.type               = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
-            emitProperty.result             = ( CUdeviceptr )( (char*)d_buffer_temp_output_gas_and_compacted_size + compactedSizeOffset );
+        //    OptixAccelEmitDesc emitProperty = {};
+        //    emitProperty.type               = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
+        //    emitProperty.result             = ( CUdeviceptr )( (char*)d_buffer_temp_output_gas_and_compacted_size + compactedSizeOffset );
 
-            OPTIX_CHECK( optixAccelBuild( context,
-                                          0,                  // CUDA stream
-                                          &accel_options,
-                                          &aabb_input,
-                                          1,                  // num build inputs
-                                          d_temp_buffer_gas,
-                                          gas_buffer_sizes.tempSizeInBytes,
-                                          d_buffer_temp_output_gas_and_compacted_size,
-                                          gas_buffer_sizes.outputSizeInBytes,
-                                          &gas_handle,
-                                          &emitProperty,      // emitted property list
-                                          1                   // num emitted properties
-                                          ) );
+        //    OPTIX_CHECK( optixAccelBuild( context,
+        //                                  0,                  // CUDA stream
+        //                                  &accel_options,
+        //                                  &aabb_input,
+        //                                  1,                  // num build inputs
+        //                                  d_temp_buffer_gas,
+        //                                  gas_buffer_sizes.tempSizeInBytes,
+        //                                  d_buffer_temp_output_gas_and_compacted_size,
+        //                                  gas_buffer_sizes.outputSizeInBytes,
+        //                                  &gas_handle,
+        //                                  &emitProperty,      // emitted property list
+        //                                  1                   // num emitted properties
+        //                                  ) );
 
-            CUDA_CHECK( cudaFree( (void*)d_temp_buffer_gas ) );
-            CUDA_CHECK( cudaFree( (void*)d_aabb_buffer ) );
+        //    CUDA_CHECK( cudaFree( (void*)d_temp_buffer_gas ) );
+        //    CUDA_CHECK( cudaFree( (void*)d_aabb_buffer ) );
 
-            size_t compacted_gas_size;
-            CUDA_CHECK( cudaMemcpy( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost ) );
+        //    size_t compacted_gas_size;
+        //    CUDA_CHECK( cudaMemcpy( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost ) );
 
-            if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
-            {
-                CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
+        //    if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
+        //    {
+        //        CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
 
-                // use handle as input and output
-                OPTIX_CHECK( optixAccelCompact( context, 0, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
+        //        // use handle as input and output
+        //        OPTIX_CHECK( optixAccelCompact( context, 0, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
-                CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
-            }
-            else
-            {
-                d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
-            }
-        }
+        //        CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
+        //    }
+        //    else
+        //    {
+        //        d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
+        //    }
+        //}
 
         //
         // Create module
@@ -400,16 +572,19 @@ int main( int argc, char* argv[] )
                         cudaMemcpyHostToDevice
                         ) );
 
-            CUdeviceptr hitgroup_record;
+            HitGroupSbtRecord hg_sbt[OBJ_COUNT];
             size_t      hitgroup_record_size = sizeof( HitGroupSbtRecord );
-            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &hitgroup_record ), hitgroup_record_size ) );
-            HitGroupSbtRecord hg_sbt;
-            hg_sbt.data = { 1.5f };
-            OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt ) );
+            hg_sbt[1].data = { 1.5f };
+            hg_sbt[2].data = { 1.5f };
+            OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[1] ) );
+            OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[2] ) );
+
+            CUdeviceptr d_hitgroup_record;
+            CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_hitgroup_record ), OBJ_COUNT * hitgroup_record_size ) );
             CUDA_CHECK( cudaMemcpy(
-                        reinterpret_cast<void*>( hitgroup_record ),
-                        &hg_sbt,
-                        hitgroup_record_size,
+                        reinterpret_cast<void*>( d_hitgroup_record ),
+                        hg_sbt,
+                        OBJ_COUNT * hitgroup_record_size,
                         cudaMemcpyHostToDevice
                         ) );
 
@@ -417,7 +592,7 @@ int main( int argc, char* argv[] )
             sbt.missRecordBase              = miss_record;
             sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
             sbt.missRecordCount             = 1;
-            sbt.hitgroupRecordBase          = hitgroup_record;
+            sbt.hitgroupRecordBase          = d_hitgroup_record;
             sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
             sbt.hitgroupRecordCount         = 1;
         }
