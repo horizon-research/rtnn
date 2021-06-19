@@ -28,7 +28,7 @@
 
 #include <optix.h>
 
-#include "optixSphere.h"
+#include "optixRangeSearch.h"
 #include <cuda/helpers.h>
 
 #include <sutil/vec_math.h>
@@ -113,6 +113,7 @@ extern "C" __global__ void __raygen__rg()
             &payload_rgb );
 
     params.image[idx.y * params.image_width + idx.x] = make_color( payload_rgb );
+    params.out[idx.y * params.image_width + idx.x] = (float)idx.x;
 }
 
 
@@ -169,4 +170,7 @@ extern "C" __global__ void __closesthit__ch()
                 int_as_float( optixGetAttribute_2() )
                 );
     setPayload( normalize( optixTransformNormalFromObjectToWorldSpace( shading_normal ) ) * 0.5f + 0.5f );
+    unsigned int id = optixGetPrimitiveIndex();
+    float3 idPayload = make_float3(id, 0, 0);
+    setPayload( idPayload );
 }

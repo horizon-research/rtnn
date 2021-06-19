@@ -39,7 +39,7 @@
 #include <sutil/Exception.h>
 #include <sutil/sutil.h>
 
-#include "optixSphere.h"
+#include "optixRangeSearch.h"
 
 #include <iomanip>
 #include <iostream>
@@ -68,7 +68,7 @@ struct rsState
     OptixDeviceContext          context                   = 0;
     OptixTraversableHandle      gas_handle                = {};
     CUdeviceptr                 d_gas_output_buffer       = {};
-}
+};
 
 void configureCamera( sutil::Camera& cam, const uint32_t width, const uint32_t height )
 {
@@ -97,13 +97,13 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
 }
 
 const Sphere g_sphere1 = {
-    { 2.0f, 1.5f, -2.5f }, // center
-    1.5f                   // radius
+    { 0.0f, 0.0f, 0.0f }, // center
+    0.1f                   // radius
 };
 
 const Sphere g_sphere2 = {
-    { l.0f, 1.0f, -1.5f }, // center
-    1.5f                   // radius
+    { 0.1f, 0.1f, 0.1f }, // center
+    0.5f                   // radius
 };
 
 static void sphere_bound(float3 center, float radius, float result[6])
@@ -203,6 +203,7 @@ void createGeometry( rsState &state  )
     sphere_bound(
         g_sphere2.center, g_sphere2.radius,
         reinterpret_cast<float*>(&aabb[1]));
+    std::cerr << aabb[1].minX << " " << aabb[1].minY << " " << aabb[1].minZ << " " << aabb[1].maxX << " " << aabb[1].maxY << " " << aabb[1].maxZ << "\n";
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
         ), OBJ_COUNT * sizeof( OptixAabb ) ) );
@@ -250,7 +251,7 @@ void createGeometry( rsState &state  )
 
 
     buildGas(
-        state.context,
+        state,
         accel_options,
         aabb_input,
         state.gas_handle,
@@ -321,8 +322,9 @@ int main( int argc, char* argv[] )
         //
         // accel handling
         //
-        OptixTraversableHandle gas_handle;
-        CUdeviceptr            d_gas_output_buffer;
+        //OptixTraversableHandle gas_handle;
+        //CUdeviceptr            d_gas_output_buffer;
+        state.context = context;
         createGeometry  ( state );
         //{
         //    OptixAccelBuildOptions accel_options = {};
@@ -420,7 +422,7 @@ int main( int argc, char* argv[] )
             pipeline_compile_options.exceptionFlags        = OPTIX_EXCEPTION_FLAG_NONE;  // TODO: should be OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW;
             pipeline_compile_options.pipelineLaunchParamsVariableName = "params";
 
-            const std::string ptx = sutil::getPtxString( OPTIX_SAMPLE_NAME, OPTIX_SAMPLE_DIR, "optixSphere.cu" );
+            const std::string ptx = sutil::getPtxString( OPTIX_SAMPLE_NAME, OPTIX_SAMPLE_DIR, "optixRangeSearch.cu" );
             size_t sizeof_log = sizeof( log );
 
             OPTIX_CHECK_LOG( optixModuleCreateFromPTX(
@@ -551,6 +553,7 @@ int main( int argc, char* argv[] )
             rg_sbt.data ={};
             rg_sbt.data.cam_eye = cam.eye();
             cam.UVWFrame( rg_sbt.data.camera_u, rg_sbt.data.camera_v, rg_sbt.data.camera_w );
+            //std::cerr << rg_sbt.data.cam_eye.x << " " << rg_sbt.data.cam_eye.y << " " << rg_sbt.data.cam_eye.z << "\n";
             OPTIX_CHECK( optixSbtRecordPackHeader( raygen_prog_group, &rg_sbt ) );
             CUDA_CHECK( cudaMemcpy(
                         reinterpret_cast<void*>( raygen_record ),
@@ -574,10 +577,10 @@ int main( int argc, char* argv[] )
 
             HitGroupSbtRecord hg_sbt[OBJ_COUNT];
             size_t      hitgroup_record_size = sizeof( HitGroupSbtRecord );
-            hg_sbt[1].data = { 1.5f };
-            hg_sbt[2].data = { 1.5f };
+            OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[0] ) );
+            hg_sbt[0].data = { 0.1f };
             OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[1] ) );
-            OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[2] ) );
+            hg_sbt[1].data = { 0.5f };
 
             CUdeviceptr d_hitgroup_record;
             CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_hitgroup_record ), OBJ_COUNT * hitgroup_record_size ) );
@@ -587,17 +590,19 @@ int main( int argc, char* argv[] )
                         OBJ_COUNT * hitgroup_record_size,
                         cudaMemcpyHostToDevice
                         ) );
+            std::cerr << hitgroup_record_size << " " << OBJ_COUNT * hitgroup_record_size << std::endl;
 
             sbt.raygenRecord                = raygen_record;
             sbt.missRecordBase              = miss_record;
-            sbt.missRecordStrideInBytes     = sizeof( MissSbtRecord );
+            sbt.missRecordStrideInBytes     = static_cast<uint32_t>(miss_record_size);
             sbt.missRecordCount             = 1;
             sbt.hitgroupRecordBase          = d_hitgroup_record;
-            sbt.hitgroupRecordStrideInBytes = sizeof( HitGroupSbtRecord );
-            sbt.hitgroupRecordCount         = 1;
+            sbt.hitgroupRecordStrideInBytes = static_cast<uint32_t>(hitgroup_record_size);
+            sbt.hitgroupRecordCount         = OBJ_COUNT;
         }
 
         sutil::CUDAOutputBuffer<uchar4> output_buffer( sutil::CUDAOutputBufferType::CUDA_DEVICE, width, height );
+        sutil::CUDAOutputBuffer<float> output( sutil::CUDAOutputBufferType::CUDA_DEVICE, width, height );
 
         //
         // launch
@@ -608,11 +613,12 @@ int main( int argc, char* argv[] )
 
             Params params;
             params.image        = output_buffer.map();
+            params.out          = output.map();
             params.image_width  = width;
             params.image_height = height;
             params.origin_x     = width / 2;
             params.origin_y     = height / 2;
-            params.handle       = gas_handle;
+            params.handle       = state.gas_handle;
 
             CUdeviceptr d_param;
             CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_param ), sizeof( Params ) ) );
@@ -626,12 +632,19 @@ int main( int argc, char* argv[] )
             CUDA_SYNC_CHECK();
 
             output_buffer.unmap();
+
         }
 
         //
         // Display results
         //
         {
+            // debug results
+            output.unmap();
+            sutil::ImageBuffer dbgBuf;
+            dbgBuf.data = output.getHostPointer();
+            std::cerr << reinterpret_cast<float*>( dbgBuf.data )[10] << std::endl;
+
             sutil::ImageBuffer buffer;
             buffer.data         = output_buffer.getHostPointer();
             buffer.width        = width;
@@ -650,7 +663,7 @@ int main( int argc, char* argv[] )
             CUDA_CHECK( cudaFree( reinterpret_cast<void*>( sbt.raygenRecord       ) ) );
             CUDA_CHECK( cudaFree( reinterpret_cast<void*>( sbt.missRecordBase     ) ) );
             CUDA_CHECK( cudaFree( reinterpret_cast<void*>( sbt.hitgroupRecordBase ) ) );
-            CUDA_CHECK( cudaFree( reinterpret_cast<void*>( d_gas_output_buffer    ) ) );
+            CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
 
             OPTIX_CHECK( optixPipelineDestroy( pipeline ) );
             OPTIX_CHECK( optixProgramGroupDestroy( hitgroup_prog_group ) );
