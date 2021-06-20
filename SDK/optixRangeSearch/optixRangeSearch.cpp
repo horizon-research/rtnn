@@ -98,12 +98,12 @@ static void context_log_cb( unsigned int level, const char* tag, const char* mes
 
 const Sphere g_sphere1 = {
     { 0.0f, 0.0f, 0.0f }, // center
-    0.1f                   // radius
+    1.5f                   // radius
 };
 
 const Sphere g_sphere2 = {
-    { 0.1f, 0.1f, 0.1f }, // center
-    0.5f                   // radius
+    { 0.3f, 0.3f, 0.3f }, // center
+    1.5f                   // radius
 };
 
 static void sphere_bound(float3 center, float radius, float result[6])
@@ -578,9 +578,9 @@ int main( int argc, char* argv[] )
             HitGroupSbtRecord hg_sbt[OBJ_COUNT];
             size_t      hitgroup_record_size = sizeof( HitGroupSbtRecord );
             OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[0] ) );
-            hg_sbt[0].data = { 0.1f };
+            hg_sbt[0].data = { 1.5f };
             OPTIX_CHECK( optixSbtRecordPackHeader( hitgroup_prog_group, &hg_sbt[1] ) );
-            hg_sbt[1].data = { 0.5f };
+            hg_sbt[1].data = { 1.5f };
 
             CUdeviceptr d_hitgroup_record;
             CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_hitgroup_record ), OBJ_COUNT * hitgroup_record_size ) );

@@ -144,6 +144,38 @@ extern "C" __device__ void intersect_sphere()
 extern "C" __global__ void __intersection__sphere()
 {
     intersect_sphere();
+
+    //const Sphere* sphere   = reinterpret_cast<Sphere*>( optixGetSbtDataPointer() );
+    //const float3 orig = optixGetObjectRayOrigin();
+    //const float3 dir  = optixGetObjectRayDirection();
+
+    //const float3 center = {0.f, 0.f, 0.f};
+    //const float  radius = sphere->radius;
+    //const float3 O      = orig - center;
+    //const float  l      = 1 / length( dir );
+    //const float3 D      = dir * l;
+
+    //const float b    = dot( O, D );
+    //const float c    = dot( O, O ) - radius * radius;
+    //const float disc = b * b - c;
+    //if( disc > 0.0f )
+    //{
+    //    const float sdisc = sqrtf( disc );
+    //    const float root1 = ( -b - sdisc );
+
+    //    const float        root11        = 0.0f;
+    //    const float3       shading_normal = ( O + ( root1 + root11 ) * D ) / radius;
+    //    unsigned int p0, p1, p2;
+    //    p0 = float_as_int( shading_normal.x );
+    //    p1 = float_as_int( shading_normal.y );
+    //    p2 = float_as_int( shading_normal.z );
+
+    //    optixReportIntersection(
+    //            root1,      // t hit
+    //            0,          // user hit kind
+    //            p0, p1, p2
+    //            );
+    //}
 }
 
 extern "C" __global__ void __intersection__sphere_shell()

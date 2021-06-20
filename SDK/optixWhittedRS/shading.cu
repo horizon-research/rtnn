@@ -248,17 +248,28 @@ extern "C" __global__ void __closesthit__checker_radiance()
 
 extern "C" __global__ void __closesthit__metal_radiance()
 {
-    const HitGroupData* sbt_data = (HitGroupData*) optixGetSbtDataPointer();
-    const Phong &phong = sbt_data->shading.metal;
+    //const HitGroupData* sbt_data = (HitGroupData*) optixGetSbtDataPointer();
+    //const Phong &phong = sbt_data->shading.metal;
 
-    float3 object_normal = make_float3(
-        int_as_float( optixGetAttribute_0() ),
-        int_as_float( optixGetAttribute_1() ),
-        int_as_float( optixGetAttribute_2() ));
+    //float3 object_normal = make_float3(
+    //    int_as_float( optixGetAttribute_0() ),
+    //    int_as_float( optixGetAttribute_1() ),
+    //    int_as_float( optixGetAttribute_2() ));
 
-    float3 world_normal = normalize( optixTransformNormalFromObjectToWorldSpace( object_normal ) );
-    float3 ffnormal = faceforward( world_normal, -optixGetWorldRayDirection(), world_normal );
-    phongShade( phong.Kd, phong.Ka, phong.Ks, phong.Kr, phong.phong_exp, ffnormal );
+    //float3 world_normal = normalize( optixTransformNormalFromObjectToWorldSpace( object_normal ) );
+    //float3 ffnormal = faceforward( world_normal, -optixGetWorldRayDirection(), world_normal );
+    //phongShade( phong.Kd, phong.Ka, phong.Ks, phong.Kr, phong.phong_exp, ffnormal );
+
+    const float3 shading_normal =
+        make_float3(
+                int_as_float( optixGetAttribute_0() ),
+                int_as_float( optixGetAttribute_1() ),
+                int_as_float( optixGetAttribute_2() )
+                );
+    const float3 color = normalize( optixTransformNormalFromObjectToWorldSpace( shading_normal ) ) * 0.5f + 0.5f;
+    optixSetPayload_0( float_as_int(color.x) );
+    optixSetPayload_1( float_as_int(color.y) );
+    optixSetPayload_2( float_as_int(color.z) );
 }
 
 extern "C" __global__ void __closesthit__full_occlusion()

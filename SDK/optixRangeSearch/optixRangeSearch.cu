@@ -61,7 +61,7 @@ static __forceinline__ __device__ void trace(
             OptixVisibilityMask( 1 ),
             OPTIX_RAY_FLAG_NONE,
             0,                   // SBT offset
-            0,                   // SBT stride
+            1,                   // SBT stride
             0,                   // missSBTIndex
             p0, p1, p2 );
     prd->x = int_as_float( p0 );
