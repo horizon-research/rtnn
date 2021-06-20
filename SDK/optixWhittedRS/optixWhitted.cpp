@@ -503,6 +503,9 @@ static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGr
 
 static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
 {
+    char    log[2048];
+    size_t  sizeof_log = sizeof( log );
+
     OptixProgramGroup           radiance_sphere_prog_group;
     OptixProgramGroupOptions    radiance_sphere_prog_group_options = {};
     OptixProgramGroupDesc       radiance_sphere_prog_group_desc = {};
@@ -514,8 +517,6 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     radiance_sphere_prog_group_desc.hitgroup.moduleAH               = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
 
-    char    log[2048];
-    size_t  sizeof_log = sizeof( log );
     OPTIX_CHECK_LOG( optixProgramGroupCreate(
         state.context,
         &radiance_sphere_prog_group_desc,
@@ -737,8 +738,7 @@ void createSBT( WhittedState &state )
         MissRecord ms_sbt[RAY_TYPE_COUNT];
         optixSbtRecordPackHeader( state.radiance_miss_prog_group, &ms_sbt[0] );
         optixSbtRecordPackHeader( state.occlusion_miss_prog_group, &ms_sbt[1] );
-        //ms_sbt[1].data = ms_sbt[0].data = { 0.34f, 0.55f, 0.85f };
-        ms_sbt[0].data = { 0.34f, 0.55f, 0.85f };
+        ms_sbt[1].data = ms_sbt[0].data = { 0.34f, 0.55f, 0.85f };
 
         CUDA_CHECK( cudaMemcpy(
             reinterpret_cast<void*>( d_miss_record ),
@@ -757,10 +757,25 @@ void createSBT( WhittedState &state )
         const size_t count_records = RAY_TYPE_COUNT * OBJ_COUNT;
         HitGroupRecord hitgroup_records[count_records];
 
-        // Note: Fill SBT record array the same order like AS is built.
+	// Note: MUST fill SBT record array same order like AS is built. Fill
+	// different ray types for a primitive first then move to the next
+	// primitive. See the table here:
+	// https://raytracing-docs.nvidia.com/optix7/guide/index.html#shader_binding_table#shader-binding-table
         int sbt_idx = 0;
 
         // Metal Sphere
+	// The correct way of thinking about optixSbtRecordPackHeader is that
+	// it assigns a program group to a sbt record, not the other way
+	// around. When we find a hit we will have to decide what program to
+	// run and what data to use for that program; given the parameters
+	// passed into optixTrace, we can calculate the entry of the SBT
+	// associated with that ray; that entry will have an assigned program
+	// group and the data. The way to calculate the exact entry in the SBT
+	// can be found here:
+	// https://www.willusher.io/graphics/2019/11/20/the-sbt-three-ways. The
+	// key is to think with a SBT-centric mindset: the programs are just
+	// attached to the SBT (each SBT entry points to a program that will be
+	// executed when we find the entry).
         OPTIX_CHECK( optixSbtRecordPackHeader(
             state.radiance_metal_sphere_prog_group,
             &hitgroup_records[sbt_idx] ) );
@@ -926,21 +941,21 @@ void handleCameraUpdate( WhittedState &state )
     syncCameraDataToSbt(state, camData);
 }
 
-void handleResize( sutil::CUDAOutputBuffer<uchar4>& output_buffer, Params& params )
-{
-    if( !resize_dirty )
-        return;
-    resize_dirty = false;
-
-    output_buffer.resize( params.width, params.height );
-
-    // Realloc accumulation buffer
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( params.accum_buffer ) ) );
-    CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>( &params.accum_buffer ),
-        params.width*params.height*sizeof(float4)
-    ) );
-}
+//void handleResize( sutil::CUDAOutputBuffer<uchar4>& output_buffer, Params& params )
+//{
+//    if( !resize_dirty )
+//        return;
+//    resize_dirty = false;
+//
+//    output_buffer.resize( params.width, params.height );
+//
+//    // Realloc accumulation buffer
+//    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( params.accum_buffer ) ) );
+//    CUDA_CHECK( cudaMalloc(
+//        reinterpret_cast<void**>( &params.accum_buffer ),
+//        params.width*params.height*sizeof(float4)
+//    ) );
+//}
 
 //void updateState( sutil::CUDAOutputBuffer<uchar4>& output_buffer, WhittedState &state )
 //{
@@ -1091,7 +1106,7 @@ int main( int argc, char* argv[] )
             //sutil::CUDAOutputBuffer<float> output( sutil::CUDAOutputBufferType::CUDA_DEVICE, state.params.width, state.params.height );
 
             handleCameraUpdate( state );
-            handleResize( output_buffer, state.params );
+            //handleResize( output_buffer, state.params );
             launchSubframe( output_buffer, state );
 
             sutil::ImageBuffer buffer;
