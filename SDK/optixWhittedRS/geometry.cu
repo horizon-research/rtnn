@@ -72,20 +72,20 @@ extern "C" __device__ void intersect_sphere()
 {
     const bool use_robust_method = true;
 
-    const Sphere* sphere   = reinterpret_cast<Sphere*>( optixGetSbtDataPointer() );
-    //const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
-    //const Sphere sphere = sbt_data.geometry.sphere;
+    //const Sphere* sphere   = reinterpret_cast<Sphere*>( optixGetSbtDataPointer() );
+    const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
+    const Sphere sphere = sbt_data.geometry.sphere;
 
     const float3  ray_orig = optixGetWorldRayOrigin();
     const float3  ray_dir  = optixGetWorldRayDirection();
     const float   ray_tmin = optixGetRayTmin(), ray_tmax = optixGetRayTmax();
 
-    float3 O = ray_orig - sphere->center;
-    //float3 O = ray_orig - sphere.center;
+    //float3 O = ray_orig - sphere->center;
+    float3 O = ray_orig - sphere.center;
     float  l = 1 / length(ray_dir);
     float3 D = ray_dir * l;
-    float radius = sphere->radius;
-    //float radius = sphere.radius;
+    //float radius = sphere->radius;
+    float radius = sphere.radius;
 
     float b = dot(O, D);
     float c = dot(O, O)-radius*radius;
