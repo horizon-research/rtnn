@@ -52,6 +52,7 @@ extern "C" __global__ void __raygen__pinhole_camera()
     float2 subpixel_jitter = params.subframe_index == 0 ?
         make_float2(0.0f, 0.0f) : make_float2(rnd( seed ) - 0.5f, rnd( seed ) - 0.5f);
 
+    // calculate d by transforming <0, 0> from the top-left corner to the center of the image
     float2 d = (make_float2(idx.x, idx.y) + subpixel_jitter) / make_float2(params.width, params.height) * 2.f - 1.f;
     float3 ray_origin = camera->eye;
     float3 ray_direction = normalize(d.x*camera->U + d.y*camera->V + camera->W);

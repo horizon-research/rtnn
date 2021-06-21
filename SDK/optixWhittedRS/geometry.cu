@@ -29,6 +29,7 @@
 #include <optix.h>
 
 #include "optixWhitted.h"
+#include "random.h"
 #include "helpers.h"
 
 extern "C" {
@@ -70,6 +71,9 @@ extern "C" __global__ void __intersection__parallelogram()
 
 extern "C" __device__ void intersect_sphere()
 {
+    // This is called when a ray-bbox intersection is found. We still need to
+    // perform the ray-sphere intersection test ourselves.
+
     const bool use_robust_method = true;
 
     //const Sphere* sphere   = reinterpret_cast<Sphere*>( optixGetSbtDataPointer() );
@@ -87,9 +91,14 @@ extern "C" __device__ void intersect_sphere()
     //float radius = sphere->radius;
     float radius = sphere.radius;
 
+    // this is O projected onto D, which will be the tangential line length if
+    // the ray just touches the sphere.
     float b = dot(O, D);
+    // dot(O, O) gets us the square of the ray-center distance
     float c = dot(O, O)-radius*radius;
     float disc = b*b-c;
+
+    // disc > 0 means b^2 + radius^2 > dot(O, O)^2, which mean we have an intersection
     if(disc > 0.0f)
     {
         float sdisc = sqrtf(disc);
@@ -123,9 +132,11 @@ extern "C" __device__ void intersect_sphere()
         float  t;
         float3 normal;
         t = (root1 + root11) * l;
+        //unsigned int seed = optixGetPrimitiveIndex(); // for debug
         if ( t > ray_tmin && t < ray_tmax )
         {
             normal = (O + (root1 + root11)*D)/radius;
+            //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
             if (optixReportIntersection( t, 0, float3_as_args( normal ) ) )
                 check_second = false;
         }
@@ -135,6 +146,7 @@ extern "C" __device__ void intersect_sphere()
             float root2 = (-b + sdisc) + (do_refine ? root1 : 0);
             t = root2 * l;
             normal = (O + root2*D)/radius;
+            //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
             if ( t > ray_tmin && t < ray_tmax )
                 optixReportIntersection( t, 0, float3_as_args( normal ) );
         }
@@ -143,39 +155,11 @@ extern "C" __device__ void intersect_sphere()
 
 extern "C" __global__ void __intersection__sphere()
 {
+    //unsigned int seed = optixGetPrimitiveIndex();
+    //float3 normal = make_float3(rnd(seed), rnd(seed), rnd(seed));
+    //optixReportIntersection( 1, 0, float3_as_args( normal ) );
+
     intersect_sphere();
-
-    //const Sphere* sphere   = reinterpret_cast<Sphere*>( optixGetSbtDataPointer() );
-    //const float3 orig = optixGetObjectRayOrigin();
-    //const float3 dir  = optixGetObjectRayDirection();
-
-    //const float3 center = {0.f, 0.f, 0.f};
-    //const float  radius = sphere->radius;
-    //const float3 O      = orig - center;
-    //const float  l      = 1 / length( dir );
-    //const float3 D      = dir * l;
-
-    //const float b    = dot( O, D );
-    //const float c    = dot( O, O ) - radius * radius;
-    //const float disc = b * b - c;
-    //if( disc > 0.0f )
-    //{
-    //    const float sdisc = sqrtf( disc );
-    //    const float root1 = ( -b - sdisc );
-
-    //    const float        root11        = 0.0f;
-    //    const float3       shading_normal = ( O + ( root1 + root11 ) * D ) / radius;
-    //    unsigned int p0, p1, p2;
-    //    p0 = float_as_int( shading_normal.x );
-    //    p1 = float_as_int( shading_normal.y );
-    //    p2 = float_as_int( shading_normal.z );
-
-    //    optixReportIntersection(
-    //            root1,      // t hit
-    //            0,          // user hit kind
-    //            p0, p1, p2
-    //            );
-    //}
 }
 
 extern "C" __global__ void __intersection__sphere_shell()
