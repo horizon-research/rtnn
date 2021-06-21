@@ -50,6 +50,7 @@
 #include <GLFW/glfw3.h>
 #include <iomanip>
 #include <cstring>
+#include <fstream>
 
 #include "optixWhitted.h"
 
@@ -1116,8 +1117,18 @@ int main( int argc, char* argv[] )
             //buffer.height       = output_buffer.height();
             //buffer.pixel_format = sutil::BufferImageFormat::UNSIGNED_BYTE4;
             //sutil::saveImage( outfile.c_str(), buffer, false );
-            unsigned int p = reinterpret_cast<unsigned int*>( data )[ 200 ];
-            std::cerr << "results: " << p << std::endl;
+            std::ofstream myfile;
+            myfile.open (outfile.c_str(), std::fstream::out);
+            for (int i = 0; i < output_buffer.height(); i++) {
+              for (int j = 0; j < output_buffer.width(); j++) {
+                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * output_buffer.width() + j ];
+                myfile << p << " ";
+                //std::cout << p << " ";
+              }
+              myfile << "\n";
+              //std::cout << "\n";
+            }
+            myfile.close();
         }
 
         cleanupState( state );

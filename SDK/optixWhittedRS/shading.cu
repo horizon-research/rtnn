@@ -260,16 +260,18 @@ extern "C" __global__ void __closesthit__metal_radiance()
     //float3 ffnormal = faceforward( world_normal, -optixGetWorldRayDirection(), world_normal );
     //phongShade( phong.Kd, phong.Ka, phong.Ks, phong.Kr, phong.phong_exp, ffnormal );
 
-    const float3 shading_normal =
-        make_float3(
-                int_as_float( optixGetAttribute_0() ),
-                int_as_float( optixGetAttribute_1() ),
-                int_as_float( optixGetAttribute_2() )
-                );
-    const float3 color = normalize( optixTransformNormalFromObjectToWorldSpace( shading_normal ) ) * 0.5f + 0.5f;
-    optixSetPayload_0( float_as_int(color.x) );
-    optixSetPayload_1( float_as_int(color.y) );
-    optixSetPayload_2( float_as_int(color.z) );
+    //const float3 shading_normal =
+    //    make_float3(
+    //            int_as_float( optixGetAttribute_0() ),
+    //            int_as_float( optixGetAttribute_1() ),
+    //            int_as_float( optixGetAttribute_2() )
+    //            );
+    //const float3 color = normalize( optixTransformNormalFromObjectToWorldSpace( shading_normal ) ) * 0.5f + 0.5f;
+    //optixSetPayload_0( float_as_int(color.x) );
+    //optixSetPayload_1( float_as_int(color.y) );
+    //optixSetPayload_2( float_as_int(color.z) );
+
+    //optixSetPayload_0( optixGetPrimitiveIndex() );
 }
 
 extern "C" __global__ void __closesthit__full_occlusion()
@@ -420,7 +422,7 @@ extern "C" __global__ void __anyhit__glass_occlusion()
 
 extern "C" __global__ void __miss__constant_bg()
 {
-    optixSetPayload_0( 637 );
+    //optixSetPayload_0( 5 );
     //const MissData* sbt_data = (MissData*) optixGetSbtDataPointer();
     //RadiancePRD prd = getRadiancePRD();
     //prd.result = sbt_data->bg_color;
