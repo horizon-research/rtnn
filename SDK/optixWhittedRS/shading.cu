@@ -420,8 +420,9 @@ extern "C" __global__ void __anyhit__glass_occlusion()
 
 extern "C" __global__ void __miss__constant_bg()
 {
-    const MissData* sbt_data = (MissData*) optixGetSbtDataPointer();
-    RadiancePRD prd = getRadiancePRD();
-    prd.result = sbt_data->bg_color;
-    setRadiancePRD(prd);
+    optixSetPayload_0( 637 );
+    //const MissData* sbt_data = (MissData*) optixGetSbtDataPointer();
+    //RadiancePRD prd = getRadiancePRD();
+    //prd.result = sbt_data->bg_color;
+    //setRadiancePRD(prd);
 }

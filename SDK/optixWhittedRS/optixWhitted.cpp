@@ -279,7 +279,6 @@ static void buildGas(
     size_t compacted_gas_size;
     CUDA_CHECK( cudaMemcpy( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost ) );
 
-    std::cerr << compacted_gas_size << std::endl;
     if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
     {
         CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
@@ -967,11 +966,12 @@ void handleCameraUpdate( WhittedState &state )
 //    handleResize( output_buffer, state.params );
 //}
 
-void launchSubframe( sutil::CUDAOutputBuffer<uchar4>& output_buffer, WhittedState& state )
+void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
 
     // Launch
-    uchar4* result_buffer_data = output_buffer.map();
+    //uchar4* result_buffer_data = output_buffer.map();
+    unsigned int* result_buffer_data = output_buffer.map();
     state.params.frame_buffer = result_buffer_data;
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,
@@ -1098,7 +1098,8 @@ int main( int argc, char* argv[] )
         initLaunchParams( state );
 
         {
-            sutil::CUDAOutputBuffer<uchar4> output_buffer(
+            //sutil::CUDAOutputBuffer<uchar4> output_buffer(
+            sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
                     state.params.width,
                     state.params.height
@@ -1109,12 +1110,14 @@ int main( int argc, char* argv[] )
             //handleResize( output_buffer, state.params );
             launchSubframe( output_buffer, state );
 
-            sutil::ImageBuffer buffer;
-            buffer.data         = output_buffer.getHostPointer();
-            buffer.width        = output_buffer.width();
-            buffer.height       = output_buffer.height();
-            buffer.pixel_format = sutil::BufferImageFormat::UNSIGNED_BYTE4;
-            sutil::saveImage( outfile.c_str(), buffer, false );
+            //sutil::ImageBuffer buffer;
+            void* data = output_buffer.getHostPointer();
+            //buffer.width        = output_buffer.width();
+            //buffer.height       = output_buffer.height();
+            //buffer.pixel_format = sutil::BufferImageFormat::UNSIGNED_BYTE4;
+            //sutil::saveImage( outfile.c_str(), buffer, false );
+            unsigned int p = reinterpret_cast<unsigned int*>( data )[ 200 ];
+            std::cerr << "results: " << p << std::endl;
         }
 
         cleanupState( state );

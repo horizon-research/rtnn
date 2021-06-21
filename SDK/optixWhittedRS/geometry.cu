@@ -101,55 +101,60 @@ extern "C" __device__ void intersect_sphere()
     // disc > 0 means b^2 + radius^2 > dot(O, O)^2, which mean we have an intersection
     if(disc > 0.0f)
     {
-        float sdisc = sqrtf(disc);
-        float root1 = (-b - sdisc);
+        optixSetPayload_0( optixGetPrimitiveIndex() );
+        //float sdisc = sqrtf(disc);
+        //float root1 = (-b - sdisc);
 
-        bool do_refine = false;
+        //bool do_refine = false;
 
-        float root11 = 0.0f;
+        //float root11 = 0.0f;
 
-        if(use_robust_method && fabsf(root1) > 10.f * radius)
-        {
-             do_refine = true;
-        }
+        //if(use_robust_method && fabsf(root1) > 10.f * radius)
+        //{
+        //     do_refine = true;
+        //}
 
-        if(do_refine) {
-            // refine root1
-            float3 O1 = O + root1 * D;
-            b = dot(O1, D);
-            c = dot(O1, O1) - radius*radius;
-            disc = b*b - c;
+        //if(do_refine) {
+        //    // refine root1
+        //    float3 O1 = O + root1 * D;
+        //    b = dot(O1, D);
+        //    c = dot(O1, O1) - radius*radius;
+        //    disc = b*b - c;
 
-            if(disc > 0.0f)
-            {
-                sdisc = sqrtf(disc);
-                root11 = (-b - sdisc);
-            }
-        }
+        //    if(disc > 0.0f)
+        //    {
+        //        sdisc = sqrtf(disc);
+        //        root11 = (-b - sdisc);
+        //    }
+        //}
 
-        bool check_second = true;
+        //bool check_second = true;
 
-        float  t;
-        float3 normal;
-        t = (root1 + root11) * l;
-        //unsigned int seed = optixGetPrimitiveIndex(); // for debug
-        if ( t > ray_tmin && t < ray_tmax )
-        {
-            normal = (O + (root1 + root11)*D)/radius;
-            //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
-            if (optixReportIntersection( t, 0, float3_as_args( normal ) ) )
-                check_second = false;
-        }
+        //float  t;
+        //float3 normal;
+        //t = (root1 + root11) * l;
+        ////unsigned int seed = optixGetPrimitiveIndex(); // for debug
+        //if ( t > ray_tmin && t < ray_tmax )
+        //{
+        //    normal = (O + (root1 + root11)*D)/radius;
+        //    //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
+        //    if (optixReportIntersection( t, 0, float3_as_args( normal ) ) )
+        //        check_second = false;
+        //}
 
-        if(check_second)
-        {
-            float root2 = (-b + sdisc) + (do_refine ? root1 : 0);
-            t = root2 * l;
-            normal = (O + root2*D)/radius;
-            //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
-            if ( t > ray_tmin && t < ray_tmax )
-                optixReportIntersection( t, 0, float3_as_args( normal ) );
-        }
+        //if(check_second)
+        //{
+        //    float root2 = (-b + sdisc) + (do_refine ? root1 : 0);
+        //    t = root2 * l;
+        //    normal = (O + root2*D)/radius;
+        //    //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
+        //    if ( t > ray_tmin && t < ray_tmax )
+        //        optixReportIntersection( t, 0, float3_as_args( normal ) );
+        //}
+    }
+    else
+    {
+        optixSetPayload_0( 178 );
     }
 }
 
