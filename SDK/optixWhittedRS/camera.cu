@@ -68,7 +68,8 @@ extern "C" __global__ void __raygen__pinhole_camera()
         ray_origin,
         ray_direction,
         params.scene_epsilon,
-        1e16f,
+        //1e16f,
+        1e-2f,
         0.0f,
         OptixVisibilityMask( 1 ),
         OPTIX_RAY_FLAG_NONE,
@@ -77,10 +78,6 @@ extern "C" __global__ void __raygen__pinhole_camera()
         RAY_TYPE_RADIANCE,
         reinterpret_cast<unsigned int&>(image_index),
         reinterpret_cast<unsigned int&>(id)
-        //reinterpret_cast<unsigned int&>(p)
-        //float3_as_args(prd.result),
-        //reinterpret_cast<unsigned int&>(prd.importance),
-        //reinterpret_cast<unsigned int&>(prd.depth)
     );
     //params.frame_buffer[image_index] = p;
 }

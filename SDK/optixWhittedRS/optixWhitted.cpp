@@ -90,6 +90,7 @@ struct Record
     T data;
 };
 
+//typedef Record< vector<Sphere> >      RayGenRecord;
 typedef Record<CameraData>      RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
@@ -718,11 +719,27 @@ void createSBT( WhittedState &state )
 {
     // Raygen program record
     {
+        //RayGenRecord rg_sbt;
+
+        //optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
+        //rg_sbt.data.push_back(g_sphere1);
+        //rg_sbt.data.push_back(g_sphere2);
+
         CUdeviceptr d_raygen_record;
+        //CUDA_CHECK( cudaMalloc(
+        //    reinterpret_cast<void**>( &d_raygen_record ),
+        //    sizeof(rg_sbt) ) );
         size_t sizeof_raygen_record = sizeof( RayGenRecord );
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>( &d_raygen_record ),
             sizeof_raygen_record ) );
+
+        //CUDA_CHECK( cudaMemcpy(
+        //    reinterpret_cast<void*>( d_raygen_record ),
+        //    &rg_sbt,
+        //    sizeof(rg_sbt),
+        //    cudaMemcpyHostToDevice
+        //) );
 
         state.sbt.raygenRecord = d_raygen_record;
     }
@@ -969,7 +986,6 @@ void handleCameraUpdate( WhittedState &state )
 
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
-
     // Launch
     //uchar4* result_buffer_data = output_buffer.map();
     // this map() thing basically returns the cudaMalloc-ed device pointer.
@@ -978,7 +994,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte have to be.
-    CUDA_CHECK( cudaMemset ( reinterpret_cast<void*>( result_buffer_data ), 0, state.params.width*state.params.height*OBJ_COUNT*sizeof(unsigned int) ) );
+    CUDA_CHECK( cudaMemset ( result_buffer_data, 0, state.params.width*state.params.height*state.params.numPrims*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
 
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
@@ -1100,7 +1116,7 @@ int main( int argc, char* argv[] )
         // Set up OptiX state
         //
         createContext  ( state );
-        createGeometry  ( state );
+        createGeometry ( state );
         createPipeline ( state );
         createSBT      ( state );
 
@@ -1113,7 +1129,6 @@ int main( int argc, char* argv[] )
                     state.params.numPrims * state.params.width,
                     state.params.height
                     );
-            //sutil::CUDAOutputBuffer<float> output( sutil::CUDAOutputBufferType::CUDA_DEVICE, state.params.width, state.params.height );
 
             handleCameraUpdate( state );
             //handleResize( output_buffer, state.params );

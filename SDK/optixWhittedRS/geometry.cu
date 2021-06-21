@@ -72,7 +72,9 @@ extern "C" __global__ void __intersection__parallelogram()
 extern "C" __device__ void intersect_sphere()
 {
     // This is called when a ray-bbox intersection is found. We still need to
-    // perform the ray-sphere intersection test ourselves.
+    // perform the ray-sphere intersection test ourselves, basically using the
+    // classic algorithm here:
+    // https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 
     const bool use_robust_method = true;
 
@@ -110,56 +112,20 @@ extern "C" __device__ void intersect_sphere()
         unsigned int id = optixGetPayload_1();
         params.frame_buffer[image_index + id] = optixGetPrimitiveIndex() + 1;
         optixSetPayload_1( id+1 );
-        //optixSetPayload_0( optixGetPrimitiveIndex() );
 
         //float sdisc = sqrtf(disc);
         //float root1 = (-b - sdisc);
+        //float root2 = (-b + sdisc);
 
-        //bool do_refine = false;
+        //float t0, t1;
+        //t0 = root1 * l;
+        //t1 = root2 * l;
 
-        //float root11 = 0.0f;
-
-        //if(use_robust_method && fabsf(root1) > 10.f * radius)
-        //{
-        //     do_refine = true;
-        //}
-
-        //if(do_refine) {
-        //    // refine root1
-        //    float3 O1 = O + root1 * D;
-        //    b = dot(O1, D);
-        //    c = dot(O1, O1) - radius*radius;
-        //    disc = b*b - c;
-
-        //    if(disc > 0.0f)
-        //    {
-        //        sdisc = sqrtf(disc);
-        //        root11 = (-b - sdisc);
-        //    }
-        //}
-
-        //bool check_second = true;
-
-        //float  t;
-        //float3 normal;
-        //t = (root1 + root11) * l;
-        ////unsigned int seed = optixGetPrimitiveIndex(); // for debug
-        //if ( t > ray_tmin && t < ray_tmax )
-        //{
-        //    normal = (O + (root1 + root11)*D)/radius;
-        //    //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
-        //    if (optixReportIntersection( t, 0, float3_as_args( normal ) ) )
-        //        check_second = false;
-        //}
-
-        //if(check_second)
-        //{
-        //    float root2 = (-b + sdisc) + (do_refine ? root1 : 0);
-        //    t = root2 * l;
-        //    normal = (O + root2*D)/radius;
-        //    //normal = make_float3(rnd(seed), rnd(seed), rnd(seed)); // for debug
-        //    if ( t > ray_tmin && t < ray_tmax )
-        //        optixReportIntersection( t, 0, float3_as_args( normal ) );
+        //if ((t0 > 0 && t1 < 0) || (t0 < 0 && t1 > 0)) {
+        //  unsigned int image_index = optixGetPayload_0();
+        //  unsigned int id = optixGetPayload_1();
+        //  params.frame_buffer[image_index + id] = optixGetPrimitiveIndex() + 1;
+        //  optixSetPayload_1( id+1 );
         //}
     }
 }
