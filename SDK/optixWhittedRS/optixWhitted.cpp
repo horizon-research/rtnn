@@ -972,8 +972,14 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
 
     // Launch
     //uchar4* result_buffer_data = output_buffer.map();
+    // this map() thing basically returns the cudaMalloc-ed device pointer.
     unsigned int* result_buffer_data = output_buffer.map();
+    // need to manually set the cuda-malloced device memory. note the semantics
+    // of cudamemset: it sets #count number of BYTES to value; literally think
+    // about what each byte have to be.
+    CUDA_CHECK( cudaMemset ( reinterpret_cast<void*>( result_buffer_data ), 0, state.params.width*state.params.height*OBJ_COUNT*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
+
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,
                                  sizeof( Params ),
@@ -1102,7 +1108,7 @@ int main( int argc, char* argv[] )
             //sutil::CUDAOutputBuffer<uchar4> output_buffer(
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
-                    state.params.width,
+                    OBJ_COUNT * state.params.width,
                     state.params.height
                     );
             //sutil::CUDAOutputBuffer<float> output( sutil::CUDAOutputBufferType::CUDA_DEVICE, state.params.width, state.params.height );
@@ -1119,9 +1125,13 @@ int main( int argc, char* argv[] )
             //sutil::saveImage( outfile.c_str(), buffer, false );
             std::ofstream myfile;
             myfile.open (outfile.c_str(), std::fstream::out);
-            for (int i = 0; i < output_buffer.height(); i++) {
-              for (int j = 0; j < output_buffer.width(); j++) {
-                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * output_buffer.width() + j ];
+
+            std::cerr << output_buffer.height() << std::endl;
+            for (unsigned int i = 0; i < state.params.height; i++) {
+              for (unsigned int j = 0; j < state.params.width * OBJ_COUNT; j+=OBJ_COUNT) {
+                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * OBJ_COUNT + j * OBJ_COUNT ];
+                myfile << p << ",";
+                p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * OBJ_COUNT + j * OBJ_COUNT + 1];
                 myfile << p << " ";
                 //std::cout << p << " ";
               }
@@ -1129,6 +1139,7 @@ int main( int argc, char* argv[] )
               //std::cout << "\n";
             }
             myfile.close();
+            std::cerr << "done" << std::endl;
         }
 
         cleanupState( state );

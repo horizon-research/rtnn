@@ -101,8 +101,16 @@ extern "C" __device__ void intersect_sphere()
     // disc > 0 means b^2 + radius^2 > dot(O, O)^2, which mean we have an intersection
     if(disc > 0.0f)
     {
-        // record the intersected primitive (might not be the closest and can be overwritten later). we won't report the intersection so the miss program will be called (although that's empty; if not, then the value set here will be overwritten there) and the closest hit program won't be called.
-        optixSetPayload_0( optixGetPrimitiveIndex() );
+	// record the intersected primitive (might not be the closest and can
+	// be overwritten later). we won't report the intersection so the miss
+	// program will be called (although that's empty; if not, then the
+	// value set here will be overwritten there) and the closest hit
+	// program won't be called.
+        unsigned int image_index = optixGetPayload_0();
+        unsigned int id = optixGetPayload_1();
+        params.frame_buffer[image_index + id] = optixGetPrimitiveIndex() + 1;
+        optixSetPayload_1( id+1 );
+        //optixSetPayload_0( optixGetPrimitiveIndex() );
 
         //float sdisc = sqrtf(disc);
         //float root1 = (-b - sdisc);
