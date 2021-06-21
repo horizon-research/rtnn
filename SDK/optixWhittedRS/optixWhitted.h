@@ -53,6 +53,7 @@ struct Params
     unsigned int*      frame_buffer;
     unsigned int width;
     unsigned int height;
+    unsigned int numPrims;
 
     BasicLight   light;                 // TODO: make light list
     float3       ambient_light_color;

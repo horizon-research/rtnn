@@ -45,7 +45,7 @@ extern "C" __global__ void __raygen__pinhole_camera()
     const CameraData* camera = (CameraData*) optixGetSbtDataPointer();
 
     //const unsigned int image_index = params.width * idx.y + idx.x;
-    unsigned int image_index = params.width * 2 * idx.y + idx.x * 2;
+    unsigned int image_index = params.width * params.numPrims * idx.y + idx.x * params.numPrims;
     //unsigned int       seed        = tea<16>( image_index, params.subframe_index );
 
     // Subpixel jitter: send the ray through a different position inside the pixel each time,

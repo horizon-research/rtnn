@@ -974,6 +974,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     //uchar4* result_buffer_data = output_buffer.map();
     // this map() thing basically returns the cudaMalloc-ed device pointer.
     unsigned int* result_buffer_data = output_buffer.map();
+
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte have to be.
@@ -1051,6 +1052,7 @@ int main( int argc, char* argv[] )
     WhittedState state;
     state.params.width  = 768;
     state.params.height = 768;
+    state.params.numPrims = OBJ_COUNT;
     sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
 
     //
@@ -1108,7 +1110,7 @@ int main( int argc, char* argv[] )
             //sutil::CUDAOutputBuffer<uchar4> output_buffer(
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
-                    OBJ_COUNT * state.params.width,
+                    state.params.numPrims * state.params.width,
                     state.params.height
                     );
             //sutil::CUDAOutputBuffer<float> output( sutil::CUDAOutputBufferType::CUDA_DEVICE, state.params.width, state.params.height );
@@ -1126,12 +1128,12 @@ int main( int argc, char* argv[] )
             std::ofstream myfile;
             myfile.open (outfile.c_str(), std::fstream::out);
 
-            std::cerr << output_buffer.height() << std::endl;
+            //std::cerr << output_buffer.height() << ", " << state.params.numPrims << std::endl;
             for (unsigned int i = 0; i < state.params.height; i++) {
-              for (unsigned int j = 0; j < state.params.width * OBJ_COUNT; j+=OBJ_COUNT) {
-                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * OBJ_COUNT + j * OBJ_COUNT ];
+              for (unsigned int j = 0; j < state.params.width * state.params.numPrims; j += state.params.numPrims) {
+                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims ];
                 myfile << p << ",";
-                p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * OBJ_COUNT + j * OBJ_COUNT + 1];
+                p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims + 1];
                 myfile << p << " ";
                 //std::cout << p << " ";
               }
