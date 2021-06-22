@@ -83,7 +83,7 @@ typedef Record<GeomData>      RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
-const uint32_t OBJ_COUNT = 2;
+const uint32_t OBJ_COUNT = 4;
 
 struct WhittedState
 {
@@ -113,6 +113,7 @@ struct WhittedState
     Params*                     d_params                  = nullptr;
 
     float3*                     d_spheres                 = nullptr;
+    float3*                     points = nullptr;
 
     OptixShaderBindingTable     sbt                       = {};
 };
@@ -125,12 +126,20 @@ struct WhittedState
 
 // Metal sphere, glass sphere, floor, light
 const Sphere g_sphere1 = {
-    { 2.0f, 1.5f, -2.5f }, // center
-    0.02f                  // radius
+    { 0.0f, 0.0f, 0.0f }, // center
+    2.0f                  // radius
 };
 const Sphere g_sphere2 = {
-    { 5.0f, 5.5f, -5.6f }, // center
-    0.02f                  // radius
+    { 5.0f, 0.0f, 0.0f }, // center
+    2.0f                  // radius
+};
+const Sphere g_sphere3 = {
+    { 0.0f, 5.0f, 0.0f }, // center
+    2.0f                  // radius
+};
+const Sphere g_sphere4 = {
+    { 0.0f, 0.0f, 5.0f }, // center
+    2.0f                  // radius
 };
 const BasicLight g_light = {
     make_float3( 60.0f, 40.0f, 0.0f ),   // pos
@@ -142,6 +151,43 @@ const BasicLight g_light = {
 //  Helper functions
 //
 //------------------------------------------------------------------------------
+
+float3* read_pc_data(const char* data_file, unsigned int* N) {
+  std::ifstream file;
+
+  file.open(data_file);
+  if( !file.good() ) {
+    std::cerr << "Could not read the frame data...\n";
+    //assert(0);
+  }
+
+  char line[1024];
+  unsigned int lines = 0;
+
+  while (file.getline(line, 1024)) {
+    lines++;
+  }
+  file.clear();
+  file.seekg(0, std::ios::beg);
+  float3* points = new float3[lines];
+  *N = lines;
+
+  lines = 0;
+  while (file.getline(line, 1024)) {
+    double x, y, z;
+
+    sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
+    points[lines].x = x;
+    points[lines].y = y;
+    points[lines].z = z;
+    //std::cerr << points[lines].x << "," << points[lines].y << "," << points[lines].z << std::endl;
+    lines++;
+  }
+
+  file.close();
+
+  return points;
+}
 
 void printUsageAndExit( const char* argv0 )
 {
@@ -263,49 +309,79 @@ void createGeometry( WhittedState &state )
     //
 
     // Load AABB into device memory
-    OptixAabb   aabb[OBJ_COUNT];
+    //OptixAabb   aabb[OBJ_COUNT];
+    OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
 
-    sphere_bound(
-        g_sphere1.center, g_sphere1.radius,
-        reinterpret_cast<float*>(&aabb[0]));
-    sphere_bound(
-        g_sphere2.center, g_sphere2.radius,
-        reinterpret_cast<float*>(&aabb[1]));
+    for(unsigned int i = 0; i < state.params.numPrims; i++) {
+      sphere_bound(
+          state.points[i], 2,
+          reinterpret_cast<float*>(&aabb[i]));
+    }
+
+    //sphere_bound(
+    //    g_sphere1.center, g_sphere1.radius,
+    //    reinterpret_cast<float*>(&aabb[0]));
+    //sphere_bound(
+    //    g_sphere2.center, g_sphere2.radius,
+    //    reinterpret_cast<float*>(&aabb[1]));
+    //sphere_bound(
+    //    g_sphere3.center, g_sphere3.radius,
+    //    reinterpret_cast<float*>(&aabb[2]));
+    //sphere_bound(
+    //    g_sphere4.center, g_sphere4.radius,
+    //    reinterpret_cast<float*>(&aabb[3]));
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-        ), OBJ_COUNT * sizeof( OptixAabb ) ) );
+        ), state.params.numPrims* sizeof( OptixAabb ) ) );
+        //), OBJ_COUNT * sizeof( OptixAabb ) ) );
     CUDA_CHECK( cudaMemcpy(
                 reinterpret_cast<void*>( d_aabb ),
-                &aabb,
-                OBJ_COUNT * sizeof( OptixAabb ),
+                //&aabb,
+                aabb,
+                state.params.numPrims * sizeof( OptixAabb ),
+                //OBJ_COUNT * sizeof( OptixAabb ),
                 cudaMemcpyHostToDevice
                 ) );
 
     // Setup AABB build input
-    uint32_t aabb_input_flags[] = {
-        /* flags for metal sphere */
-        OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
-        OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT
-    };
-    /* TODO: This API cannot control flags for different ray type */
+    //uint32_t aabb_input_flags[] = {
+    //    /* flags for metal sphere */
+    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
+    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
+    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
+    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT
+    //};
+    uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
 
-    const uint32_t sbt_index[] = { 0, 1 };
+    //const uint32_t sbt_index[] = { 0, 1, 2, 3 };
+    //const uint32_t sbt_index[4] = { 0 };
+    uint32_t* sbt_index = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
+    for (unsigned int i = 0; i < state.params.numPrims; i++) {
+      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+      // it's important to set all these indices to 0.
+      sbt_index[i] = 0;
+    }
     CUdeviceptr    d_sbt_index;
 
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), sizeof(sbt_index) ) );
+    std::cerr << sizeof(sbt_index) << std::endl;
+    //CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), sizeof(sbt_index) ) );
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), state.params.numPrims * sizeof(uint32_t) ) );
     CUDA_CHECK( cudaMemcpy(
         reinterpret_cast<void*>( d_sbt_index ),
         sbt_index,
-        sizeof( sbt_index ),
+        //sizeof( sbt_index ),
+        state.params.numPrims * sizeof(uint32_t),
         cudaMemcpyHostToDevice ) );
 
     OptixBuildInput aabb_input = {};
     aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
     aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
     aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
-    aabb_input.customPrimitiveArray.numSbtRecords = OBJ_COUNT;
-    aabb_input.customPrimitiveArray.numPrimitives = OBJ_COUNT;
+    //aabb_input.customPrimitiveArray.numSbtRecords = OBJ_COUNT;
+    aabb_input.customPrimitiveArray.numSbtRecords = state.params.numPrims;
+    //aabb_input.customPrimitiveArray.numPrimitives = OBJ_COUNT;
+    aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
     aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = d_sbt_index;
     aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
     aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
@@ -550,9 +626,14 @@ void createSBT( WhittedState &state )
 {
     // Raygen program record
     {
-        std::vector<float3> spheres;
-        spheres.push_back(g_sphere1.center);
-        spheres.push_back(g_sphere2.center);
+        //std::vector<float3> spheres;
+        //for (unsigned int i = 0; i < state.params.numPrims; i++) {
+        //  spheres.push_back(state.points[i]);
+        //}
+        //spheres.push_back(g_sphere1.center);
+        //spheres.push_back(g_sphere2.center);
+        //spheres.push_back(g_sphere3.center);
+        //spheres.push_back(g_sphere4.center);
 
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>(&state.d_spheres),
@@ -560,7 +641,8 @@ void createSBT( WhittedState &state )
 
         CUDA_CHECK( cudaMemcpy(
             reinterpret_cast<void*>( state.d_spheres),
-            &spheres[0],
+            //&spheres[0],
+            state.points,
             state.params.numPrims * sizeof(float3),
             cudaMemcpyHostToDevice
         ) );
@@ -608,35 +690,39 @@ void createSBT( WhittedState &state )
         state.sbt.missRecordCount         = RAY_TYPE_COUNT;
         state.sbt.missRecordStrideInBytes = static_cast<uint32_t>( sizeof_miss_record );
     }
+    std::cerr << "success miss" << std::endl;
 
     // Hitgroup program record
     {
-        const size_t count_records = RAY_TYPE_COUNT * OBJ_COUNT;
+        //const size_t count_records = RAY_TYPE_COUNT * OBJ_COUNT;
+        const size_t count_records = RAY_TYPE_COUNT * state.params.numPrims;
+        std::cerr << count_records << std::endl;
         HitGroupRecord hitgroup_records[count_records];
 
-	// Note: MUST fill SBT record array same order like AS is built. Fill
-	// different ray types for a primitive first then move to the next
-	// primitive. See the table here:
-	// https://raytracing-docs.nvidia.com/optix7/guide/index.html#shader_binding_table#shader-binding-table
+        // Note: MUST fill SBT record array same order like AS is built. Fill
+        // different ray types for a primitive first then move to the next
+        // primitive. See the table here:
+        // https://raytracing-docs.nvidia.com/optix7/guide/index.html#shader_binding_table#shader-binding-table
         int sbt_idx = 0;
 
         // Metal Sphere
-	// The correct way of thinking about optixSbtRecordPackHeader is that
-	// it assigns a program group to a sbt record, not the other way
-	// around. When we find a hit we will have to decide what program to
-	// run and what data to use for that program; given the parameters
-	// passed into optixTrace, we can calculate the entry of the SBT
-	// associated with that ray; that entry will have an assigned program
-	// group and the data. The way to calculate the exact entry in the SBT
-	// can be found here:
-	// https://www.willusher.io/graphics/2019/11/20/the-sbt-three-ways. The
-	// key is to think with a SBT-centric mindset: the programs are just
-	// attached to the SBT (each SBT entry points to a program that will be
-	// executed when we find the entry).
+        // The correct way of thinking about optixSbtRecordPackHeader is that
+        // it assigns a program group to a sbt record, not the other way
+        // around. When we find a hit we will have to decide what program to
+        // run and what data to use for that program; given the parameters
+        // passed into optixTrace, we can calculate the entry of the SBT
+        // associated with that ray; that entry will have an assigned program
+        // group and the data. The way to calculate the exact entry in the SBT
+        // can be found here:
+        // https://www.willusher.io/graphics/2019/11/20/the-sbt-three-ways. The
+        // key is to think with a SBT-centric mindset: the programs are just
+        // attached to the SBT (each SBT entry points to a program that will be
+        // executed when we find the entry).
         OPTIX_CHECK( optixSbtRecordPackHeader(
             state.radiance_metal_sphere_prog_group,
             &hitgroup_records[sbt_idx] ) );
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
+        hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[0], 0};
         hitgroup_records[ sbt_idx ].data.shading.metal = {
             { 0.2f, 0.5f, 0.5f },   // Ka
             { 0.2f, 0.7f, 0.8f },   // Kd
@@ -655,7 +741,8 @@ void createSBT( WhittedState &state )
         OPTIX_CHECK( optixSbtRecordPackHeader(
             state.radiance_metal_sphere_prog_group,
             &hitgroup_records[sbt_idx] ) );
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
+        hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[1], 0};
         hitgroup_records[ sbt_idx ].data.shading.metal = {
             { 0.2f, 0.5f, 0.5f },   // Ka
             { 0.2f, 0.7f, 0.8f },   // Kd
@@ -872,39 +959,46 @@ int main( int argc, char* argv[] )
         }
     }
 
+    // read points
+    state.points = read_pc_data(outfile.c_str(), &state.params.numPrims);
+    std::cerr << "numPrims: " << state.params.numPrims << std::endl;
+
     try
     {
         //
         // Set up OptiX state
         //
         createContext  ( state );
+        std::cerr << "ctx created" << std::endl;
         createGeometry ( state );
+        std::cerr << "geom created" << std::endl;
         createPipeline ( state );
+        std::cerr << "pipeline created" << std::endl;
         createSBT      ( state );
+        std::cerr << "sbt created" << std::endl;
 
         initLaunchParams( state );
+        std::cerr << "launch params init" << std::endl;
 
         {
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
-                    state.params.numPrims,
-                    state.params.numPrims
+                    state.params.numPrims*state.params.numPrims,
+                    1
                     );
 
+            std::cerr << "before launch" << std::endl;
             launchSubframe( output_buffer, state );
 
             void* data = output_buffer.getHostPointer();
-            std::ofstream myfile;
-            myfile.open (outfile.c_str(), std::fstream::out);
 
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
               for (unsigned int j = 0; j < state.params.numPrims; j++) {
                 unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.numPrims + j ];
-                myfile << p << " ";
+                std::cout << p << " ";
               }
-              myfile << "\n";
+              std::cout << "\n";
             }
-            myfile.close();
             std::cerr << "done" << std::endl;
         }
 

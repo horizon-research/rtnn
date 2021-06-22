@@ -55,7 +55,7 @@ extern "C" __global__ void __raygen__pinhole_camera()
     //float3 ray_direction = normalize(d.x*camera->U + d.y*camera->V + camera->W);
 
     float3 ray_origin = geom->spheres[rayIdx];
-    float3 ray_direction = normalize(make_float3(1, 1, 1));
+    float3 ray_direction = normalize(make_float3(1, 1, 0));
 
     unsigned int id = 0;
 
@@ -75,4 +75,8 @@ extern "C" __global__ void __raygen__pinhole_camera()
         reinterpret_cast<unsigned int&>(rayIdx),
         reinterpret_cast<unsigned int&>(id)
     );
+    //params.frame_buffer[rayIdx * params.numPrims] = rayIdx;
+    //params.frame_buffer[rayIdx * params.numPrims+1] = ray_origin.x;
+    //params.frame_buffer[rayIdx * params.numPrims+2] = ray_origin.y;
+    //params.frame_buffer[rayIdx * params.numPrims+3] = ray_origin.z;
 }

@@ -43,8 +43,6 @@ extern "C" __device__ void intersect_sphere()
     // classic algorithm here:
     // https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 
-    const bool use_robust_method = true;
-
     const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
     const Sphere sphere = sbt_data.geometry.sphere;
 
@@ -63,6 +61,7 @@ extern "C" __device__ void intersect_sphere()
     // dot(O, O) gets us the square of the ray-center distance
     float c = dot(O, O)-radius*radius;
     float disc = b*b-c;
+    //params.frame_buffer[optixGetPayload_0() * params.numPrims + optixGetPrimitiveIndex()] = b;
 
     // disc > 0 means b^2 + radius^2 > dot(O, O)^2, which mean we have an intersection
     if(disc > 0.0f)
@@ -76,11 +75,13 @@ extern "C" __device__ void intersect_sphere()
         bool isApprox = true;
 
         unsigned int rayIdx = optixGetPayload_0();
-        unsigned int id = optixGetPayload_1();
+        //unsigned int id = optixGetPayload_1();
+        unsigned int primIdx = optixGetPrimitiveIndex();
         if (isApprox)
         {
           // approximate search here.
-          params.frame_buffer[rayIdx * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
+          //params.frame_buffer[rayIdx * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
+          params.frame_buffer[rayIdx * params.numPrims + primIdx] = 1;
 	  // each ray's traversal is sequential; payload set here will be used in
 	  // the next intersection.
         }
@@ -95,20 +96,19 @@ extern "C" __device__ void intersect_sphere()
           t1 = root2 * l;
 
           if ((t0 > 0 && t1 < 0) || (t0 < 0 && t1 > 0)) {
-            params.frame_buffer[rayIdx * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
+            //params.frame_buffer[rayIdx * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
+            params.frame_buffer[rayIdx * params.numPrims + primIdx] = 1;
           }
         }
-        optixSetPayload_1( id+1 );
+        //optixSetPayload_1( id+1 );
     }
 }
 
 extern "C" __global__ void __intersection__sphere()
 {
-    //unsigned int seed = optixGetPrimitiveIndex();
-    //float3 normal = make_float3(rnd(seed), rnd(seed), rnd(seed));
-    //optixReportIntersection( 1, 0, float3_as_args( normal ) );
-
-    //optixSetPayload_0( 3 );
-    intersect_sphere();
+    unsigned int rayIdx = optixGetPayload_0();
+    unsigned int primIdx = optixGetPrimitiveIndex();
+    params.frame_buffer[rayIdx * params.numPrims + primIdx] = rayIdx;
+    //intersect_sphere();
 }
 
