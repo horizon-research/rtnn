@@ -141,10 +141,6 @@ const Sphere g_sphere4 = {
     { 0.0f, 0.0f, 5.0f }, // center
     2.0f                  // radius
 };
-const BasicLight g_light = {
-    make_float3( 60.0f, 40.0f, 0.0f ),   // pos
-    make_float3( 1.0f, 1.0f, 1.0f )      // color
-};
 
 //------------------------------------------------------------------------------
 //
@@ -192,26 +188,17 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 void printUsageAndExit( const char* argv0 )
 {
     std::cerr << "Usage  : " << argv0 << " [options]\n";
-    std::cerr << "Options: --file | -f <filename>      File for image output\n";
+    std::cerr << "Options: --file | -f <filename>      File for point cloud input\n";
     std::cerr << "         --launch-samples | -s       Number of samples per pixel per launch (default 16)\n";
-    std::cerr << "         --no-gl-interop             Disable GL interop for display\n";
-    std::cerr << "         --dim=<width>x<height>      Set image dimensions; defaults to 768x768\n";
+    std::cerr << "         --radius | -r               Search radius\n";
     std::cerr << "         --help | -h                 Print this usage message\n";
     exit( 0 );
 }
 
 void initLaunchParams( WhittedState& state )
 {
-    CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>( &state.params.accum_buffer ),
-        state.params.width*state.params.height*sizeof(float4)
-    ) );
     state.params.frame_buffer = nullptr; // Will be set when output buffer is mapped
 
-    state.params.subframe_index = 0u;
-
-    state.params.light = g_light;
-    state.params.ambient_light_color = make_float3( 0.4f, 0.4f, 0.4f );
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
 
@@ -315,7 +302,7 @@ void createGeometry( WhittedState &state )
 
     for(unsigned int i = 0; i < state.params.numPrims; i++) {
       sphere_bound(
-          state.points[i], 2,
+          state.points[i], state.params.radius,
           reinterpret_cast<float*>(&aabb[i]));
     }
 
@@ -505,28 +492,28 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     program_groups.push_back(radiance_sphere_prog_group);
     state.radiance_metal_sphere_prog_group = radiance_sphere_prog_group;
 
-    OptixProgramGroup           occlusion_sphere_prog_group;
-    OptixProgramGroupOptions    occlusion_sphere_prog_group_options = {};
-    OptixProgramGroupDesc       occlusion_sphere_prog_group_desc = {};
-    occlusion_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
-        occlusion_sphere_prog_group_desc.hitgroup.moduleIS           = state.geometry_module;
-    occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
-    occlusion_sphere_prog_group_desc.hitgroup.moduleCH               = state.shading_module;
-    occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = "__closesthit__full_occlusion";
-    occlusion_sphere_prog_group_desc.hitgroup.moduleAH               = nullptr;
-    occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
+    //OptixProgramGroup           occlusion_sphere_prog_group;
+    //OptixProgramGroupOptions    occlusion_sphere_prog_group_options = {};
+    //OptixProgramGroupDesc       occlusion_sphere_prog_group_desc = {};
+    //occlusion_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+    //    occlusion_sphere_prog_group_desc.hitgroup.moduleIS           = state.geometry_module;
+    //occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
+    //occlusion_sphere_prog_group_desc.hitgroup.moduleCH               = state.shading_module;
+    //occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = "__closesthit__full_occlusion";
+    //occlusion_sphere_prog_group_desc.hitgroup.moduleAH               = nullptr;
+    //occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
 
-    OPTIX_CHECK_LOG( optixProgramGroupCreate(
-        state.context,
-        &occlusion_sphere_prog_group_desc,
-        1,
-        &occlusion_sphere_prog_group_options,
-        log,
-        &sizeof_log,
-        &occlusion_sphere_prog_group ) );
+    //OPTIX_CHECK_LOG( optixProgramGroupCreate(
+    //    state.context,
+    //    &occlusion_sphere_prog_group_desc,
+    //    1,
+    //    &occlusion_sphere_prog_group_options,
+    //    log,
+    //    &sizeof_log,
+    //    &occlusion_sphere_prog_group ) );
 
-    program_groups.push_back(occlusion_sphere_prog_group);
-    state.occlusion_metal_sphere_prog_group = occlusion_sphere_prog_group;
+    //program_groups.push_back(occlusion_sphere_prog_group);
+    //state.occlusion_metal_sphere_prog_group = occlusion_sphere_prog_group;
 }
 
 static void createMissProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
@@ -675,36 +662,66 @@ void createSBT( WhittedState &state )
             reinterpret_cast<void**>( &d_miss_record ),
             sizeof_miss_record*RAY_TYPE_COUNT ) );
 
-        MissRecord ms_sbt[RAY_TYPE_COUNT];
-        optixSbtRecordPackHeader( state.radiance_miss_prog_group, &ms_sbt[0] );
-        optixSbtRecordPackHeader( state.occlusion_miss_prog_group, &ms_sbt[1] );
-        ms_sbt[1].data = ms_sbt[0].data = { 0.34f, 0.55f, 0.85f };
+        MissRecord ms_sbt;
+        optixSbtRecordPackHeader( state.radiance_miss_prog_group, &ms_sbt );
 
         CUDA_CHECK( cudaMemcpy(
             reinterpret_cast<void*>( d_miss_record ),
-            ms_sbt,
-            sizeof_miss_record*RAY_TYPE_COUNT,
+            &ms_sbt,
+            sizeof_miss_record,
             cudaMemcpyHostToDevice
         ) );
 
+        //MissRecord ms_sbt[RAY_TYPE_COUNT];
+        //optixSbtRecordPackHeader( state.radiance_miss_prog_group, &ms_sbt[0] );
+        //optixSbtRecordPackHeader( state.occlusion_miss_prog_group, &ms_sbt[1] );
+        //ms_sbt[1].data = ms_sbt[0].data = { 0.34f, 0.55f, 0.85f };
+
+        //CUDA_CHECK( cudaMemcpy(
+        //    reinterpret_cast<void*>( d_miss_record ),
+        //    ms_sbt,
+        //    sizeof_miss_record*RAY_TYPE_COUNT,
+        //    cudaMemcpyHostToDevice
+        //) );
+
         state.sbt.missRecordBase          = d_miss_record;
-        state.sbt.missRecordCount         = RAY_TYPE_COUNT;
+        //state.sbt.missRecordCount         = RAY_TYPE_COUNT;
+        state.sbt.missRecordCount         = 1;
         state.sbt.missRecordStrideInBytes = static_cast<uint32_t>( sizeof_miss_record );
     }
     std::cerr << "success miss" << std::endl;
 
     // Hitgroup program record
     {
+        HitGroupRecord hit_sbt;
+        OPTIX_CHECK( optixSbtRecordPackHeader(
+            state.radiance_metal_sphere_prog_group,
+            &hit_sbt ) );
+        CUdeviceptr d_hitgroup_records;
+        size_t      sizeof_hitgroup_record = sizeof( HitGroupRecord );
+        CUDA_CHECK( cudaMalloc(
+            reinterpret_cast<void**>( &d_hitgroup_records ),
+            sizeof_hitgroup_record
+        ) );
+
+        CUDA_CHECK( cudaMemcpy(
+            reinterpret_cast<void*>( d_hitgroup_records ),
+            &hit_sbt,
+            sizeof_hitgroup_record,
+            cudaMemcpyHostToDevice
+        ) );
+
+        //const size_t count_records = 1;
         //const size_t count_records = RAY_TYPE_COUNT * OBJ_COUNT;
-        const size_t count_records = RAY_TYPE_COUNT * state.params.numPrims;
-        std::cerr << count_records << std::endl;
-        HitGroupRecord hitgroup_records[count_records];
+        //const size_t count_records = RAY_TYPE_COUNT * state.params.numPrims;
+        //std::cerr << count_records << std::endl;
+        //HitGroupRecord hitgroup_records[count_records];
 
         // Note: MUST fill SBT record array same order like AS is built. Fill
         // different ray types for a primitive first then move to the next
         // primitive. See the table here:
         // https://raytracing-docs.nvidia.com/optix7/guide/index.html#shader_binding_table#shader-binding-table
-        int sbt_idx = 0;
+        //int sbt_idx = 0;
 
         // Metal Sphere
         // The correct way of thinking about optixSbtRecordPackHeader is that
@@ -719,44 +736,42 @@ void createSBT( WhittedState &state )
         // key is to think with a SBT-centric mindset: the programs are just
         // attached to the SBT (each SBT entry points to a program that will be
         // executed when we find the entry).
-        OPTIX_CHECK( optixSbtRecordPackHeader(
-            state.radiance_metal_sphere_prog_group,
-            &hitgroup_records[sbt_idx] ) );
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[0], 0};
-        hitgroup_records[ sbt_idx ].data.shading.metal = {
-            { 0.2f, 0.5f, 0.5f },   // Ka
-            { 0.2f, 0.7f, 0.8f },   // Kd
-            { 0.9f, 0.9f, 0.9f },   // Ks
-            { 0.5f, 0.5f, 0.5f },   // Kr
-            64,                     // phong_exp
-        };
-        sbt_idx ++;
+        //OPTIX_CHECK( optixSbtRecordPackHeader(
+        //    state.radiance_metal_sphere_prog_group,
+        //    &hitgroup_records[sbt_idx] ) );
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
+        //hitgroup_records[ sbt_idx ].data.shading.metal = {
+        //    { 0.2f, 0.5f, 0.5f },   // Ka
+        //    { 0.2f, 0.7f, 0.8f },   // Kd
+        //    { 0.9f, 0.9f, 0.9f },   // Ks
+        //    { 0.5f, 0.5f, 0.5f },   // Kr
+        //    64,                     // phong_exp
+        //};
+        //sbt_idx ++;
 
-        OPTIX_CHECK( optixSbtRecordPackHeader(
-            state.occlusion_metal_sphere_prog_group,
-            &hitgroup_records[sbt_idx] ) );
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
-        sbt_idx ++;
+        //OPTIX_CHECK( optixSbtRecordPackHeader(
+        //    state.occlusion_metal_sphere_prog_group,
+        //    &hitgroup_records[sbt_idx] ) );
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
+        //sbt_idx ++;
 
-        OPTIX_CHECK( optixSbtRecordPackHeader(
-            state.radiance_metal_sphere_prog_group,
-            &hitgroup_records[sbt_idx] ) );
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[1], 0};
-        hitgroup_records[ sbt_idx ].data.shading.metal = {
-            { 0.2f, 0.5f, 0.5f },   // Ka
-            { 0.2f, 0.7f, 0.8f },   // Kd
-            { 0.9f, 0.9f, 0.9f },   // Ks
-            { 0.5f, 0.5f, 0.5f },   // Kr
-            64,                     // phong_exp
-        };
-        sbt_idx ++;
+        //OPTIX_CHECK( optixSbtRecordPackHeader(
+        //    state.radiance_metal_sphere_prog_group,
+        //    &hitgroup_records[sbt_idx] ) );
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
+        //hitgroup_records[ sbt_idx ].data.shading.metal = {
+        //    { 0.2f, 0.5f, 0.5f },   // Ka
+        //    { 0.2f, 0.7f, 0.8f },   // Kd
+        //    { 0.9f, 0.9f, 0.9f },   // Ks
+        //    { 0.5f, 0.5f, 0.5f },   // Kr
+        //    64,                     // phong_exp
+        //};
+        //sbt_idx ++;
 
-        OPTIX_CHECK( optixSbtRecordPackHeader(
-            state.occlusion_metal_sphere_prog_group,
-            &hitgroup_records[sbt_idx] ) );
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
+        //OPTIX_CHECK( optixSbtRecordPackHeader(
+        //    state.occlusion_metal_sphere_prog_group,
+        //    &hitgroup_records[sbt_idx] ) );
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
         //sbt_idx ++;
 
         // Glass Sphere
@@ -812,22 +827,23 @@ void createSBT( WhittedState &state )
         //    &hitgroup_records[sbt_idx] ) );
         //hitgroup_records[ sbt_idx ].data.geometry.parallelogram = g_floor;
 
-        CUdeviceptr d_hitgroup_records;
-        size_t      sizeof_hitgroup_record = sizeof( HitGroupRecord );
-        CUDA_CHECK( cudaMalloc(
-            reinterpret_cast<void**>( &d_hitgroup_records ),
-            sizeof_hitgroup_record*count_records
-        ) );
+        //CUdeviceptr d_hitgroup_records;
+        //size_t      sizeof_hitgroup_record = sizeof( HitGroupRecord );
+        //CUDA_CHECK( cudaMalloc(
+        //    reinterpret_cast<void**>( &d_hitgroup_records ),
+        //    sizeof_hitgroup_record*count_records
+        //) );
 
-        CUDA_CHECK( cudaMemcpy(
-            reinterpret_cast<void*>( d_hitgroup_records ),
-            hitgroup_records,
-            sizeof_hitgroup_record*count_records,
-            cudaMemcpyHostToDevice
-        ) );
+        //CUDA_CHECK( cudaMemcpy(
+        //    reinterpret_cast<void*>( d_hitgroup_records ),
+        //    hitgroup_records,
+        //    sizeof_hitgroup_record*count_records,
+        //    cudaMemcpyHostToDevice
+        //) );
 
         state.sbt.hitgroupRecordBase            = d_hitgroup_records;
-        state.sbt.hitgroupRecordCount           = count_records;
+        //state.sbt.hitgroupRecordCount           = count_records;
+        state.sbt.hitgroupRecordCount           = 1;
         state.sbt.hitgroupRecordStrideInBytes   = static_cast<uint32_t>( sizeof_hitgroup_record );
     }
 }
@@ -861,7 +877,6 @@ void createContext( WhittedState& state )
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
     // Launch
-    //uchar4* result_buffer_data = output_buffer.map();
     // this map() thing basically returns the cudaMalloc-ed device pointer.
     unsigned int* result_buffer_data = output_buffer.map();
 
@@ -878,6 +893,13 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
                                  state.stream
     ) );
 
+    float time;
+    cudaEvent_t start, stop;
+
+    CUDA_CHECK( cudaEventCreate(&start) );
+    CUDA_CHECK( cudaEventCreate(&stop) );
+    CUDA_CHECK( cudaEventRecord(start, 0) );
+
     OPTIX_CHECK( optixLaunch(
         state.pipeline,
         state.stream,
@@ -890,6 +912,11 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     ) );
     output_buffer.unmap();
     CUDA_SYNC_CHECK();
+
+    CUDA_CHECK( cudaEventRecord(stop, 0) );
+    CUDA_CHECK( cudaEventSynchronize(stop) );
+    CUDA_CHECK( cudaEventElapsedTime(&time, start, stop) );
+    std::cerr << std::setprecision(9) << "kernel time (ms): " << time << std::endl;
 }
 
 
@@ -898,7 +925,7 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixPipelineDestroy     ( state.pipeline                ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.raygen_prog_group       ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_metal_sphere_prog_group ) );
-    OPTIX_CHECK( optixProgramGroupDestroy ( state.occlusion_metal_sphere_prog_group ) );
+    //OPTIX_CHECK( optixProgramGroupDestroy ( state.occlusion_metal_sphere_prog_group ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_miss_prog_group         ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.shading_module          ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.geometry_module         ) );
@@ -910,7 +937,6 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.accum_buffer    ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres                    ) ) );
 }
@@ -918,9 +944,8 @@ void cleanupState( WhittedState& state )
 int main( int argc, char* argv[] )
 {
     WhittedState state;
-    state.params.width  = 768;
-    state.params.height = 768;
     state.params.numPrims = OBJ_COUNT;
+    state.params.radius = 2; // will be overwritten if set explicitly
     sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
 
     //
@@ -935,23 +960,17 @@ int main( int argc, char* argv[] )
         {
             printUsageAndExit( argv[0] );
         }
-        else if( arg == "--no-gl-interop" )
-        {
-            output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-        }
         else if( arg == "--file" || arg == "-f" )
         {
             if( i >= argc - 1 )
                 printUsageAndExit( argv[0] );
             outfile = argv[++i];
         }
-        else if( arg.substr( 0, 6 ) == "--dim=" )
+        else if( arg == "--radius" || arg == "-r" )
         {
-            const std::string dims_arg = arg.substr( 6 );
-            int w, h;
-            sutil::parseDimensions( dims_arg.c_str(), w, h );
-            state.params.width  = w;
-            state.params.height = h;
+            if( i >= argc - 1 )
+                printUsageAndExit( argv[0] );
+            state.params.radius = atoi(argv[++i]);
         }
         else
         {
@@ -991,12 +1010,23 @@ int main( int argc, char* argv[] )
             std::cerr << "before launch" << std::endl;
             launchSubframe( output_buffer, state );
 
+            float time;
+            cudaEvent_t start, stop;
+            CUDA_CHECK( cudaEventCreate(&start) );
+            CUDA_CHECK( cudaEventCreate(&stop) );
+            CUDA_CHECK( cudaEventRecord(start, 0) );
+
             void* data = output_buffer.getHostPointer();
+
+            CUDA_CHECK( cudaEventRecord(stop, 0) );
+            CUDA_CHECK( cudaEventSynchronize(stop) );
+            CUDA_CHECK( cudaEventElapsedTime(&time, start, stop) );
+            std::cerr << std::setprecision(9) << "memcpy time (ms): " << time << std::endl;
 
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
               for (unsigned int j = 0; j < state.params.numPrims; j++) {
                 unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.numPrims + j ];
-                std::cout << p << " ";
+                std::cout << p;
               }
               std::cout << "\n";
             }

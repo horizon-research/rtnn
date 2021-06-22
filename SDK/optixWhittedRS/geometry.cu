@@ -43,21 +43,19 @@ extern "C" __device__ void intersect_sphere()
     // classic algorithm here:
     // https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 
-    const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
+    //const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
     //const Sphere sphere = sbt_data.geometry.sphere;
     unsigned int primIdx = optixGetPrimitiveIndex();
     const float3 center = params.spheres[primIdx];
-    const Sphere sphere = {center, 2};
 
     const float3  ray_orig = optixGetWorldRayOrigin();
     const float3  ray_dir  = optixGetWorldRayDirection();
     const float   ray_tmin = optixGetRayTmin(), ray_tmax = optixGetRayTmax();
 
-    float3 O = ray_orig - sphere.center;
+    float3 O = ray_orig - center;
     float  l = 1 / length(ray_dir);
     float3 D = ray_dir * l;
-    float radius = sphere.radius;
-    //float radius = 2; // a quick hack here
+    float radius = params.radius;
 
     // this is O projected onto D, which will be the tangential line length if
     // the ray just touches the sphere.
@@ -76,7 +74,7 @@ extern "C" __device__ void intersect_sphere()
 	// value set here will be overwritten there) and the closest hit
 	// program won't be called.
 
-        bool isApprox = true;
+        bool isApprox = false;
 
         unsigned int rayIdx = optixGetPayload_0();
         //unsigned int id = optixGetPayload_1();

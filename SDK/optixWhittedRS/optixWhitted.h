@@ -47,17 +47,12 @@ struct BasicLight
 
 struct Params
 {
-    unsigned int subframe_index;
-    float4*      accum_buffer;
-    //uchar4*      frame_buffer;
-    unsigned int*      frame_buffer;
-    float3*      spheres;
-    unsigned int width;
-    unsigned int height;
-    unsigned int numPrims;
+    unsigned int     subframe_index;
+    unsigned int*    frame_buffer;
+    float3*          spheres;
+    float            radius;
+    unsigned int     numPrims;
 
-    BasicLight   light;                 // TODO: make light list
-    float3       ambient_light_color;
     int          max_depth;
     float        scene_epsilon;
 
