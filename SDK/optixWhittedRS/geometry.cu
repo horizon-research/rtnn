@@ -44,7 +44,10 @@ extern "C" __device__ void intersect_sphere()
     // https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 
     const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
-    const Sphere sphere = sbt_data.geometry.sphere;
+    //const Sphere sphere = sbt_data.geometry.sphere;
+    unsigned int primIdx = optixGetPrimitiveIndex();
+    const float3 center = params.spheres[primIdx];
+    const Sphere sphere = {center, 2};
 
     const float3  ray_orig = optixGetWorldRayOrigin();
     const float3  ray_dir  = optixGetWorldRayDirection();
@@ -54,6 +57,7 @@ extern "C" __device__ void intersect_sphere()
     float  l = 1 / length(ray_dir);
     float3 D = ray_dir * l;
     float radius = sphere.radius;
+    //float radius = 2; // a quick hack here
 
     // this is O projected onto D, which will be the tangential line length if
     // the ray just touches the sphere.
@@ -106,9 +110,9 @@ extern "C" __device__ void intersect_sphere()
 
 extern "C" __global__ void __intersection__sphere()
 {
-    unsigned int rayIdx = optixGetPayload_0();
-    unsigned int primIdx = optixGetPrimitiveIndex();
-    params.frame_buffer[rayIdx * params.numPrims + primIdx] = rayIdx;
-    //intersect_sphere();
+    //unsigned int rayIdx = optixGetPayload_0();
+    //unsigned int primIdx = optixGetPrimitiveIndex();
+    //params.frame_buffer[rayIdx * params.numPrims + primIdx] = rayIdx;
+    intersect_sphere();
 }
 

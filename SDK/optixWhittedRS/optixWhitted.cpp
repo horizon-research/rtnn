@@ -646,6 +646,7 @@ void createSBT( WhittedState &state )
             state.params.numPrims * sizeof(float3),
             cudaMemcpyHostToDevice
         ) );
+        state.params.spheres = state.d_spheres;
 
         RayGenRecord rg_sbt;
         optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
@@ -721,8 +722,8 @@ void createSBT( WhittedState &state )
         OPTIX_CHECK( optixSbtRecordPackHeader(
             state.radiance_metal_sphere_prog_group,
             &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[0], 0};
+        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[0], 0};
         hitgroup_records[ sbt_idx ].data.shading.metal = {
             { 0.2f, 0.5f, 0.5f },   // Ka
             { 0.2f, 0.7f, 0.8f },   // Kd
@@ -741,8 +742,8 @@ void createSBT( WhittedState &state )
         OPTIX_CHECK( optixSbtRecordPackHeader(
             state.radiance_metal_sphere_prog_group,
             &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
-        hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[1], 0};
+        hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
+        //hitgroup_records[ sbt_idx ].data.geometry.sphere = {state.points[1], 0};
         hitgroup_records[ sbt_idx ].data.shading.metal = {
             { 0.2f, 0.5f, 0.5f },   // Ka
             { 0.2f, 0.7f, 0.8f },   // Kd

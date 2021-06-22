@@ -51,6 +51,7 @@ struct Params
     float4*      accum_buffer;
     //uchar4*      frame_buffer;
     unsigned int*      frame_buffer;
+    float3*      spheres;
     unsigned int width;
     unsigned int height;
     unsigned int numPrims;
