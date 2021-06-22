@@ -90,8 +90,8 @@ struct Record
     T data;
 };
 
-//typedef Record< vector<Sphere> >      RayGenRecord;
-typedef Record<CameraData>      RayGenRecord;
+typedef Record<GeomData>      RayGenRecord;
+//typedef Record<CameraData>      RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
@@ -124,6 +124,8 @@ struct WhittedState
     Params                      params;
     Params*                     d_params                  = nullptr;
 
+    float3*                     d_spheres                 = nullptr;
+
     OptixShaderBindingTable     sbt                       = {};
 };
 
@@ -139,8 +141,8 @@ const Sphere g_sphere1 = {
     1.0f                   // radius
 };
 const Sphere g_sphere2 = {
-    { 3.0f, 2.5f, -1.5f }, // center
-    0.7f                   // radius
+    { 2.0f, 1.5f, -2.6f }, // center
+    0.02f                   // radius
 };
 //const SphereShell g_sphere_shell = {
 //    { 4.0f, 2.3f, -4.0f }, // center
@@ -700,46 +702,55 @@ void createPipeline( WhittedState &state )
                                             ) );
 }
 
-void syncCameraDataToSbt( WhittedState &state, const CameraData& camData )
-{
-    RayGenRecord rg_sbt;
-
-    optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
-    rg_sbt.data = camData;
-
-    CUDA_CHECK( cudaMemcpy(
-        reinterpret_cast<void*>( state.sbt.raygenRecord ),
-        &rg_sbt,
-        sizeof( RayGenRecord ),
-        cudaMemcpyHostToDevice
-    ) );
-}
+//void syncCameraDataToSbt( WhittedState &state, const CameraData& camData )
+//{
+//    RayGenRecord rg_sbt;
+//
+//    optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
+//    rg_sbt.data = camData;
+//
+//    CUDA_CHECK( cudaMemcpy(
+//        reinterpret_cast<void*>( state.sbt.raygenRecord ),
+//        &rg_sbt,
+//        sizeof( RayGenRecord ),
+//        cudaMemcpyHostToDevice
+//    ) );
+//}
 
 void createSBT( WhittedState &state )
 {
     // Raygen program record
     {
-        //RayGenRecord rg_sbt;
+        std::vector<float3> spheres;
+        spheres.push_back(g_sphere1.center);
+        spheres.push_back(g_sphere2.center);
 
-        //optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
-        //rg_sbt.data.push_back(g_sphere1);
-        //rg_sbt.data.push_back(g_sphere2);
+        CUDA_CHECK( cudaMalloc(
+            reinterpret_cast<void**>(&state.d_spheres),
+            state.params.numPrims * sizeof(float3) ) );
+
+        CUDA_CHECK( cudaMemcpy(
+            reinterpret_cast<void*>( state.d_spheres),
+            &spheres[0],
+            state.params.numPrims * sizeof(float3),
+            cudaMemcpyHostToDevice
+        ) );
+
+        RayGenRecord rg_sbt;
+        optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
+        rg_sbt.data.spheres = state.d_spheres;
 
         CUdeviceptr d_raygen_record;
-        //CUDA_CHECK( cudaMalloc(
-        //    reinterpret_cast<void**>( &d_raygen_record ),
-        //    sizeof(rg_sbt) ) );
-        size_t sizeof_raygen_record = sizeof( RayGenRecord );
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>( &d_raygen_record ),
-            sizeof_raygen_record ) );
+            sizeof( RayGenRecord ) ) );
 
-        //CUDA_CHECK( cudaMemcpy(
-        //    reinterpret_cast<void*>( d_raygen_record ),
-        //    &rg_sbt,
-        //    sizeof(rg_sbt),
-        //    cudaMemcpyHostToDevice
-        //) );
+        CUDA_CHECK( cudaMemcpy(
+            reinterpret_cast<void*>( d_raygen_record ),
+            &rg_sbt,
+            sizeof(rg_sbt),
+            cudaMemcpyHostToDevice
+        ) );
 
         state.sbt.raygenRecord = d_raygen_record;
     }
@@ -944,19 +955,19 @@ void initCameraState()
     trackball.setGimbalLock(true);
 }
 
-void handleCameraUpdate( WhittedState &state )
-{
-    if( !camera_changed )
-        return;
-    camera_changed = false;
-
-    camera.setAspectRatio( static_cast<float>( state.params.width ) / static_cast<float>( state.params.height ) );
-    CameraData camData;
-    camData.eye = camera.eye();
-    camera.UVWFrame( camData.U, camData.V, camData.W );
-
-    syncCameraDataToSbt(state, camData);
-}
+//void handleCameraUpdate( WhittedState &state )
+//{
+//    if( !camera_changed )
+//        return;
+//    camera_changed = false;
+//
+//    camera.setAspectRatio( static_cast<float>( state.params.width ) / static_cast<float>( state.params.height ) );
+//    CameraData camData;
+//    camData.eye = camera.eye();
+//    camera.UVWFrame( camData.U, camData.V, camData.W );
+//
+//    syncCameraDataToSbt(state, camData);
+//}
 
 //void handleResize( sutil::CUDAOutputBuffer<uchar4>& output_buffer, Params& params )
 //{
@@ -994,7 +1005,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte have to be.
-    CUDA_CHECK( cudaMemset ( result_buffer_data, 0, state.params.width*state.params.height*state.params.numPrims*sizeof(unsigned int) ) );
+    CUDA_CHECK( cudaMemset ( result_buffer_data, 0, state.params.numPrims*state.params.numPrims*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
 
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
@@ -1010,8 +1021,10 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
         reinterpret_cast<CUdeviceptr>( state.d_params ),
         sizeof( Params ),
         &state.sbt,
-        state.params.width,  // launch width
-        state.params.height, // launch height
+        //state.params.width,  // launch width
+        state.params.numPrims,
+        //state.params.height, // launch height
+        1,
         1                    // launch depth
     ) );
     output_buffer.unmap();
@@ -1061,6 +1074,7 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.accum_buffer    ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
+    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres                    ) ) );
 }
 
 int main( int argc, char* argv[] )
@@ -1123,14 +1137,13 @@ int main( int argc, char* argv[] )
         initLaunchParams( state );
 
         {
-            //sutil::CUDAOutputBuffer<uchar4> output_buffer(
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
-                    state.params.numPrims * state.params.width,
-                    state.params.height
+                    state.params.numPrims,
+                    state.params.numPrims
                     );
 
-            handleCameraUpdate( state );
+            //handleCameraUpdate( state );
             //handleResize( output_buffer, state.params );
             launchSubframe( output_buffer, state );
 
@@ -1143,17 +1156,26 @@ int main( int argc, char* argv[] )
             std::ofstream myfile;
             myfile.open (outfile.c_str(), std::fstream::out);
 
-            //std::cerr << output_buffer.height() << ", " << state.params.numPrims << std::endl;
-            for (unsigned int i = 0; i < state.params.height; i++) {
-              for (unsigned int j = 0; j < state.params.width * state.params.numPrims; j += state.params.numPrims) {
-                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims ];
-                myfile << p << ",";
-                p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims + 1];
+            //for (unsigned int i = 0; i < state.params.height; i++) {
+            //  for (unsigned int j = 0; j < state.params.width * state.params.numPrims; j += state.params.numPrims) {
+            //    unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims ];
+            //    myfile << p << ",";
+            //    p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims + 1];
+            //    myfile << p << " ";
+            //    //std::cout << p << " ";
+            //  }
+            //  myfile << "\n";
+            //  //std::cout << "\n";
+            //}
+            //myfile.close();
+            //std::cerr << "done" << std::endl;
+
+            for (unsigned int i = 0; i < state.params.numPrims; i++) {
+              for (unsigned int j = 0; j < state.params.numPrims; j++) {
+                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.numPrims + j ];
                 myfile << p << " ";
-                //std::cout << p << " ";
               }
               myfile << "\n";
-              //std::cout << "\n";
             }
             myfile.close();
             std::cerr << "done" << std::endl;

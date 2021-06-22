@@ -81,8 +81,14 @@ struct MissData
 
 struct Sphere
 {
-	float3	center;
-	float 	radius;
+    float3	center;
+    float 	radius;
+};
+
+
+struct GeomData
+{
+  float3 *spheres;
 };
 
 

@@ -110,7 +110,9 @@ extern "C" __device__ void intersect_sphere()
 	// program won't be called.
         unsigned int image_index = optixGetPayload_0();
         unsigned int id = optixGetPayload_1();
-        params.frame_buffer[image_index + id] = optixGetPrimitiveIndex() + 1;
+        params.frame_buffer[image_index * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
+	// each ray's traversal is sequential; payload set here will be used in
+	// the next intersection.
         optixSetPayload_1( id+1 );
 
         //float sdisc = sqrtf(disc);
