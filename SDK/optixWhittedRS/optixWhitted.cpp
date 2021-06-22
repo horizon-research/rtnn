@@ -61,17 +61,6 @@
 //
 //------------------------------------------------------------------------------
 
-bool              resize_dirty  = false;
-bool              minimized     = false;
-
-// Camera state
-bool              camera_changed = true;
-sutil::Camera     camera;
-sutil::Trackball  trackball;
-
-// Mouse state
-int32_t           mouse_button = -1;
-
 const int         max_trace = 12;
 
 //------------------------------------------------------------------------------
@@ -91,7 +80,6 @@ struct Record
 };
 
 typedef Record<GeomData>      RayGenRecord;
-//typedef Record<CameraData>      RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
@@ -138,22 +126,12 @@ struct WhittedState
 // Metal sphere, glass sphere, floor, light
 const Sphere g_sphere1 = {
     { 2.0f, 1.5f, -2.5f }, // center
-    1.0f                   // radius
+    0.02f                  // radius
 };
 const Sphere g_sphere2 = {
-    { 2.0f, 1.5f, -2.6f }, // center
-    0.02f                   // radius
+    { 5.0f, 5.5f, -5.6f }, // center
+    0.02f                  // radius
 };
-//const SphereShell g_sphere_shell = {
-//    { 4.0f, 2.3f, -4.0f }, // center
-//    0.96f,                 // radius1
-//    1.0f                   // radius2
-//};
-//const Parallelogram g_floor(
-//    make_float3( 32.0f, 0.0f, 0.0f ),    // v1
-//    make_float3( 0.0f, 0.0f, 16.0f ),    // v2
-//    make_float3( -16.0f, 0.01f, -8.0f )  // anchor
-//    );
 const BasicLight g_light = {
     make_float3( 60.0f, 40.0f, 0.0f ),   // pos
     make_float3( 1.0f, 1.0f, 1.0f )      // color
@@ -209,26 +187,6 @@ static void sphere_bound(float3 center, float radius, float result[6])
         m_max.x, m_max.y, m_max.z
     };
 }
-
-//static void parallelogram_bound(float3 v1, float3 v2, float3 anchor, float result[6])
-//{
-//    // v1 and v2 are scaled by 1./length^2.  Rescale back to normal for the bounds computation.
-//    const float3 tv1  = v1 / dot( v1, v1 );
-//    const float3 tv2  = v2 / dot( v2, v2 );
-//    const float3 p00  = anchor;
-//    const float3 p01  = anchor + tv1;
-//    const float3 p10  = anchor + tv2;
-//    const float3 p11  = anchor + tv1 + tv2;
-//
-//    OptixAabb* aabb = reinterpret_cast<OptixAabb*>(result);
-//
-//    float3 m_min = fminf( fminf( p00, p01 ), fminf( p10, p11 ));
-//    float3 m_max = fmaxf( fmaxf( p00, p01 ), fmaxf( p10, p11 ));
-//    *aabb = {
-//        m_min.x, m_min.y, m_min.z,
-//        m_max.x, m_max.y, m_max.z
-//    };
-//}
 
 static void buildGas(
     const WhittedState &state,
@@ -314,12 +272,6 @@ void createGeometry( WhittedState &state )
     sphere_bound(
         g_sphere2.center, g_sphere2.radius,
         reinterpret_cast<float*>(&aabb[1]));
-    //sphere_bound(
-    //    g_sphere_shell.center, g_sphere_shell.radius2,
-    //    reinterpret_cast<float*>(&aabb[2]));
-    //parallelogram_bound(
-    //    g_floor.v1, g_floor.v2, g_floor.anchor,
-    //    reinterpret_cast<float*>(&aabb[3]));
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
         ), OBJ_COUNT * sizeof( OptixAabb ) ) );
@@ -334,11 +286,7 @@ void createGeometry( WhittedState &state )
     uint32_t aabb_input_flags[] = {
         /* flags for metal sphere */
         OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
-        OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
-        /* flag for glass sphere */
-        //OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL,
-        /* flag for floor */
-        //OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
+        OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT
     };
     /* TODO: This API cannot control flags for different ray type */
 
@@ -453,57 +401,6 @@ static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGr
     state.raygen_prog_group = cam_prog_group;
 }
 
-//static void createGlassSphereProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
-//{
-//    OptixProgramGroup           radiance_sphere_prog_group;
-//    OptixProgramGroupOptions    radiance_sphere_prog_group_options = {};
-//    OptixProgramGroupDesc       radiance_sphere_prog_group_desc = {};
-//    radiance_sphere_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-//    radiance_sphere_prog_group_desc.hitgroup.moduleIS            = state.geometry_module;
-//    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS = "__intersection__sphere_shell";
-//    radiance_sphere_prog_group_desc.hitgroup.moduleCH            = state.shading_module;
-//    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH = "__closesthit__glass_radiance";
-//    radiance_sphere_prog_group_desc.hitgroup.moduleAH            = nullptr;
-//    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameAH = nullptr;
-//
-//    char    log[2048];
-//    size_t  sizeof_log = sizeof( log );
-//    OPTIX_CHECK_LOG( optixProgramGroupCreate(
-//        state.context,
-//        &radiance_sphere_prog_group_desc,
-//        1,
-//        &radiance_sphere_prog_group_options,
-//        log,
-//        &sizeof_log,
-//        &radiance_sphere_prog_group ) );
-//
-//    program_groups.push_back(radiance_sphere_prog_group);
-//    state.radiance_glass_sphere_prog_group = radiance_sphere_prog_group;
-//
-//    OptixProgramGroup           occlusion_sphere_prog_group;
-//    OptixProgramGroupOptions    occlusion_sphere_prog_group_options = {};
-//    OptixProgramGroupDesc       occlusion_sphere_prog_group_desc = {};
-//    occlusion_sphere_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-//    occlusion_sphere_prog_group_desc.hitgroup.moduleIS            = state.geometry_module;
-//    occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameIS = "__intersection__sphere_shell";
-//    occlusion_sphere_prog_group_desc.hitgroup.moduleCH            = nullptr;
-//    occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameCH = nullptr;
-//    occlusion_sphere_prog_group_desc.hitgroup.moduleAH            = state.shading_module;
-//    occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameAH = "__anyhit__glass_occlusion";
-//
-//    OPTIX_CHECK_LOG( optixProgramGroupCreate(
-//        state.context,
-//        &occlusion_sphere_prog_group_desc,
-//        1,
-//        &occlusion_sphere_prog_group_options,
-//        log,
-//        &sizeof_log,
-//        &occlusion_sphere_prog_group ) );
-//
-//    program_groups.push_back(occlusion_sphere_prog_group);
-//    state.occlusion_glass_sphere_prog_group = occlusion_sphere_prog_group;
-//}
-
 static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
 {
     char    log[2048];
@@ -555,57 +452,6 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     program_groups.push_back(occlusion_sphere_prog_group);
     state.occlusion_metal_sphere_prog_group = occlusion_sphere_prog_group;
 }
-
-//static void createFloorProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
-//{
-//    OptixProgramGroup           radiance_floor_prog_group;
-//    OptixProgramGroupOptions    radiance_floor_prog_group_options = {};
-//    OptixProgramGroupDesc       radiance_floor_prog_group_desc = {};
-//    radiance_floor_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-//    radiance_floor_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
-//    radiance_floor_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__parallelogram";
-//    radiance_floor_prog_group_desc.hitgroup.moduleCH               = state.shading_module;
-//    radiance_floor_prog_group_desc.hitgroup.entryFunctionNameCH    = "__closesthit__checker_radiance";
-//    radiance_floor_prog_group_desc.hitgroup.moduleAH               = nullptr;
-//    radiance_floor_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
-//
-//    char    log[2048];
-//    size_t  sizeof_log = sizeof( log );
-//    OPTIX_CHECK_LOG( optixProgramGroupCreate(
-//        state.context,
-//        &radiance_floor_prog_group_desc,
-//        1,
-//        &radiance_floor_prog_group_options,
-//        log,
-//        &sizeof_log,
-//        &radiance_floor_prog_group ) );
-//
-//    program_groups.push_back(radiance_floor_prog_group);
-//    state.radiance_floor_prog_group = radiance_floor_prog_group;
-//
-//    OptixProgramGroup           occlusion_floor_prog_group;
-//    OptixProgramGroupOptions    occlusion_floor_prog_group_options = {};
-//    OptixProgramGroupDesc       occlusion_floor_prog_group_desc = {};
-//    occlusion_floor_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-//    occlusion_floor_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
-//    occlusion_floor_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__parallelogram";
-//    occlusion_floor_prog_group_desc.hitgroup.moduleCH               = state.shading_module;
-//    occlusion_floor_prog_group_desc.hitgroup.entryFunctionNameCH    = "__closesthit__full_occlusion";
-//    occlusion_floor_prog_group_desc.hitgroup.moduleAH               = nullptr;
-//    occlusion_floor_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
-//
-//    OPTIX_CHECK_LOG( optixProgramGroupCreate(
-//        state.context,
-//        &occlusion_floor_prog_group_desc,
-//        1,
-//        &occlusion_floor_prog_group_options,
-//        log,
-//        &sizeof_log,
-//        &occlusion_floor_prog_group ) );
-//
-//    program_groups.push_back(occlusion_floor_prog_group);
-//    state.occlusion_floor_prog_group = occlusion_floor_prog_group;
-//}
 
 static void createMissProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
 {
@@ -660,9 +506,7 @@ void createPipeline( WhittedState &state )
     // Prepare program groups
     createModules( state );
     createCameraProgram( state, program_groups );
-    //createGlassSphereProgram( state, program_groups );
     createMetalSphereProgram( state, program_groups );
-    //createFloorProgram( state, program_groups );
     createMissProgram( state, program_groups );
 
     // Link program groups to pipeline
@@ -701,21 +545,6 @@ void createPipeline( WhittedState &state )
                                             1  // maxTraversableDepth
                                             ) );
 }
-
-//void syncCameraDataToSbt( WhittedState &state, const CameraData& camData )
-//{
-//    RayGenRecord rg_sbt;
-//
-//    optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
-//    rg_sbt.data = camData;
-//
-//    CUDA_CHECK( cudaMemcpy(
-//        reinterpret_cast<void*>( state.sbt.raygenRecord ),
-//        &rg_sbt,
-//        sizeof( RayGenRecord ),
-//        cudaMemcpyHostToDevice
-//    ) );
-//}
 
 void createSBT( WhittedState &state )
 {
@@ -941,60 +770,6 @@ void createContext( WhittedState& state )
 //
 //
 
-void initCameraState()
-{
-    camera.setEye( make_float3( 8.0f, 2.0f, -4.0f ) );
-    camera.setLookat( make_float3( 4.0f, 2.3f, -4.0f ) );
-    camera.setUp( make_float3( 0.0f, 1.0f, 0.0f ) );
-    camera.setFovY( 60.0f );
-    camera_changed = true;
-
-    trackball.setCamera( &camera );
-    trackball.setMoveSpeed( 10.0f );
-    trackball.setReferenceFrame( make_float3( 1.0f, 0.0f, 0.0f ), make_float3( 0.0f, 0.0f, 1.0f ), make_float3( 0.0f, 1.0f, 0.0f ) );
-    trackball.setGimbalLock(true);
-}
-
-//void handleCameraUpdate( WhittedState &state )
-//{
-//    if( !camera_changed )
-//        return;
-//    camera_changed = false;
-//
-//    camera.setAspectRatio( static_cast<float>( state.params.width ) / static_cast<float>( state.params.height ) );
-//    CameraData camData;
-//    camData.eye = camera.eye();
-//    camera.UVWFrame( camData.U, camData.V, camData.W );
-//
-//    syncCameraDataToSbt(state, camData);
-//}
-
-//void handleResize( sutil::CUDAOutputBuffer<uchar4>& output_buffer, Params& params )
-//{
-//    if( !resize_dirty )
-//        return;
-//    resize_dirty = false;
-//
-//    output_buffer.resize( params.width, params.height );
-//
-//    // Realloc accumulation buffer
-//    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( params.accum_buffer ) ) );
-//    CUDA_CHECK( cudaMalloc(
-//        reinterpret_cast<void**>( &params.accum_buffer ),
-//        params.width*params.height*sizeof(float4)
-//    ) );
-//}
-
-//void updateState( sutil::CUDAOutputBuffer<uchar4>& output_buffer, WhittedState &state )
-//{
-//    // Update params on device
-//    if( camera_changed || resize_dirty )
-//        state.params.subframe_index = 0;
-//
-//    handleCameraUpdate( state );
-//    handleResize( output_buffer, state.params );
-//}
-
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
     // Launch
@@ -1021,33 +796,12 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
         reinterpret_cast<CUdeviceptr>( state.d_params ),
         sizeof( Params ),
         &state.sbt,
-        //state.params.width,  // launch width
-        state.params.numPrims,
-        //state.params.height, // launch height
-        1,
-        1                    // launch depth
+        state.params.numPrims, // launch width
+        1,                     // launch height
+        1                      // launch depth
     ) );
     output_buffer.unmap();
     CUDA_SYNC_CHECK();
-}
-
-
-void displaySubframe(
-    sutil::CUDAOutputBuffer<uchar4>&  output_buffer,
-    sutil::GLDisplay&                 gl_display,
-    GLFWwindow*                       window )
-{
-    // Display
-    int framebuf_res_x = 0;   // The display's resolution (could be HDPI res)
-    int framebuf_res_y = 0;   //
-    glfwGetFramebufferSize( window, &framebuf_res_x, &framebuf_res_y );
-    gl_display.display(
-        output_buffer.width(),
-        output_buffer.height(),
-        framebuf_res_x,
-        framebuf_res_y,
-        output_buffer.getPBO()
-    );
 }
 
 
@@ -1057,11 +811,7 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixProgramGroupDestroy ( state.raygen_prog_group       ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_metal_sphere_prog_group ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.occlusion_metal_sphere_prog_group ) );
-    //OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_glass_sphere_prog_group ) );
-    //OPTIX_CHECK( optixProgramGroupDestroy ( state.occlusion_glass_sphere_prog_group ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_miss_prog_group         ) );
-    //OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_floor_prog_group        ) );
-    //OPTIX_CHECK( optixProgramGroupDestroy ( state.occlusion_floor_prog_group       ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.shading_module          ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.geometry_module         ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.camera_module           ) );
@@ -1124,8 +874,6 @@ int main( int argc, char* argv[] )
 
     try
     {
-        initCameraState();
-
         //
         // Set up OptiX state
         //
@@ -1143,32 +891,11 @@ int main( int argc, char* argv[] )
                     state.params.numPrims
                     );
 
-            //handleCameraUpdate( state );
-            //handleResize( output_buffer, state.params );
             launchSubframe( output_buffer, state );
 
-            //sutil::ImageBuffer buffer;
             void* data = output_buffer.getHostPointer();
-            //buffer.width        = output_buffer.width();
-            //buffer.height       = output_buffer.height();
-            //buffer.pixel_format = sutil::BufferImageFormat::UNSIGNED_BYTE4;
-            //sutil::saveImage( outfile.c_str(), buffer, false );
             std::ofstream myfile;
             myfile.open (outfile.c_str(), std::fstream::out);
-
-            //for (unsigned int i = 0; i < state.params.height; i++) {
-            //  for (unsigned int j = 0; j < state.params.width * state.params.numPrims; j += state.params.numPrims) {
-            //    unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims ];
-            //    myfile << p << ",";
-            //    p = reinterpret_cast<unsigned int*>( data )[ i * state.params.width * state.params.numPrims + j * state.params.numPrims + 1];
-            //    myfile << p << " ";
-            //    //std::cout << p << " ";
-            //  }
-            //  myfile << "\n";
-            //  //std::cout << "\n";
-            //}
-            //myfile.close();
-            //std::cerr << "done" << std::endl;
 
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
               for (unsigned int j = 0; j < state.params.numPrims; j++) {
