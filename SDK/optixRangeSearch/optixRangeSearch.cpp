@@ -893,7 +893,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte have to be.
-    CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*MAX_NEIGHBORS*sizeof(unsigned int) ) );
+    CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*state.params.knn*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
 
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
@@ -942,9 +942,9 @@ void cleanupState( WhittedState& state )
 int main( int argc, char* argv[] )
 {
     WhittedState state;
-    state.params.radius = 2; // will be overwritten if set explicitly
-    sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-
+    // will be overwritten if set explicitly
+    state.params.radius = 2;
+    state.params.knn = 50;
     std::string outfile;
 
     for( int i = 1; i < argc; ++i )
@@ -959,6 +959,12 @@ int main( int argc, char* argv[] )
             if( i >= argc - 1 )
                 printUsageAndExit( argv[0] );
             outfile = argv[++i];
+        }
+        else if( arg == "--knn" || arg == "-k" )
+        {
+            if( i >= argc - 1 )
+                printUsageAndExit( argv[0] );
+            state.params.knn = atoi(argv[++i]);
         }
         else if( arg == "--radius" || arg == "-r" )
         {
@@ -977,6 +983,7 @@ int main( int argc, char* argv[] )
     state.points = read_pc_data(outfile.c_str(), &state.params.numPrims);
     std::cerr << "numPrims: " << state.params.numPrims << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
+    std::cerr << "K: " << state.params.knn << std::endl;
 
     Timing::reset();
 
@@ -1006,10 +1013,11 @@ int main( int argc, char* argv[] )
         Timing::stopTiming(true);
 
         {
+            sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
             Timing::startTiming("optixLaunch compute time");
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
-                    state.params.numPrims*MAX_NEIGHBORS,
+                    state.params.numPrims*state.params.knn,
                     1
                     );
 
@@ -1021,14 +1029,14 @@ int main( int argc, char* argv[] )
             Timing::stopTiming(true);
 
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
-              for (unsigned int j = 0; j < MAX_NEIGHBORS; j++) {
-                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * MAX_NEIGHBORS + j ];
+              for (unsigned int j = 0; j < state.params.knn; j++) {
+                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
                 if (p == UINT_MAX) break;
                 else {
                   float3 diff = state.points[p] - state.points[i];
                   float dists = dot(diff, diff);
                   if (dists > state.params.radius*state.params.radius) {
-                    fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]\n", p, state.points[i].x, state.points[i].y, state.points[i].z, i, state.points[p].x, state.points[p].y, state.points[p].z);
+                    fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[i].x, state.points[i].y, state.points[i].z, i, state.points[p].x, state.points[p].y, state.points[p].z, sqrt(dists));
                     exit(1);
                   }
                 }

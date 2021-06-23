@@ -80,7 +80,6 @@ namespace bvh_radSearch
         //std::string path = std::string(wpath.begin(), wpath.end()) + "\\assets\\ptx\\";
         //std::string ptx{};
         //getPtxString(ptx, path.c_str(), "radius_search.ptx");
-        //getPtxString(ptx, ".", "radius_search.ptx");
         const std::string ptx = sutil::getPtxString( OPTIX_SAMPLE_NAME, OPTIX_SAMPLE_DIR, "radius_search.cu" );
         size_t sizeof_log = sizeof(log);
 
@@ -385,7 +384,12 @@ namespace bvh_radSearch
         statistics_t stats{};
 
         this->radius_search_count(pQueries, stats);
+        // so we first do a radius search and just count how many neighbors
+        // each query has; we then allocate GPU memory that way and do the
+        // search again, this time with the actual neighbor indices stored and
+        // transferred back.
         *pMaxCapacity = stats.maxGather;
+        std::cout << stats.maxGather << std::endl;
         return this->truncated_knn(pQueries, stats.maxGather, pIndices, pDists);
     }
 
@@ -467,8 +471,11 @@ namespace bvh_radSearch
         CUDA_SYNC_CHECK();
         float_t elapsed_ms = timer.stop();
 
+        // the neighbor indices
         pIndices = indices.getData();
+        // the neighbor distances
         pDists = dists.getData();
+        // the queries themselves
         pQueries = queries.getData();
 
         return elapsed_ms;

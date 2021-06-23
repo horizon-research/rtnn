@@ -154,7 +154,6 @@ void test_point_cloud(const OptixDeviceContext& pCntx,
 
     if (knn == -1)
     {
-        std::cout << maxCapacity << std::endl;
         ms_search_timer = index.radius_search(queries, indices, dists, &maxCapacity);
     }
     else
@@ -180,7 +179,8 @@ int main(int argc, char* argv[])
         CUcontext cuCtx = 0;
         OPTIX_CHECK(optixInit());
         OptixDeviceContextOptions options = {};
-        options.logCallbackFunction = &context_log_cb;
+        //options.logCallbackFunction = &context_log_cb;
+        options.logCallbackFunction = nullptr;
         options.logCallbackLevel = 4;
         OPTIX_CHECK(optixDeviceContextCreate(cuCtx, &options, &context));
 
@@ -191,7 +191,9 @@ int main(int argc, char* argv[])
 
         std::string outfile;
         outfile = argv[1];
-        test_point_cloud(context, outfile.c_str(), 2.f, 1.f, 50);
+        float radius = std::stof(argv[2]);
+        int knn = atoi(argv[3]);
+        test_point_cloud(context, outfile.c_str(), radius, 1.f, knn);
         /*
         //params: optixContext, objFile, radius, fraction of samples as queries, knn
 

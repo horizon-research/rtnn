@@ -53,18 +53,18 @@ extern "C" __device__ void intersect_sphere()
     const float3 center = params.spheres[primIdx];
 
     const float3  ray_orig = optixGetWorldRayOrigin();
-    const float3  ray_dir  = optixGetWorldRayDirection();
-    const float   ray_tmin = optixGetRayTmin(), ray_tmax = optixGetRayTmax();
+    //const float3  ray_dir  = optixGetWorldRayDirection();
+    //const float   ray_tmin = optixGetRayTmin(), ray_tmax = optixGetRayTmax();
 
     float3 O = ray_orig - center;
 
     if (dot(O, O) < params.radius * params.radius) {
       unsigned int id = optixGetPayload_1();
-      if (id < MAX_NEIGHBORS) {
+      if (id < params.knn) {
         unsigned int rayIdx = optixGetPayload_0();
         unsigned int primIdx = optixGetPrimitiveIndex();
-        //params.frame_buffer[rayIdx * MAX_NEIGHBORS + primIdx] = primIdx;
-        params.frame_buffer[rayIdx * MAX_NEIGHBORS + id] = primIdx;
+        //params.frame_buffer[rayIdx * params.knn + primIdx] = primIdx;
+        params.frame_buffer[rayIdx * params.knn + id] = primIdx;
         optixSetPayload_1( id+1 );
       }
     }
@@ -82,7 +82,7 @@ extern "C" __global__ void __intersection__sphere()
     unsigned int rayIdx = optixGetPayload_0();
     unsigned int primIdx = optixGetPrimitiveIndex();
     unsigned int id = optixGetPayload_1();
-    params.frame_buffer[rayIdx * MAX_NEIGHBORS + id] = primIdx;
+    params.frame_buffer[rayIdx * params.knn + id] = primIdx;
     optixSetPayload_1( id+1 );
   } else {
     intersect_sphere();

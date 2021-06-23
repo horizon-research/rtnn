@@ -30,8 +30,6 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-#define MAX_NEIGHBORS 70
-
 enum RayType
 {
     RAY_TYPE_RADIANCE  = 0,
@@ -54,6 +52,7 @@ struct Params
     float3*          spheres;
     float            radius;
     unsigned int     numPrims;
+    int              knn;
 
     int          max_depth;
     float        scene_epsilon;
