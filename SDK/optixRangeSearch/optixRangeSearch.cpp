@@ -54,7 +54,7 @@
 #include <fstream>
 #include <string>
 
-#include "optixWhitted.h"
+#include "optixRangeSearch.h"
 
 
 //------------------------------------------------------------------------------

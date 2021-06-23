@@ -28,8 +28,8 @@
 
 OPTIX_add_sample_executable( optixRangeSearch target_name
   ${SAMPLES_CUDA_DIR}/helpers.h
-  optixWhitted.cpp
-  optixWhitted.h
+  optixRangeSearch.cpp
+  optixRangeSearch.h
   camera.cu
   geometry.cu
   shading.cu
