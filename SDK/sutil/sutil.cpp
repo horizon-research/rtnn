@@ -884,6 +884,7 @@ static void getPtxFromCuString( std::string& ptx, const char* sample_name, const
     if( log_size > 1 )
     {
         NVRTC_CHECK_ERROR( nvrtcGetProgramLog( prog, &g_nvrtcLog[0] ) );
+        //std::cout << g_nvrtcLog << std::endl;
         if( log_string )
             *log_string = g_nvrtcLog.c_str();
     }

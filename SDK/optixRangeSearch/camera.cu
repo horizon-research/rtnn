@@ -65,7 +65,9 @@ extern "C" __global__ void __raygen__pinhole_camera()
         //1e16f,
         0.0f,
         OptixVisibilityMask( 1 ),
-        OPTIX_RAY_FLAG_NONE,
+        //OPTIX_RAY_FLAG_NONE,
+        OPTIX_RAY_FLAG_DISABLE_ANYHIT |
+        OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
         RAY_TYPE_RADIANCE,
         //RAY_TYPE_COUNT,
         1,
@@ -73,8 +75,8 @@ extern "C" __global__ void __raygen__pinhole_camera()
         reinterpret_cast<unsigned int&>(rayIdx),
         reinterpret_cast<unsigned int&>(id)
     );
-    //params.frame_buffer[rayIdx * params.numPrims] = rayIdx;
-    //params.frame_buffer[rayIdx * params.numPrims+1] = ray_origin.x;
-    //params.frame_buffer[rayIdx * params.numPrims+2] = ray_origin.y;
-    //params.frame_buffer[rayIdx * params.numPrims+3] = ray_origin.z;
+    //params.frame_buffer[rayIdx * MAX_NEIGHBORS] = rayIdx;
+    //params.frame_buffer[rayIdx * MAX_NEIGHBORS+1] = ray_origin.x;
+    //params.frame_buffer[rayIdx * MAX_NEIGHBORS+2] = ray_origin.y;
+    //params.frame_buffer[rayIdx * MAX_NEIGHBORS+3] = ray_origin.z;
 }
