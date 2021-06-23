@@ -49,17 +49,20 @@ extern "C" __global__ void __raygen__pinhole_camera()
 
     //float3 ray_origin = geom->spheres[rayIdx];
     float3 ray_origin = params.spheres[rayIdx];
-    float3 ray_direction = normalize(make_float3(1, 1, 0));
+    float3 ray_direction = normalize(make_float3(1, 0, 0));
 
     unsigned int id = 0;
+    const float tmin = 0.f;
+    const float tmax = 1.e-16f;
 
     optixTrace(
         params.handle,
         ray_origin,
         ray_direction,
-        params.scene_epsilon,
+        tmin,
+        tmax,
+        //params.scene_epsilon,
         //1e16f,
-        1e-2f,
         0.0f,
         OptixVisibilityMask( 1 ),
         OPTIX_RAY_FLAG_NONE,

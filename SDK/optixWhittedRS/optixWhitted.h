@@ -30,6 +30,8 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
+#define MAX_NEIGHBORS 500
+
 enum RayType
 {
     RAY_TYPE_RADIANCE  = 0,

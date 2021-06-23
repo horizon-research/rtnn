@@ -38,10 +38,14 @@ __constant__ Params params;
 
 extern "C" __device__ void intersect_sphere()
 {
-    // This is called when a ray-bbox intersection is found. We still need to
-    // perform the ray-sphere intersection test ourselves, basically using the
-    // classic algorithm here:
-    // https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
+    // This is called when a ray-bbox intersection is found, but we still can't
+    // be sure that the point is within the sphere. It's possible that the
+    // point is within the bbox but no within the sphere, and it's also
+    // possible that the point is just outside of the bbox and just intersects
+    // with the bbox. Note that it's wasteful to do a ray-sphere intersection
+    // test and use the intersected Ts to decide whethere a point is inside the
+    // sphere or not
+    // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection).
 
     //const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
     //const Sphere sphere = sbt_data.geometry.sphere;
@@ -53,64 +57,35 @@ extern "C" __device__ void intersect_sphere()
     const float   ray_tmin = optixGetRayTmin(), ray_tmax = optixGetRayTmax();
 
     float3 O = ray_orig - center;
-    float  l = 1 / length(ray_dir);
-    float3 D = ray_dir * l;
-    float radius = params.radius;
 
-    // this is O projected onto D, which will be the tangential line length if
-    // the ray just touches the sphere.
-    float b = dot(O, D);
-    // dot(O, O) gets us the square of the ray-center distance
-    float c = dot(O, O)-radius*radius;
-    float disc = b*b-c;
-    //params.frame_buffer[optixGetPayload_0() * params.numPrims + optixGetPrimitiveIndex()] = b;
-
-    // disc > 0 means b^2 + radius^2 > dot(O, O)^2, which mean we have an intersection
-    if(disc > 0.0f)
-    {
-	// record the intersected primitive (might not be the closest and can
-	// be overwritten later). we won't report the intersection so the miss
-	// program will be called (although that's empty; if not, then the
-	// value set here will be overwritten there) and the closest hit
-	// program won't be called.
-
-        bool isApprox = false;
-
+    if (dot(O, O) < params.radius * params.radius) {
+      unsigned int id = optixGetPayload_1();
+      if (id < MAX_NEIGHBORS) {
         unsigned int rayIdx = optixGetPayload_0();
-        //unsigned int id = optixGetPayload_1();
         unsigned int primIdx = optixGetPrimitiveIndex();
-        if (isApprox)
-        {
-          // approximate search here.
-          //params.frame_buffer[rayIdx * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
-          params.frame_buffer[rayIdx * params.numPrims + primIdx] = 1;
-	  // each ray's traversal is sequential; payload set here will be used in
-	  // the next intersection.
-        }
-        else
-        {
-          float sdisc = sqrtf(disc);
-          float root1 = (-b - sdisc);
-          float root2 = (-b + sdisc);
-
-          float t0, t1;
-          t0 = root1 * l;
-          t1 = root2 * l;
-
-          if ((t0 > 0 && t1 < 0) || (t0 < 0 && t1 > 0)) {
-            //params.frame_buffer[rayIdx * params.numPrims + id] = optixGetPrimitiveIndex() + 1;
-            params.frame_buffer[rayIdx * params.numPrims + primIdx] = 1;
-          }
-        }
-        //optixSetPayload_1( id+1 );
+        //params.frame_buffer[rayIdx * MAX_NEIGHBORS + primIdx] = primIdx;
+        params.frame_buffer[rayIdx * MAX_NEIGHBORS + id] = primIdx;
+        optixSetPayload_1( id+1 );
+      }
     }
 }
 
 extern "C" __global__ void __intersection__sphere()
 {
-    //unsigned int rayIdx = optixGetPayload_0();
-    //unsigned int primIdx = optixGetPrimitiveIndex();
-    //params.frame_buffer[rayIdx * params.numPrims + primIdx] = rayIdx;
+  // I don't know why but it seems like the IS program will be called as long
+  // as the ray origin is without a primitive's bbox, even if the actual
+  // intersections are beyond the tmin and tmax.
+
+  bool isApprox = false;
+
+  if (isApprox) {
+    unsigned int rayIdx = optixGetPayload_0();
+    unsigned int primIdx = optixGetPrimitiveIndex();
+    unsigned int id = optixGetPayload_1();
+    params.frame_buffer[rayIdx * MAX_NEIGHBORS + id] = primIdx;
+    optixSetPayload_1( id+1 );
+  } else {
     intersect_sphere();
+  }
 }
 

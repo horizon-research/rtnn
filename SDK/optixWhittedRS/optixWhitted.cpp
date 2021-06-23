@@ -51,6 +51,7 @@
 #include <iomanip>
 #include <cstring>
 #include <fstream>
+#include <string>
 
 #include "optixWhitted.h"
 
@@ -306,6 +307,13 @@ void createGeometry( WhittedState &state )
           reinterpret_cast<float*>(&aabb[i]));
     }
 
+    //std::cerr << aabb[0].minX << "," << aabb[0].minY << "," << aabb[0].minZ << std::endl;
+    //std::cerr << aabb[0].maxX << "," << aabb[0].maxY << "," << aabb[0].maxZ << std::endl;
+    //std::cerr << aabb[1].minX << "," << aabb[1].minY << "," << aabb[1].minZ << std::endl;
+    //std::cerr << aabb[1].maxX << "," << aabb[1].maxY << "," << aabb[1].maxZ << std::endl;
+    //std::cerr << aabb[2].minX << "," << aabb[2].minY << "," << aabb[2].minZ << std::endl;
+    //std::cerr << aabb[2].maxX << "," << aabb[2].maxY << "," << aabb[2].maxZ << std::endl;
+
     //sphere_bound(
     //    g_sphere1.center, g_sphere1.radius,
     //    reinterpret_cast<float*>(&aabb[0]));
@@ -351,7 +359,6 @@ void createGeometry( WhittedState &state )
     }
     CUdeviceptr    d_sbt_index;
 
-    std::cerr << sizeof(sbt_index) << std::endl;
     //CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), sizeof(sbt_index) ) );
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), state.params.numPrims * sizeof(uint32_t) ) );
     CUDA_CHECK( cudaMemcpy(
@@ -366,10 +373,12 @@ void createGeometry( WhittedState &state )
     aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
     aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
     //aabb_input.customPrimitiveArray.numSbtRecords = OBJ_COUNT;
-    aabb_input.customPrimitiveArray.numSbtRecords = state.params.numPrims;
+    //aabb_input.customPrimitiveArray.numSbtRecords = state.params.numPrims;
+    aabb_input.customPrimitiveArray.numSbtRecords = 1;
     //aabb_input.customPrimitiveArray.numPrimitives = OBJ_COUNT;
     aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
-    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = d_sbt_index;
+    //aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = d_sbt_index;
+    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
     aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
     aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
 
@@ -883,7 +892,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte have to be.
-    CUDA_CHECK( cudaMemset ( result_buffer_data, 0, state.params.numPrims*state.params.numPrims*sizeof(unsigned int) ) );
+    CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*MAX_NEIGHBORS*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
 
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
@@ -944,13 +953,10 @@ void cleanupState( WhittedState& state )
 int main( int argc, char* argv[] )
 {
     WhittedState state;
-    state.params.numPrims = OBJ_COUNT;
     state.params.radius = 2; // will be overwritten if set explicitly
     sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
+    //CUDA_CHECK( cudaSetDevice( 1 ) );
 
-    //
-    // Parse command line options
-    //
     std::string outfile;
 
     for( int i = 1; i < argc; ++i )
@@ -970,7 +976,7 @@ int main( int argc, char* argv[] )
         {
             if( i >= argc - 1 )
                 printUsageAndExit( argv[0] );
-            state.params.radius = atoi(argv[++i]);
+            state.params.radius = std::stof(argv[++i]);
         }
         else
         {
@@ -982,6 +988,7 @@ int main( int argc, char* argv[] )
     // read points
     state.points = read_pc_data(outfile.c_str(), &state.params.numPrims);
     std::cerr << "numPrims: " << state.params.numPrims << std::endl;
+    std::cerr << "radius: " << state.params.radius << std::endl;
 
     try
     {
@@ -989,25 +996,19 @@ int main( int argc, char* argv[] )
         // Set up OptiX state
         //
         createContext  ( state );
-        std::cerr << "ctx created" << std::endl;
         createGeometry ( state );
-        std::cerr << "geom created" << std::endl;
         createPipeline ( state );
-        std::cerr << "pipeline created" << std::endl;
         createSBT      ( state );
-        std::cerr << "sbt created" << std::endl;
 
         initLaunchParams( state );
-        std::cerr << "launch params init" << std::endl;
 
         {
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
-                    state.params.numPrims*state.params.numPrims,
+                    state.params.numPrims*MAX_NEIGHBORS,
                     1
                     );
 
-            std::cerr << "before launch" << std::endl;
             launchSubframe( output_buffer, state );
 
             float time;
@@ -1024,13 +1025,21 @@ int main( int argc, char* argv[] )
             std::cerr << std::setprecision(9) << "memcpy time (ms): " << time << std::endl;
 
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
-              for (unsigned int j = 0; j < state.params.numPrims; j++) {
-                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.numPrims + j ];
-                std::cout << p;
+              for (unsigned int j = 0; j < MAX_NEIGHBORS; j++) {
+                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * MAX_NEIGHBORS + j ];
+                if (p == UINT_MAX) break;
+                else {
+                  float3 diff = state.points[p] - state.points[i];
+                  float dists = dot(diff, diff);
+                  if (dists > state.params.radius*state.params.radius) {
+                    fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]\n", i, state.points[i].x, state.points[i].y, state.points[i].z, j, state.points[p].x, state.points[p].y, state.points[p].z);
+                    exit(1);
+                  }
+                }
+                std::cout << p << " ";
               }
               std::cout << "\n";
             }
-            std::cerr << "done" << std::endl;
         }
 
         cleanupState( state );
