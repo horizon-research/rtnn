@@ -29,7 +29,7 @@
 #include <vector_types.h>
 #include <optix_device.h>
 
-#include "optixWhitted.h"
+#include "optixRangeSearch.h"
 #include "helpers.h"
 
 extern "C" {

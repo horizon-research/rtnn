@@ -28,7 +28,7 @@
 
 #include <vector_types.h>
 #include <optix_device.h>
-#include "optixWhitted.h"
+#include "optixRangeSearch.h"
 #include "random.h"
 #include "helpers.h"
 #include <cuda/helpers.h>

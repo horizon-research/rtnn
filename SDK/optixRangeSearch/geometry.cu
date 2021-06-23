@@ -28,7 +28,7 @@
 
 #include <optix.h>
 
-#include "optixWhitted.h"
+#include "optixRangeSearch.h"
 #include "random.h"
 #include "helpers.h"
 
