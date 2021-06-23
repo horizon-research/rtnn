@@ -44,6 +44,8 @@ set(sources
     Exception.h
     GLDisplay.cpp
     GLDisplay.h
+    IDFactory.cpp
+    IDFactory.h
     Matrix.h
     PPMLoader.cpp
     PPMLoader.h
@@ -55,6 +57,8 @@ set(sources
     sutilapi.h
     sutil.cpp
     sutil.h
+    Timing.cpp
+    Timing.h
     Trackball.cpp
     Trackball.h
     vec_math.h

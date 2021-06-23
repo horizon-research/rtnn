@@ -46,6 +46,7 @@
 #include <sutil/Matrix.h>
 #include <sutil/sutil.h>
 #include <sutil/vec_math.h>
+#include <sutil/Timing.h>
 
 #include <GLFW/glfw3.h>
 #include <iomanip>
@@ -404,7 +405,7 @@ void createModules( WhittedState &state )
     OptixModuleCompileOptions module_compile_options = {
         100,                                    // maxRegisterCount
         OPTIX_COMPILE_OPTIMIZATION_DEFAULT,     // optLevel
-        OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO      // debugLevel
+        OPTIX_COMPILE_DEBUG_LEVEL_NONE          // debugLevel
     };
     char log[2048];
     size_t sizeof_log = sizeof(log);
@@ -698,7 +699,6 @@ void createSBT( WhittedState &state )
         state.sbt.missRecordCount         = 1;
         state.sbt.missRecordStrideInBytes = static_cast<uint32_t>( sizeof_miss_record );
     }
-    std::cerr << "success miss" << std::endl;
 
     // Hitgroup program record
     {
@@ -857,11 +857,11 @@ void createSBT( WhittedState &state )
     }
 }
 
-static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
-{
-    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
-              << message << "\n";
-}
+//static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
+//{
+//    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
+//              << message << "\n";
+//}
 
 void createContext( WhittedState& state )
 {
@@ -872,7 +872,8 @@ void createContext( WhittedState& state )
     CUcontext          cuCtx = 0;  // zero means take the current context
     OPTIX_CHECK( optixInit() );
     OptixDeviceContextOptions options = {};
-    options.logCallbackFunction       = &context_log_cb;
+    //options.logCallbackFunction       = &context_log_cb;
+    options.logCallbackFunction       = nullptr;
     options.logCallbackLevel          = 4;
     OPTIX_CHECK( optixDeviceContextCreate( cuCtx, &options, &context ) );
 
@@ -902,13 +903,6 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
                                  state.stream
     ) );
 
-    float time;
-    cudaEvent_t start, stop;
-
-    CUDA_CHECK( cudaEventCreate(&start) );
-    CUDA_CHECK( cudaEventCreate(&stop) );
-    CUDA_CHECK( cudaEventRecord(start, 0) );
-
     OPTIX_CHECK( optixLaunch(
         state.pipeline,
         state.stream,
@@ -921,11 +915,6 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     ) );
     output_buffer.unmap();
     CUDA_SYNC_CHECK();
-
-    CUDA_CHECK( cudaEventRecord(stop, 0) );
-    CUDA_CHECK( cudaEventSynchronize(stop) );
-    CUDA_CHECK( cudaEventElapsedTime(&time, start, stop) );
-    std::cerr << std::setprecision(9) << "kernel time (ms): " << time << std::endl;
 }
 
 
@@ -955,7 +944,6 @@ int main( int argc, char* argv[] )
     WhittedState state;
     state.params.radius = 2; // will be overwritten if set explicitly
     sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-    //CUDA_CHECK( cudaSetDevice( 1 ) );
 
     std::string outfile;
 
@@ -990,19 +978,35 @@ int main( int argc, char* argv[] )
     std::cerr << "numPrims: " << state.params.numPrims << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
 
+    Timing::reset();
+
     try
     {
         //
         // Set up OptiX state
         //
+        Timing::startTiming("creat Context");
         createContext  ( state );
-        createGeometry ( state );
-        createPipeline ( state );
-        createSBT      ( state );
+        Timing::stopTiming(true);
 
+        Timing::startTiming("creat Geometry");
+        createGeometry ( state );
+        Timing::stopTiming(true);
+
+        Timing::startTiming("creat Pipeline");
+        createPipeline ( state );
+        Timing::stopTiming(true);
+
+        Timing::startTiming("creat SBT");
+        createSBT      ( state );
+        Timing::stopTiming(true);
+
+        Timing::startTiming("init Launch Params");
         initLaunchParams( state );
+        Timing::stopTiming(true);
 
         {
+            Timing::startTiming("optixLaunch compute time");
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
                     state.params.numPrims*MAX_NEIGHBORS,
@@ -1010,19 +1014,11 @@ int main( int argc, char* argv[] )
                     );
 
             launchSubframe( output_buffer, state );
+            Timing::stopTiming(true);
 
-            float time;
-            cudaEvent_t start, stop;
-            CUDA_CHECK( cudaEventCreate(&start) );
-            CUDA_CHECK( cudaEventCreate(&stop) );
-            CUDA_CHECK( cudaEventRecord(start, 0) );
-
+            Timing::startTiming("Neighbor copy from device to host");
             void* data = output_buffer.getHostPointer();
-
-            CUDA_CHECK( cudaEventRecord(stop, 0) );
-            CUDA_CHECK( cudaEventSynchronize(stop) );
-            CUDA_CHECK( cudaEventElapsedTime(&time, start, stop) );
-            std::cerr << std::setprecision(9) << "memcpy time (ms): " << time << std::endl;
+            Timing::stopTiming(true);
 
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
               for (unsigned int j = 0; j < MAX_NEIGHBORS; j++) {
@@ -1032,14 +1028,15 @@ int main( int argc, char* argv[] )
                   float3 diff = state.points[p] - state.points[i];
                   float dists = dot(diff, diff);
                   if (dists > state.params.radius*state.params.radius) {
-                    fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]\n", i, state.points[i].x, state.points[i].y, state.points[i].z, j, state.points[p].x, state.points[p].y, state.points[p].z);
+                    fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]\n", p, state.points[i].x, state.points[i].y, state.points[i].z, i, state.points[p].x, state.points[p].y, state.points[p].z);
                     exit(1);
                   }
                 }
-                std::cout << p << " ";
+                //std::cout << p << " ";
               }
-              std::cout << "\n";
+              //std::cout << "\n";
             }
+            std::cerr << "Sanity check done" << std::endl;
         }
 
         cleanupState( state );
