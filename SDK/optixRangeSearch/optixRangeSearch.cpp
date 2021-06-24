@@ -992,6 +992,17 @@ int main( int argc, char* argv[] )
         //
         // Set up OptiX state
         //
+        int32_t device_count = 0;
+        CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
+        //state.resize( device_count );
+        std::cout << "Total GPUs visible: " << device_count << std::endl;
+  
+        int32_t device_id = 1;
+        cudaDeviceProp prop;
+        CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
+        CUDA_CHECK( cudaSetDevice( device_id ) );
+        std::cout << "\t[" << device_id << "]: " << prop.name << std::endl;
+
         Timing::startTiming("creat Context");
         createContext  ( state );
         Timing::stopTiming(true);
@@ -1015,10 +1026,12 @@ int main( int argc, char* argv[] )
         {
             sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
             Timing::startTiming("optixLaunch compute time");
+
             sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                     output_buffer_type,
                     state.params.numPrims*state.params.knn,
-                    1
+                    1,
+                    device_id
                     );
 
             launchSubframe( output_buffer, state );
@@ -1028,11 +1041,13 @@ int main( int argc, char* argv[] )
             void* data = output_buffer.getHostPointer();
             Timing::stopTiming(true);
 
+            unsigned int totalNeighbors = 0;
             for (unsigned int i = 0; i < state.params.numPrims; i++) {
               for (unsigned int j = 0; j < state.params.knn; j++) {
                 unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
                 if (p == UINT_MAX) break;
                 else {
+                  totalNeighbors++;
                   float3 diff = state.points[p] - state.points[i];
                   float dists = dot(diff, diff);
                   if (dists > state.params.radius*state.params.radius) {
@@ -1044,7 +1059,7 @@ int main( int argc, char* argv[] )
               }
               //std::cout << "\n";
             }
-            std::cerr << "Sanity check done" << std::endl;
+            std::cerr << "Sanity check done. Avg " << totalNeighbors/state.params.numPrims << " neighbors" << std::endl;
         }
 
         cleanupState( state );

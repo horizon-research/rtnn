@@ -56,6 +56,7 @@ class CUDAOutputBuffer
 {
 public:
     CUDAOutputBuffer( CUDAOutputBufferType type, int32_t width, int32_t height );
+    CUDAOutputBuffer( CUDAOutputBufferType type, int32_t width, int32_t height, int32_t device_id );
     ~CUDAOutputBuffer();
 
     void setDevice( int32_t device_idx ) { m_device_idx = device_idx; }
@@ -98,6 +99,41 @@ template <typename PIXEL_FORMAT>
 CUDAOutputBuffer<PIXEL_FORMAT>::CUDAOutputBuffer( CUDAOutputBufferType type, int32_t width, int32_t height )
     : m_type( type )
 {
+    // Output dimensions must be at least 1 in both x and y to avoid an error
+    // with cudaMalloc.
+#if 0
+    if( width < 1 || height < 1 )
+    {
+        throw sutil::Exception( "CUDAOutputBuffer dimensions must be at least 1 in both x and y." );
+    }
+#else
+    ensureMinimumSize( width, height );
+#endif
+
+    // If using GL Interop, expect that the active device is also the display device.
+    if( type == CUDAOutputBufferType::GL_INTEROP )
+    {
+        int current_device, is_display_device;
+        CUDA_CHECK( cudaGetDevice( &current_device ) );
+        CUDA_CHECK( cudaDeviceGetAttribute( &is_display_device, cudaDevAttrKernelExecTimeout, current_device ) );
+        if( !is_display_device )
+        {
+            throw sutil::Exception(
+                    "GL interop is only available on display device, please use display device for optimal "
+                    "performance.  Alternatively you can disable GL interop with --no-gl-interop and run with "
+                    "degraded performance."
+                    );
+        }
+    }
+    resize( width, height );
+}
+
+
+template <typename PIXEL_FORMAT>
+CUDAOutputBuffer<PIXEL_FORMAT>::CUDAOutputBuffer( CUDAOutputBufferType type, int32_t width, int32_t height, int32_t device_id )
+    : m_type( type )
+{
+    setDevice(device_id);
     // Output dimensions must be at least 1 in both x and y to avoid an error
     // with cudaMalloc.
 #if 0
