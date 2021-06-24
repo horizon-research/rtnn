@@ -81,7 +81,7 @@ struct Record
     T data;
 };
 
-typedef Record<GeomData>      RayGenRecord;
+typedef Record<GeomData>        RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
@@ -95,17 +95,10 @@ struct WhittedState
 
     OptixModule                 geometry_module           = 0;
     OptixModule                 camera_module             = 0;
-    OptixModule                 shading_module            = 0;
 
     OptixProgramGroup           raygen_prog_group         = 0;
     OptixProgramGroup           radiance_miss_prog_group  = 0;
-    OptixProgramGroup           occlusion_miss_prog_group = 0;
-    OptixProgramGroup           radiance_glass_sphere_prog_group  = 0;
-    OptixProgramGroup           occlusion_glass_sphere_prog_group = 0;
     OptixProgramGroup           radiance_metal_sphere_prog_group  = 0;
-    OptixProgramGroup           occlusion_metal_sphere_prog_group = 0;
-    OptixProgramGroup           radiance_floor_prog_group         = 0;
-    OptixProgramGroup           occlusion_floor_prog_group        = 0;
 
     OptixPipeline               pipeline                  = 0;
     OptixPipelineCompileOptions pipeline_compile_options  = {};
@@ -180,7 +173,6 @@ void initLaunchParams( WhittedState& state )
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
 
-    //CUDA_CHECK( cudaStreamCreate( &state.stream ) );
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
 
     state.params.handle = state.gas_handle;
@@ -385,19 +377,6 @@ void createModules( WhittedState &state )
             &sizeof_log,
             &state.camera_module ) );
     }
-
-    {
-        const std::string ptx = sutil::getPtxString( OPTIX_SAMPLE_NAME, OPTIX_SAMPLE_DIR, "shading.cu" );
-        OPTIX_CHECK_LOG( optixModuleCreateFromPTX(
-            state.context,
-            &module_compile_options,
-            &state.pipeline_compile_options,
-            ptx.c_str(),
-            ptx.size(),
-            log,
-            &sizeof_log,
-            &state.shading_module ) );
-    }
 }
 
 static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
@@ -435,8 +414,8 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     radiance_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
     radiance_sphere_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
-    radiance_sphere_prog_group_desc.hitgroup.moduleCH               = state.shading_module;
-    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = "__closesthit__metal_radiance";
+    radiance_sphere_prog_group_desc.hitgroup.moduleCH               = nullptr;
+    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.moduleAH               = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
 
@@ -458,8 +437,8 @@ static void createMissProgram( WhittedState &state, std::vector<OptixProgramGrou
     OptixProgramGroupOptions    miss_prog_group_options = {};
     OptixProgramGroupDesc       miss_prog_group_desc = {};
     miss_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_MISS;
-    miss_prog_group_desc.miss.module             = state.shading_module;
-    miss_prog_group_desc.miss.entryFunctionName  = "__miss__constant_bg";
+    miss_prog_group_desc.miss.module             = nullptr;
+    miss_prog_group_desc.miss.entryFunctionName  = nullptr;
 
     char    log[2048];
     size_t  sizeof_log = sizeof( log );
@@ -473,21 +452,6 @@ static void createMissProgram( WhittedState &state, std::vector<OptixProgramGrou
         &state.radiance_miss_prog_group ) );
 
     program_groups.push_back(state.radiance_miss_prog_group);
-
-    miss_prog_group_desc.miss = {
-        nullptr,    // module
-        nullptr     // entryFunctionName
-    };
-    OPTIX_CHECK_LOG( optixProgramGroupCreate(
-        state.context,
-        &miss_prog_group_desc,
-        1,
-        &miss_prog_group_options,
-        log,
-        &sizeof_log,
-        &state.occlusion_miss_prog_group ) );
-
-    program_groups.push_back(state.occlusion_miss_prog_group);
 }
 
 void createPipeline( WhittedState &state )
@@ -497,8 +461,8 @@ void createPipeline( WhittedState &state )
     state.pipeline_compile_options = {
         false,                                                  // usesMotionBlur
         OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS,          // traversableGraphFlags
-        5,    /* RadiancePRD uses 5 payloads */                 // numPayloadValues
-        5,    /* Parallelogram intersection uses 5 attrs */     // numAttributeValues
+        2,                                                      // numPayloadValues
+        0,                                                      // numAttributeValues
         OPTIX_EXCEPTION_FLAG_NONE,                              // exceptionFlags
         "params"                                                // pipelineLaunchParamsVariableName
     };
@@ -550,6 +514,8 @@ void createSBT( WhittedState &state )
 {
     // Raygen program record
     {
+        // allocating device memory for the spheres (points/queries)
+        // TODO: move it to somewhere else
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>(&state.d_spheres),
             state.params.numPrims * sizeof(float3) ) );
@@ -562,14 +528,14 @@ void createSBT( WhittedState &state )
         ) );
         state.params.points = state.d_spheres;
 
-        RayGenRecord rg_sbt;
-        optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
-        rg_sbt.data.spheres = state.d_spheres;
-
         CUdeviceptr d_raygen_record;
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>( &d_raygen_record ),
             sizeof( RayGenRecord ) ) );
+
+        RayGenRecord rg_sbt;
+        optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
+        //rg_sbt.data.spheres = state.d_spheres;
 
         CUDA_CHECK( cudaMemcpy(
             reinterpret_cast<void*>( d_raygen_record ),
@@ -606,16 +572,17 @@ void createSBT( WhittedState &state )
 
     // Hitgroup program record
     {
-        HitGroupRecord hit_sbt;
-        OPTIX_CHECK( optixSbtRecordPackHeader(
-            state.radiance_metal_sphere_prog_group,
-            &hit_sbt ) );
         CUdeviceptr d_hitgroup_records;
         size_t      sizeof_hitgroup_record = sizeof( HitGroupRecord );
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>( &d_hitgroup_records ),
             sizeof_hitgroup_record
         ) );
+
+        HitGroupRecord hit_sbt;
+        OPTIX_CHECK( optixSbtRecordPackHeader(
+            state.radiance_metal_sphere_prog_group,
+            &hit_sbt ) );
 
         CUDA_CHECK( cudaMemcpy(
             reinterpret_cast<void*>( d_hitgroup_records ),
@@ -721,7 +688,6 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixProgramGroupDestroy ( state.raygen_prog_group       ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_metal_sphere_prog_group ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_miss_prog_group         ) );
-    OPTIX_CHECK( optixModuleDestroy       ( state.shading_module          ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.geometry_module         ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.camera_module           ) );
     OPTIX_CHECK( optixDeviceContextDestroy( state.context                 ) );
@@ -786,7 +752,7 @@ int main( int argc, char* argv[] )
     try
     {
         //
-        // Set up OptiX state
+        // Set up CUDA device and stream
         //
         int32_t device_count = 0;
         CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
@@ -799,6 +765,10 @@ int main( int argc, char* argv[] )
         std::cout << "\t[" << device_id << "]: " << prop.name << std::endl;
 
         CUDA_CHECK( cudaStreamCreate( &state.stream ) );
+
+        //
+        // Set up OptiX state
+        //
         Timing::startTiming("creat Context");
         createContext  ( state );
         Timing::stopTiming(true);

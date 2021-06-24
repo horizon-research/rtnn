@@ -392,6 +392,7 @@ add_subdirectory( optixTriangle         )
 add_subdirectory( optixWhitted          )
 add_subdirectory( example01_helloOptix  )
 add_subdirectory( optixRangeSearch      )
+add_subdirectory( optixNDRangeSearch    )
 add_subdirectory( fastrnn )
 
 # Our sutil library.  The rules to build it are found in the subdirectory.
