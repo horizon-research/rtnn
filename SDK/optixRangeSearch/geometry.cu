@@ -50,7 +50,7 @@ extern "C" __device__ void intersect_sphere()
     //const HitGroupData &sbt_data = *(const HitGroupData*) optixGetSbtDataPointer();
     //const Sphere sphere = sbt_data.geometry.sphere;
     unsigned int primIdx = optixGetPrimitiveIndex();
-    const float3 center = params.spheres[primIdx];
+    const float3 center = params.points[primIdx];
 
     const float3  ray_orig = optixGetWorldRayOrigin();
     //const float3  ray_dir  = optixGetWorldRayDirection();

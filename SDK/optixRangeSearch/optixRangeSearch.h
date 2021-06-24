@@ -49,10 +49,11 @@ struct Params
 {
     unsigned int     subframe_index;
     unsigned int*    frame_buffer;
-    float3*          spheres;
+    float3*          points;
+    float3*          queries;
     float            radius;
     unsigned int     numPrims;
-    int              knn;
+    unsigned int     knn;
 
     int          max_depth;
     float        scene_epsilon;

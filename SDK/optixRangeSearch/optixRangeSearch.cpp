@@ -643,7 +643,7 @@ void createSBT( WhittedState &state )
             state.params.numPrims * sizeof(float3),
             cudaMemcpyHostToDevice
         ) );
-        state.params.spheres = state.d_spheres;
+        state.params.points = state.d_spheres;
 
         RayGenRecord rg_sbt;
         optixSbtRecordPackHeader( state.raygen_prog_group, &rg_sbt );
@@ -892,9 +892,10 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
 
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
-    // about what each byte have to be.
+    // about what each byte has to be.
     CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*state.params.knn*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
+    state.params.queries = state.params.points;
 
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,
@@ -910,9 +911,32 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
         sizeof( Params ),
         &state.sbt,
         state.params.numPrims, // launch width
+        //state.params.numPrims/2, // launch width
         1,                     // launch height
         1                      // launch depth
     ) );
+    //output_buffer.unmap();
+    //CUDA_SYNC_CHECK();
+
+    //state.params.frame_buffer += state.params.numPrims * state.params.knn / 2;
+    //state.params.queries += state.params.numPrims / 2;
+    //CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
+    //                             &state.params,
+    //                             sizeof( Params ),
+    //                             cudaMemcpyHostToDevice,
+    //                             state.stream
+    //) );
+
+    //OPTIX_CHECK( optixLaunch(
+    //    state.pipeline,
+    //    state.stream,
+    //    reinterpret_cast<CUdeviceptr>( state.d_params ),
+    //    sizeof( Params ),
+    //    &state.sbt,
+    //    state.params.numPrims -  state.params.numPrims/2, // launch width
+    //    1,                     // launch height
+    //    1                      // launch depth
+    //) );
     output_buffer.unmap();
     CUDA_SYNC_CHECK();
 }
@@ -936,7 +960,7 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres                    ) ) );
+    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres              ) ) );
 }
 
 int main( int argc, char* argv[] )
@@ -1022,44 +1046,50 @@ int main( int argc, char* argv[] )
         initLaunchParams( state );
         Timing::stopTiming(true);
 
-        {
-            sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-            Timing::startTiming("optixLaunch compute time");
+        //
+        // Do the work
+        //
 
-            sutil::CUDAOutputBuffer<unsigned int> output_buffer(
-                    output_buffer_type,
-                    state.params.numPrims*state.params.knn,
-                    1,
-                    device_id
-                    );
+        sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
+        Timing::startTiming("optixLaunch compute time");
 
-            launchSubframe( output_buffer, state );
-            Timing::stopTiming(true);
+        sutil::CUDAOutputBuffer<unsigned int> output_buffer(
+                output_buffer_type,
+                state.params.numPrims*state.params.knn,
+                1,
+                device_id
+                );
 
-            Timing::startTiming("Neighbor copy from device to host");
-            void* data = output_buffer.getHostPointer();
-            Timing::stopTiming(true);
+        launchSubframe( output_buffer, state );
+        Timing::stopTiming(true);
 
-            unsigned int totalNeighbors = 0;
-            for (unsigned int i = 0; i < state.params.numPrims; i++) {
-              for (unsigned int j = 0; j < state.params.knn; j++) {
-                unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
-                if (p == UINT_MAX) break;
-                else {
-                  totalNeighbors++;
-                  float3 diff = state.points[p] - state.points[i];
-                  float dists = dot(diff, diff);
-                  if (dists > state.params.radius*state.params.radius) {
-                    fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[i].x, state.points[i].y, state.points[i].z, i, state.points[p].x, state.points[p].y, state.points[p].z, sqrt(dists));
-                    exit(1);
-                  }
-                }
-                //std::cout << p << " ";
-              }
-              //std::cout << "\n";
-            }
-            std::cerr << "Sanity check done. Avg " << totalNeighbors/state.params.numPrims << " neighbors" << std::endl;
-        }
+        //
+        // Check the work
+        //
+
+        Timing::startTiming("Neighbor copy from device to host");
+        void* data = output_buffer.getHostPointer();
+        Timing::stopTiming(true);
+
+        //unsigned int totalNeighbors = 0;
+        //for (unsigned int i = 0; i < state.params.numPrims; i++) {
+        //  for (unsigned int j = 0; j < state.params.knn; j++) {
+        //    unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
+        //    if (p == UINT_MAX) break;
+        //    else {
+        //      totalNeighbors++;
+        //      float3 diff = state.points[p] - state.points[i];
+        //      float dists = dot(diff, diff);
+        //      if (dists > state.params.radius*state.params.radius) {
+        //        fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[i].x, state.points[i].y, state.points[i].z, i, state.points[p].x, state.points[p].y, state.points[p].z, sqrt(dists));
+        //        exit(1);
+        //      }
+        //    }
+        //    //std::cout << p << " ";
+        //  }
+        //  //std::cout << "\n";
+        //}
+        //std::cerr << "Sanity check done. Avg " << totalNeighbors/state.params.numPrims << " neighbors" << std::endl;
 
         cleanupState( state );
     }
