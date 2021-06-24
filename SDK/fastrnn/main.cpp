@@ -174,6 +174,16 @@ int main(int argc, char* argv[])
 
     try
     {
+        int32_t device_count = 0;
+        CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
+        std::cout << "Total GPUs visible: " << device_count << std::endl;
+
+        int32_t device_id = 1;
+        cudaDeviceProp prop;
+        CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
+        CUDA_CHECK( cudaSetDevice( device_id ) );
+        std::cout << "\t[" << device_id << "]: " << prop.name << std::endl;
+
         CUDA_CHECK(cudaFree(0));
 
         CUcontext cuCtx = 0;
