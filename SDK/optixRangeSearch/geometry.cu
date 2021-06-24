@@ -72,18 +72,19 @@ extern "C" __device__ void intersect_sphere()
 
 extern "C" __global__ void __intersection__sphere()
 {
-  // I don't know why but it seems like the IS program will be called as long
-  // as the ray origin is without a primitive's bbox, even if the actual
-  // intersections are beyond the tmin and tmax.
+  // The IS program will be called if the ray origin is within a primitive's
+  // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = false;
+  bool isApprox = true;
 
   if (isApprox) {
-    unsigned int rayIdx = optixGetPayload_0();
-    unsigned int primIdx = optixGetPrimitiveIndex();
     unsigned int id = optixGetPayload_1();
-    params.frame_buffer[rayIdx * params.knn + id] = primIdx;
-    optixSetPayload_1( id+1 );
+    if (id < params.knn) {
+      unsigned int rayIdx = optixGetPayload_0();
+      unsigned int primIdx = optixGetPrimitiveIndex();
+      params.frame_buffer[rayIdx * params.knn + id] = primIdx;
+      optixSetPayload_1( id+1 );
+    }
   } else {
     intersect_sphere();
   }

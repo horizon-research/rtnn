@@ -1071,25 +1071,32 @@ int main( int argc, char* argv[] )
         void* data = output_buffer.getHostPointer();
         Timing::stopTiming(true);
 
-        //unsigned int totalNeighbors = 0;
-        //for (unsigned int i = 0; i < state.params.numPrims; i++) {
-        //  for (unsigned int j = 0; j < state.params.knn; j++) {
-        //    unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
-        //    if (p == UINT_MAX) break;
-        //    else {
-        //      totalNeighbors++;
-        //      float3 diff = state.points[p] - state.points[i];
-        //      float dists = dot(diff, diff);
-        //      if (dists > state.params.radius*state.params.radius) {
-        //        fprintf(stderr, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[i].x, state.points[i].y, state.points[i].z, i, state.points[p].x, state.points[p].y, state.points[p].z, sqrt(dists));
-        //        exit(1);
-        //      }
-        //    }
-        //    //std::cout << p << " ";
-        //  }
-        //  //std::cout << "\n";
-        //}
-        //std::cerr << "Sanity check done. Avg " << totalNeighbors/state.params.numPrims << " neighbors" << std::endl;
+        unsigned int totalNeighbors = 0;
+        unsigned int totalWrongNeighbors = 0;
+        double totalWrongDist = 0;
+        for (unsigned int i = 0; i < state.params.numPrims; i++) {
+          for (unsigned int j = 0; j < state.params.knn; j++) {
+            unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
+            if (p == UINT_MAX) break;
+            else {
+              totalNeighbors++;
+              float3 diff = state.points[p] - state.points[i];
+              float dists = dot(diff, diff);
+              if (dists > state.params.radius*state.params.radius) {
+                //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[p].x, state.points[p].y, state.points[p].z, i, state.points[i].x, state.points[i].y, state.points[i].z, sqrt(dists));
+                totalWrongNeighbors++;
+                totalWrongDist += sqrt(dists);
+                //exit(1);
+              }
+            }
+            //std::cout << p << " ";
+          }
+          //std::cout << "\n";
+        }
+        std::cerr << "Sanity check done." << std::endl;
+        std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
+        std::cerr << "Avg wrong neighbor/query: " << totalWrongNeighbors/state.params.numPrims << std::endl;
+        if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
 
         cleanupState( state );
     }
