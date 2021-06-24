@@ -122,30 +122,6 @@ struct WhittedState
 
 //------------------------------------------------------------------------------
 //
-//  Geometry and Camera data
-//
-//------------------------------------------------------------------------------
-
-// Metal sphere, glass sphere, floor, light
-const Sphere g_sphere1 = {
-    { 0.0f, 0.0f, 0.0f }, // center
-    2.0f                  // radius
-};
-const Sphere g_sphere2 = {
-    { 5.0f, 0.0f, 0.0f }, // center
-    2.0f                  // radius
-};
-const Sphere g_sphere3 = {
-    { 0.0f, 5.0f, 0.0f }, // center
-    2.0f                  // radius
-};
-const Sphere g_sphere4 = {
-    { 0.0f, 0.0f, 5.0f }, // center
-    2.0f                  // radius
-};
-
-//------------------------------------------------------------------------------
-//
 //  Helper functions
 //
 //------------------------------------------------------------------------------
@@ -204,7 +180,7 @@ void initLaunchParams( WhittedState& state )
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
 
-    CUDA_CHECK( cudaStreamCreate( &state.stream ) );
+    //CUDA_CHECK( cudaStreamCreate( &state.stream ) );
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
 
     state.params.handle = state.gas_handle;
@@ -259,7 +235,8 @@ static void buildGas(
 
     OPTIX_CHECK( optixAccelBuild(
         state.context,
-        0,
+        //0,
+        state.stream,
         &accel_options,
         &build_input,
         1,
@@ -308,55 +285,32 @@ void createGeometry( WhittedState &state )
           reinterpret_cast<float*>(&aabb[i]));
     }
 
-    //std::cerr << aabb[0].minX << "," << aabb[0].minY << "," << aabb[0].minZ << std::endl;
-    //std::cerr << aabb[0].maxX << "," << aabb[0].maxY << "," << aabb[0].maxZ << std::endl;
-    //std::cerr << aabb[1].minX << "," << aabb[1].minY << "," << aabb[1].minZ << std::endl;
-    //std::cerr << aabb[1].maxX << "," << aabb[1].maxY << "," << aabb[1].maxZ << std::endl;
-    //std::cerr << aabb[2].minX << "," << aabb[2].minY << "," << aabb[2].minZ << std::endl;
-    //std::cerr << aabb[2].maxX << "," << aabb[2].maxY << "," << aabb[2].maxZ << std::endl;
-
-    //sphere_bound(
-    //    g_sphere1.center, g_sphere1.radius,
-    //    reinterpret_cast<float*>(&aabb[0]));
-    //sphere_bound(
-    //    g_sphere2.center, g_sphere2.radius,
-    //    reinterpret_cast<float*>(&aabb[1]));
-    //sphere_bound(
-    //    g_sphere3.center, g_sphere3.radius,
-    //    reinterpret_cast<float*>(&aabb[2]));
-    //sphere_bound(
-    //    g_sphere4.center, g_sphere4.radius,
-    //    reinterpret_cast<float*>(&aabb[3]));
-
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
         ), state.params.numPrims* sizeof( OptixAabb ) ) );
-        //), OBJ_COUNT * sizeof( OptixAabb ) ) );
-    CUDA_CHECK( cudaMemcpy(
+    //CUDA_CHECK( cudaMemcpy(
+    //            reinterpret_cast<void*>( d_aabb ),
+    //            //&aabb,
+    //            aabb,
+    //            state.params.numPrims * sizeof( OptixAabb ),
+    //            //OBJ_COUNT * sizeof( OptixAabb ),
+    //            cudaMemcpyHostToDevice
+    //            ) );
+    CUDA_CHECK( cudaMemcpyAsync(
                 reinterpret_cast<void*>( d_aabb ),
-                //&aabb,
                 aabb,
                 state.params.numPrims * sizeof( OptixAabb ),
-                //OBJ_COUNT * sizeof( OptixAabb ),
-                cudaMemcpyHostToDevice
-                ) );
+                cudaMemcpyHostToDevice,
+                state.stream
+    ) );
 
     // Setup AABB build input
-    //uint32_t aabb_input_flags[] = {
-    //    /* flags for metal sphere */
-    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
-    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
-    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT,
-    //    OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT
-    //};
     uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
 
-    //const uint32_t sbt_index[] = { 0, 1, 2, 3 };
-    //const uint32_t sbt_index[4] = { 0 };
     uint32_t* sbt_index = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
     for (unsigned int i = 0; i < state.params.numPrims; i++) {
       aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-      // it's important to set all these indices to 0.
-      sbt_index[i] = 0;
+      // it's important to set all these indices to 0, or simply pass 0 to sbtIndexOffsetBuffer
+      //sbt_index[i] = 0;
     }
     CUdeviceptr    d_sbt_index;
 
@@ -365,7 +319,6 @@ void createGeometry( WhittedState &state )
     CUDA_CHECK( cudaMemcpy(
         reinterpret_cast<void*>( d_sbt_index ),
         sbt_index,
-        //sizeof( sbt_index ),
         state.params.numPrims * sizeof(uint32_t),
         cudaMemcpyHostToDevice ) );
 
@@ -373,10 +326,7 @@ void createGeometry( WhittedState &state )
     aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
     aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
     aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
-    //aabb_input.customPrimitiveArray.numSbtRecords = OBJ_COUNT;
-    //aabb_input.customPrimitiveArray.numSbtRecords = state.params.numPrims;
     aabb_input.customPrimitiveArray.numSbtRecords = 1;
-    //aabb_input.customPrimitiveArray.numPrimitives = OBJ_COUNT;
     aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
     //aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = d_sbt_index;
     aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
@@ -501,29 +451,6 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
 
     program_groups.push_back(radiance_sphere_prog_group);
     state.radiance_metal_sphere_prog_group = radiance_sphere_prog_group;
-
-    //OptixProgramGroup           occlusion_sphere_prog_group;
-    //OptixProgramGroupOptions    occlusion_sphere_prog_group_options = {};
-    //OptixProgramGroupDesc       occlusion_sphere_prog_group_desc = {};
-    //occlusion_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
-    //    occlusion_sphere_prog_group_desc.hitgroup.moduleIS           = state.geometry_module;
-    //occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
-    //occlusion_sphere_prog_group_desc.hitgroup.moduleCH               = state.shading_module;
-    //occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = "__closesthit__full_occlusion";
-    //occlusion_sphere_prog_group_desc.hitgroup.moduleAH               = nullptr;
-    //occlusion_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
-
-    //OPTIX_CHECK_LOG( optixProgramGroupCreate(
-    //    state.context,
-    //    &occlusion_sphere_prog_group_desc,
-    //    1,
-    //    &occlusion_sphere_prog_group_options,
-    //    log,
-    //    &sizeof_log,
-    //    &occlusion_sphere_prog_group ) );
-
-    //program_groups.push_back(occlusion_sphere_prog_group);
-    //state.occlusion_metal_sphere_prog_group = occlusion_sphere_prog_group;
 }
 
 static void createMissProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
@@ -623,22 +550,12 @@ void createSBT( WhittedState &state )
 {
     // Raygen program record
     {
-        //std::vector<float3> spheres;
-        //for (unsigned int i = 0; i < state.params.numPrims; i++) {
-        //  spheres.push_back(state.points[i]);
-        //}
-        //spheres.push_back(g_sphere1.center);
-        //spheres.push_back(g_sphere2.center);
-        //spheres.push_back(g_sphere3.center);
-        //spheres.push_back(g_sphere4.center);
-
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>(&state.d_spheres),
             state.params.numPrims * sizeof(float3) ) );
 
         CUDA_CHECK( cudaMemcpy(
             reinterpret_cast<void*>( state.d_spheres),
-            //&spheres[0],
             state.points,
             state.params.numPrims * sizeof(float3),
             cudaMemcpyHostToDevice
@@ -682,20 +599,7 @@ void createSBT( WhittedState &state )
             cudaMemcpyHostToDevice
         ) );
 
-        //MissRecord ms_sbt[RAY_TYPE_COUNT];
-        //optixSbtRecordPackHeader( state.radiance_miss_prog_group, &ms_sbt[0] );
-        //optixSbtRecordPackHeader( state.occlusion_miss_prog_group, &ms_sbt[1] );
-        //ms_sbt[1].data = ms_sbt[0].data = { 0.34f, 0.55f, 0.85f };
-
-        //CUDA_CHECK( cudaMemcpy(
-        //    reinterpret_cast<void*>( d_miss_record ),
-        //    ms_sbt,
-        //    sizeof_miss_record*RAY_TYPE_COUNT,
-        //    cudaMemcpyHostToDevice
-        //) );
-
         state.sbt.missRecordBase          = d_miss_record;
-        //state.sbt.missRecordCount         = RAY_TYPE_COUNT;
         state.sbt.missRecordCount         = 1;
         state.sbt.missRecordStrideInBytes = static_cast<uint32_t>( sizeof_miss_record );
     }
@@ -720,138 +624,7 @@ void createSBT( WhittedState &state )
             cudaMemcpyHostToDevice
         ) );
 
-        //const size_t count_records = 1;
-        //const size_t count_records = RAY_TYPE_COUNT * OBJ_COUNT;
-        //const size_t count_records = RAY_TYPE_COUNT * state.params.numPrims;
-        //std::cerr << count_records << std::endl;
-        //HitGroupRecord hitgroup_records[count_records];
-
-        // Note: MUST fill SBT record array same order like AS is built. Fill
-        // different ray types for a primitive first then move to the next
-        // primitive. See the table here:
-        // https://raytracing-docs.nvidia.com/optix7/guide/index.html#shader_binding_table#shader-binding-table
-        //int sbt_idx = 0;
-
-        // Metal Sphere
-        // The correct way of thinking about optixSbtRecordPackHeader is that
-        // it assigns a program group to a sbt record, not the other way
-        // around. When we find a hit we will have to decide what program to
-        // run and what data to use for that program; given the parameters
-        // passed into optixTrace, we can calculate the entry of the SBT
-        // associated with that ray; that entry will have an assigned program
-        // group and the data. The way to calculate the exact entry in the SBT
-        // can be found here:
-        // https://www.willusher.io/graphics/2019/11/20/the-sbt-three-ways. The
-        // key is to think with a SBT-centric mindset: the programs are just
-        // attached to the SBT (each SBT entry points to a program that will be
-        // executed when we find the entry).
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.radiance_metal_sphere_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
-        //hitgroup_records[ sbt_idx ].data.shading.metal = {
-        //    { 0.2f, 0.5f, 0.5f },   // Ka
-        //    { 0.2f, 0.7f, 0.8f },   // Kd
-        //    { 0.9f, 0.9f, 0.9f },   // Ks
-        //    { 0.5f, 0.5f, 0.5f },   // Kr
-        //    64,                     // phong_exp
-        //};
-        //sbt_idx ++;
-
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.occlusion_metal_sphere_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere1;
-        //sbt_idx ++;
-
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.radiance_metal_sphere_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
-        //hitgroup_records[ sbt_idx ].data.shading.metal = {
-        //    { 0.2f, 0.5f, 0.5f },   // Ka
-        //    { 0.2f, 0.7f, 0.8f },   // Kd
-        //    { 0.9f, 0.9f, 0.9f },   // Ks
-        //    { 0.5f, 0.5f, 0.5f },   // Kr
-        //    64,                     // phong_exp
-        //};
-        //sbt_idx ++;
-
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.occlusion_metal_sphere_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere = g_sphere2;
-        //sbt_idx ++;
-
-        // Glass Sphere
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.radiance_glass_sphere_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere_shell = g_sphere_shell;
-        //hitgroup_records[ sbt_idx ].data.shading.glass = {
-        //    1e-2f,                                  // importance_cutoff
-        //    { 0.034f, 0.055f, 0.085f },             // cutoff_color
-        //    3.0f,                                   // fresnel_exponent
-        //    0.1f,                                   // fresnel_minimum
-        //    1.0f,                                   // fresnel_maximum
-        //    1.4f,                                   // refraction_index
-        //    { 1.0f, 1.0f, 1.0f },                   // refraction_color
-        //    { 1.0f, 1.0f, 1.0f },                   // reflection_color
-        //    { logf(.83f), logf(.83f), logf(.83f) }, // extinction_constant
-        //    { 0.6f, 0.6f, 0.6f },                   // shadow_attenuation
-        //    10,                                     // refraction_maxdepth
-        //    5                                       // reflection_maxdepth
-        //};
-        //sbt_idx ++;
-
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.occlusion_glass_sphere_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.sphere_shell = g_sphere_shell;
-        //hitgroup_records[ sbt_idx ].data.shading.glass.shadow_attenuation = { 0.6f, 0.6f, 0.6f };
-        //sbt_idx ++;
-
-        //// Floor
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.radiance_floor_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.parallelogram = g_floor;
-        //hitgroup_records[ sbt_idx ].data.shading.checker = {
-        //    { 0.8f, 0.3f, 0.15f },      // Kd1
-        //    { 0.9f, 0.85f, 0.05f },     // Kd2
-        //    { 0.8f, 0.3f, 0.15f },      // Ka1
-        //    { 0.9f, 0.85f, 0.05f },     // Ka2
-        //    { 0.0f, 0.0f, 0.0f },       // Ks1
-        //    { 0.0f, 0.0f, 0.0f },       // Ks2
-        //    { 0.0f, 0.0f, 0.0f },       // Kr1
-        //    { 0.0f, 0.0f, 0.0f },       // Kr2
-        //    0.0f,                       // phong_exp1
-        //    0.0f,                       // phong_exp2
-        //    { 32.0f, 16.0f }            // inv_checker_size
-        //};
-        //sbt_idx++;
-
-        //OPTIX_CHECK( optixSbtRecordPackHeader(
-        //    state.occlusion_floor_prog_group,
-        //    &hitgroup_records[sbt_idx] ) );
-        //hitgroup_records[ sbt_idx ].data.geometry.parallelogram = g_floor;
-
-        //CUdeviceptr d_hitgroup_records;
-        //size_t      sizeof_hitgroup_record = sizeof( HitGroupRecord );
-        //CUDA_CHECK( cudaMalloc(
-        //    reinterpret_cast<void**>( &d_hitgroup_records ),
-        //    sizeof_hitgroup_record*count_records
-        //) );
-
-        //CUDA_CHECK( cudaMemcpy(
-        //    reinterpret_cast<void*>( d_hitgroup_records ),
-        //    hitgroup_records,
-        //    sizeof_hitgroup_record*count_records,
-        //    cudaMemcpyHostToDevice
-        //) );
-
         state.sbt.hitgroupRecordBase            = d_hitgroup_records;
-        //state.sbt.hitgroupRecordCount           = count_records;
         state.sbt.hitgroupRecordCount           = 1;
         state.sbt.hitgroupRecordStrideInBytes   = static_cast<uint32_t>( sizeof_hitgroup_record );
     }
@@ -947,7 +720,6 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixPipelineDestroy     ( state.pipeline                ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.raygen_prog_group       ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_metal_sphere_prog_group ) );
-    //OPTIX_CHECK( optixProgramGroupDestroy ( state.occlusion_metal_sphere_prog_group ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_miss_prog_group         ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.shading_module          ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.geometry_module         ) );
@@ -1026,6 +798,7 @@ int main( int argc, char* argv[] )
         CUDA_CHECK( cudaSetDevice( device_id ) );
         std::cout << "\t[" << device_id << "]: " << prop.name << std::endl;
 
+        CUDA_CHECK( cudaStreamCreate( &state.stream ) );
         Timing::startTiming("creat Context");
         createContext  ( state );
         Timing::stopTiming(true);
