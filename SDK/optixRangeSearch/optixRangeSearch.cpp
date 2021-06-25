@@ -53,6 +53,8 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <random>
+#include <cstdlib>
 
 #include "optixRangeSearch.h"
 
@@ -136,20 +138,41 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
   }
   file.clear();
   file.seekg(0, std::ios::beg);
-  float3* points = new float3[lines];
   *N = lines;
 
-  lines = 0;
-  while (file.getline(line, 1024)) {
-    double x, y, z;
+  float3* points = new float3[lines];
 
-    sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
-    points[lines].x = x;
-    points[lines].y = y;
-    points[lines].z = z;
-    //std::cerr << points[lines].x << "," << points[lines].y << "," << points[lines].z << std::endl;
-    lines++;
+  bool isShuffle = false;
+
+  if (isShuffle) {
+    std::vector<float3> vpoints;
+
+    while (file.getline(line, 1024)) {
+      double x, y, z;
+
+      sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
+      vpoints.push_back(make_float3(x, y, z));
+    }
+    unsigned seed = std::chrono::system_clock::now()
+                        .time_since_epoch()
+                        .count();
+    std::shuffle(std::begin(vpoints), std::end(vpoints), std::default_random_engine(seed));
+
+    unsigned int i = 0;
+    for (std::vector<float3>::iterator it = vpoints.begin(); it != vpoints.end(); it++) {
+      points[i++] = *it;
+    }
+  } else {
+    lines = 0;
+    while (file.getline(line, 1024)) {
+      double x, y, z;
+
+      sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
+      points[lines] = make_float3(x, y, z);
+      lines++;
+    }
   }
+  std::cerr << points[0].x << ", " << points[0].y << ", " << points[0].z << std::endl;
 
   file.close();
 

@@ -75,7 +75,7 @@ extern "C" __global__ void __intersection__sphere()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = false;
+  bool isApprox = true;
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();
