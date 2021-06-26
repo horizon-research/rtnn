@@ -28,7 +28,7 @@
 
 #include <optix.h>
 
-#include "optixRangeSearch.h"
+#include "optixNDRangeSearch.h"
 #include "random.h"
 #include "helpers.h"
 
@@ -83,6 +83,9 @@ extern "C" __global__ void __intersection__sphere()
       unsigned int rayIdx = optixGetPayload_0();
       unsigned int primIdx = optixGetPrimitiveIndex();
       params.frame_buffer[rayIdx * params.knn + id] = primIdx;
+      //params.frame_buffer[rayIdx * params.knn + id] = params.points[primIdx].x;
+      //params.frame_buffer[rayIdx * params.knn + id + 1] = params.points[primIdx].y;
+      //params.frame_buffer[rayIdx * params.knn + id + 2] = params.points[primIdx].z;
       if (id + 1 == params.knn)
         optixReportIntersection( 0, 0 );
       else optixSetPayload_1( id+1 );

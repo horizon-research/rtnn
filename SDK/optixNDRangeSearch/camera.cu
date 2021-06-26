@@ -28,7 +28,7 @@
 
 #include <vector_types.h>
 #include <optix_device.h>
-#include "optixRangeSearch.h"
+#include "optixNDRangeSearch.h"
 #include "random.h"
 #include "helpers.h"
 #include <cuda/helpers.h>
@@ -61,8 +61,6 @@ extern "C" __global__ void __raygen__pinhole_camera()
         ray_direction,
         tmin,
         tmax,
-        //params.scene_epsilon,
-        //1e16f,
         0.0f,
         OptixVisibilityMask( 1 ),
         OPTIX_RAY_FLAG_NONE,
@@ -74,8 +72,11 @@ extern "C" __global__ void __raygen__pinhole_camera()
         reinterpret_cast<unsigned int&>(rayIdx),
         reinterpret_cast<unsigned int&>(id)
     );
-    //params.frame_buffer[rayIdx * params.knn] = id;
+    //params.frame_buffer[rayIdx * params.knn] = rayIdx;
     //params.frame_buffer[rayIdx * params.knn+1] = ray_origin.x;
     //params.frame_buffer[rayIdx * params.knn+2] = ray_origin.y;
     //params.frame_buffer[rayIdx * params.knn+3] = ray_origin.z;
+    //params.frame_buffer[rayIdx * params.knn+1] = params.points[rayIdx].x;
+    //params.frame_buffer[rayIdx * params.knn+2] = params.points[rayIdx].y;
+    //params.frame_buffer[rayIdx * params.knn+3] = params.points[rayIdx].z;
 }
