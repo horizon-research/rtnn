@@ -65,7 +65,9 @@ extern "C" __device__ void intersect_sphere()
         unsigned int primIdx = optixGetPrimitiveIndex();
         //params.frame_buffer[rayIdx * params.knn + primIdx] = primIdx;
         params.frame_buffer[rayIdx * params.knn + id] = primIdx;
-        optixSetPayload_1( id+1 );
+        if (id + 1 == params.knn)
+          optixReportIntersection( 0, 0 );
+        else optixSetPayload_1( id+1 );
       }
     }
 }
@@ -75,7 +77,7 @@ extern "C" __global__ void __intersection__sphere()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = true;
+  bool isApprox = false;
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();
@@ -83,10 +85,17 @@ extern "C" __global__ void __intersection__sphere()
       unsigned int rayIdx = optixGetPayload_0();
       unsigned int primIdx = optixGetPrimitiveIndex();
       params.frame_buffer[rayIdx * params.knn + id] = primIdx;
-      optixSetPayload_1( id+1 );
+      if (id + 1 == params.knn)
+        optixReportIntersection( 0, 0 );
+      else optixSetPayload_1( id+1 );
     }
   } else {
     intersect_sphere();
   }
+}
+
+extern "C" __global__ void __anyhit__terminateRay()
+{
+  optixTerminateRay();
 }
 

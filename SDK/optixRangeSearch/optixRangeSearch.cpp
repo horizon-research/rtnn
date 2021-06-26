@@ -323,7 +323,8 @@ void createGeometry( WhittedState &state )
 
     uint32_t* sbt_index = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
     for (unsigned int i = 0; i < state.params.numPrims; i++) {
-      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
       // it's important to set all these indices to 0, or simply pass 0 to sbtIndexOffsetBuffer
       //sbt_index[i] = 0;
     }
@@ -439,8 +440,8 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
     radiance_sphere_prog_group_desc.hitgroup.moduleCH               = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = nullptr;
-    radiance_sphere_prog_group_desc.hitgroup.moduleAH               = nullptr;
-    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = nullptr;
+    radiance_sphere_prog_group_desc.hitgroup.moduleAH               = state.geometry_module;
+    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = "__anyhit__terminateRay";
 
     OPTIX_CHECK_LOG( optixProgramGroupCreate(
         state.context,
