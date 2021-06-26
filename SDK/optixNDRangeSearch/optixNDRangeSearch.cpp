@@ -53,6 +53,7 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <assert.h>
 
 #include "optixNDRangeSearch.h"
 
@@ -111,6 +112,8 @@ struct WhittedState
     float3*                     points = nullptr;
     float3**                    ndpoints = nullptr;
 
+    int                         dim = 3;
+
     OptixShaderBindingTable     sbt                       = {};
 };
 
@@ -120,47 +123,80 @@ struct WhittedState
 //
 //------------------------------------------------------------------------------
 
-float3** read_pc_data(const char* data_file, unsigned int* N, float3** p) {
+int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lineId)
+{
+  int start = 0;
+  int end = s.find(del);
+  int dim = 0;
+
+  std::vector<float> vcoords;
+  while (end != -1) {
+    float coord = std::stof(s.substr(start, end - start));
+    //std::cout << coord << std::endl;
+    if (ndpoints != nullptr) {
+      vcoords.push_back(coord);
+    }
+    start = end + del.size();
+    end = s.find(del, start);
+    dim++;
+  }
+  float coord  = std::stof(s.substr(start, end - start));
+  //std::cout << coord << std::endl;
+  if (ndpoints != nullptr) {
+    vcoords.push_back(coord);
+  }
+  dim++;
+
+  assert(dim > 0);
+  if ((dim % 3) != 0) dim = (dim/3+1)*3;
+
+  if (ndpoints != nullptr) {
+    for (int batch = 0; batch < dim/3; batch++) {
+      float3 point = make_float3(vcoords[batch*3], vcoords[batch*3+1], vcoords[batch*3+2]);
+      float3* list = ndpoints[batch];
+      list[lineId] = point;
+    }
+  }
+
+  return dim;
+}
+
+float3** read_pc_data(const char* data_file, unsigned int* N, int* d) {
   std::ifstream file;
 
   file.open(data_file);
   if( !file.good() ) {
     std::cerr << "Could not read the frame data...\n";
-    //assert(0);
+    assert(0);
   }
 
   char line[1024];
   unsigned int lines = 0;
+  int dim = 0;
 
   while (file.getline(line, 1024)) {
+    if (lines == 0) {
+      std::string str(line);
+      dim = tokenize(str, ",", nullptr, 0);
+    }
     lines++;
   }
   file.clear();
   file.seekg(0, std::ios::beg);
-  *N = lines;
 
-  float3** ndpoints = new float3*[2];
-  float3* points1 = new float3[lines];
-  float3* points2 = new float3[lines];
-  ndpoints[0] = points1;
-  ndpoints[1] = points2;
-  *p = points1;
+  *N = lines;
+  *d = dim;
+
+  float3** ndpoints = new float3*[dim/3];
+  for (int i = 0; i < dim/3; i++) {
+    ndpoints[i] = new float3[lines];
+  }
 
   lines = 0;
   while (file.getline(line, 1024)) {
-    double x, y, z, u, v, w;
+    std::string str(line);
+    tokenize(str, ",", ndpoints, lines);
 
-    sscanf(line, "%lf,%lf,%lf,%lf,%lf,%lf\n", &x, &y, &z, &u, &v, &w);
-    points1[lines].x = x;
-    points1[lines].y = y;
-    points1[lines].z = z;
-    points2[lines].x = u;
-    points2[lines].y = v;
-    points2[lines].z = w;
-    //std::cerr << line << std::endl;
-    //fprintf(stderr, "%lf,%lf,%lf,%lf,%lf,%lf\n", x, y, z, u, v, w);
-    //std::cerr << points1[lines].x << "," << points1[lines].y << "," << points1[lines].z << std::endl;
-    //std::cerr << points2[lines].x << "," << points2[lines].y << "," << points2[lines].z << std::endl;
     //std::cerr << ndpoints[0][lines].x << "," << ndpoints[0][lines].y << "," << ndpoints[0][lines].z << std::endl;
     //std::cerr << ndpoints[1][lines].x << "," << ndpoints[1][lines].y << "," << ndpoints[1][lines].z << std::endl;
     lines++;
@@ -175,8 +211,8 @@ void printUsageAndExit( const char* argv0 )
 {
     std::cerr << "Usage  : " << argv0 << " [options]\n";
     std::cerr << "Options: --file | -f <filename>      File for point cloud input\n";
-    std::cerr << "         --launch-samples | -s       Number of samples per pixel per launch (default 16)\n";
     std::cerr << "         --radius | -r               Search radius\n";
+    std::cerr << "         --knn | -k                  Max K returned\n";
     std::cerr << "         --help | -h                 Print this usage message\n";
     exit( 0 );
 }
@@ -743,11 +779,15 @@ int main( int argc, char* argv[] )
     }
 
     // read points
-    state.ndpoints = read_pc_data(outfile.c_str(), &state.params.numPrims, &state.points);
+    state.ndpoints = read_pc_data(outfile.c_str(), &state.params.numPrims, &state.dim);
     std::cerr << "numPrims: " << state.params.numPrims << std::endl;
+    std::cerr << "dim: " << state.dim << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
     std::cerr << "K: " << state.params.knn << std::endl;
+
     //std::cerr << state.ndpoints[0][0].x << "," << state.ndpoints[0][0].y << "," << state.ndpoints[0][0].z << std::endl;
+    //std::cerr << state.ndpoints[0][1].x << "," << state.ndpoints[0][1].y << "," << state.ndpoints[0][1].z << std::endl;
+    //std::cerr << state.ndpoints[0][2].x << "," << state.ndpoints[0][2].y << "," << state.ndpoints[0][2].z << std::endl;
     //std::cerr << state.ndpoints[1][0].x << "," << state.ndpoints[1][0].y << "," << state.ndpoints[1][0].z << std::endl;
     //std::cerr << state.ndpoints[1][1].x << "," << state.ndpoints[1][1].y << "," << state.ndpoints[1][1].z << std::endl;
     //std::cerr << state.ndpoints[1][2].x << "," << state.ndpoints[1][2].y << "," << state.ndpoints[1][2].z << std::endl;
@@ -838,13 +878,13 @@ int main( int argc, char* argv[] )
         unsigned int totalNeighbors = 0;
         unsigned int totalWrongNeighbors = 0;
         double totalWrongDist = 0;
-        for (unsigned int i = 0; i < state.params.numPrims; i++) {
+        for (unsigned int q = 0; q < state.params.numPrims; q++) {
           for (unsigned int j = 0; j < state.params.knn; j++) {
-            unsigned int p = reinterpret_cast<unsigned int*>( data1 )[ i * state.params.knn + j ];
+            unsigned int p = reinterpret_cast<unsigned int*>( data1 )[ q * state.params.knn + j ];
             if (p == UINT_MAX) break;
             else {
               totalNeighbors++;
-              float3 diff = state.ndpoints[1][p] - state.ndpoints[1][i];
+              float3 diff = state.ndpoints[1][p] - state.ndpoints[1][q];
               float dists = dot(diff, diff);
               if (dists > state.params.radius*state.params.radius) {
                 //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[p].x, state.points[p].y, state.points[p].z, i, state.points[i].x, state.points[i].y, state.points[i].z, sqrt(dists));
