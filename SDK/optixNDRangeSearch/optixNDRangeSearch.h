@@ -30,6 +30,8 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
+#define MAX_DIM 12
+
 enum RayType
 {
     RAY_TYPE_RADIANCE  = 0,
@@ -49,7 +51,7 @@ struct Params
 {
     unsigned int     subframe_index;
     unsigned int*    frame_buffer;
-    float3*          points;
+    float3*          points[MAX_DIM/3];
     float3*          queries;
     float            radius;
     unsigned int     numPrims;

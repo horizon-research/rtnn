@@ -660,6 +660,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*state.params.knn*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
     state.params.queries = state.params.points;
+    std::cout << state.params.handle << std::endl;
 
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,

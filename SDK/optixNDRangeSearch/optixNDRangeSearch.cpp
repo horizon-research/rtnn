@@ -91,8 +91,8 @@ const uint32_t OBJ_COUNT = 4;
 struct WhittedState
 {
     OptixDeviceContext          context                   = 0;
-    OptixTraversableHandle      gas_handle                = {};
-    CUdeviceptr                 d_gas_output_buffer       = {};
+    OptixTraversableHandle*     gas_handle                = nullptr;
+    CUdeviceptr*                d_gas_output_buffer       = nullptr;
 
     OptixModule                 geometry_module           = 0;
     OptixModule                 camera_module             = 0;
@@ -108,11 +108,12 @@ struct WhittedState
     Params                      params;
     Params*                     d_params                  = nullptr;
 
-    float3*                     d_spheres                 = nullptr;
-    float3*                     points = nullptr;
+    //float3**                    d_spheres                 = nullptr;
+    float3**                    points = nullptr;
     float3**                    ndpoints = nullptr;
 
     int                         dim = 3;
+    int                         batch = 1;
 
     OptixShaderBindingTable     sbt                       = {};
 };
@@ -153,8 +154,7 @@ int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lin
   if (ndpoints != nullptr) {
     for (int batch = 0; batch < dim/3; batch++) {
       float3 point = make_float3(vcoords[batch*3], vcoords[batch*3+1], vcoords[batch*3+2]);
-      float3* list = ndpoints[batch];
-      list[lineId] = point;
+      ndpoints[batch][lineId] = point;
     }
   }
 
@@ -306,81 +306,92 @@ static void buildGas(
     }
 }
 
-void createGeometry( WhittedState &state, int round )
+void createGeometry( WhittedState &state )
 {
     //
     // Allocate device memory for the spheres (points/queries)
     //
-    CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>(&state.d_spheres),
-        state.params.numPrims * sizeof(float3) ) );
 
-    CUDA_CHECK( cudaMemcpy(
-        reinterpret_cast<void*>( state.d_spheres),
-        state.ndpoints[round],
-        state.params.numPrims * sizeof(float3),
-        cudaMemcpyHostToDevice
-    ) );
-    state.params.points = state.d_spheres;
+    state.gas_handle = new OptixTraversableHandle[state.batch];
+    state.d_gas_output_buffer = new CUdeviceptr[state.batch];
+    for (int b = 0; b < state.batch; b++) {
+       //float3* spheres;
+       CUDA_CHECK( cudaMalloc(
+           reinterpret_cast<void**>(&state.params.points[b]),
+           //reinterpret_cast<void**>(&spheres),
+           //reinterpret_cast<void**>(&state.d_spheres),
+           state.params.numPrims * sizeof(float3) ) );
+
+       CUDA_CHECK( cudaMemcpy(
+           reinterpret_cast<void*>(state.params.points[b]),
+           //reinterpret_cast<void*>(spheres),
+           //reinterpret_cast<void*>( state.d_spheres),
+           state.ndpoints[b],
+           state.params.numPrims * sizeof(float3),
+           cudaMemcpyHostToDevice
+       ) );
+       //state.params.points[b] = spheres;
+    }
 
     //
     // Build Custom Primitives
     //
 
-    // Load AABB into device memory
-    OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
-    CUdeviceptr d_aabb;
+    for (int b = 0; b < state.batch; b++) {
+      // Load AABB into device memory
+      OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
+      CUdeviceptr d_aabb;
 
-    for(unsigned int i = 0; i < state.params.numPrims; i++) {
-      sphere_bound(
-          state.ndpoints[round][i], state.params.radius,
-          reinterpret_cast<float*>(&aabb[i]));
+      for(unsigned int i = 0; i < state.params.numPrims; i++) {
+        sphere_bound(
+            state.ndpoints[b][i], state.params.radius,
+            reinterpret_cast<float*>(&aabb[i]));
+      }
+
+      CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
+          ), state.params.numPrims* sizeof( OptixAabb ) ) );
+      CUDA_CHECK( cudaMemcpyAsync(
+                  reinterpret_cast<void*>( d_aabb ),
+                  aabb,
+                  state.params.numPrims * sizeof( OptixAabb ),
+                  cudaMemcpyHostToDevice,
+                  state.stream
+      ) );
+
+      // Setup AABB build input
+      uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
+
+      for (unsigned int i = 0; i < state.params.numPrims; i++) {
+        //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+        aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
+      }
+
+      OptixBuildInput aabb_input = {};
+      aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+      aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
+      aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
+      aabb_input.customPrimitiveArray.numSbtRecords = 1;
+      aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
+      // it's important to pass 0 to sbtIndexOffsetBuffer
+      aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
+      aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
+      aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
+
+      OptixAccelBuildOptions accel_options = {
+          OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
+          OPTIX_BUILD_OPERATION_BUILD         // operation
+      };
+
+      buildGas(
+          state,
+          accel_options,
+          aabb_input,
+          state.gas_handle[b],
+          state.d_gas_output_buffer[b]);
+
+      CUDA_CHECK( cudaFree( (void*)d_aabb) );
+      free(aabb);
     }
-
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-        ), state.params.numPrims* sizeof( OptixAabb ) ) );
-    CUDA_CHECK( cudaMemcpyAsync(
-                reinterpret_cast<void*>( d_aabb ),
-                aabb,
-                state.params.numPrims * sizeof( OptixAabb ),
-                cudaMemcpyHostToDevice,
-                state.stream
-    ) );
-
-    // Setup AABB build input
-    uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
-
-    for (unsigned int i = 0; i < state.params.numPrims; i++) {
-      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
-    }
-
-    OptixBuildInput aabb_input = {};
-    aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
-    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
-    aabb_input.customPrimitiveArray.numSbtRecords = 1;
-    aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
-    // it's important to pass 0 to sbtIndexOffsetBuffer
-    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
-    aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
-    aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
-
-
-    OptixAccelBuildOptions accel_options = {
-        OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
-        OPTIX_BUILD_OPERATION_BUILD         // operation
-    };
-
-
-    buildGas(
-        state,
-        accel_options,
-        aabb_input,
-        state.gas_handle,
-        state.d_gas_output_buffer);
-
-    CUDA_CHECK( cudaFree( (void*)d_aabb) );
 }
 
 void createModules( WhittedState &state )
@@ -650,7 +661,7 @@ void createContext( WhittedState& state )
     state.context = context;
 }
 
-void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
+void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state, int batch )
 {
     // Launch
     // this map() thing basically returns the cudaMalloc-ed device pointer.
@@ -661,9 +672,9 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // about what each byte has to be.
     CUDA_CHECK( cudaMemsetAsync ( result_buffer_data, 0xFF, state.params.numPrims*state.params.knn*sizeof(unsigned int), state.stream ) );
     state.params.frame_buffer = result_buffer_data;
+    state.params.queries = state.params.points[batch];
+    state.params.handle = state.gas_handle[batch];
 
-    state.params.queries = state.params.points;
-    state.params.handle = state.gas_handle;
     //std::cout << state.params.handle << std::endl;
     //std::cout << state.params.frame_buffer << std::endl;
     //std::cout << state.params.queries << std::endl;
@@ -692,18 +703,20 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     //output_buffer.unmap();
     //CUDA_SYNC_CHECK();
 
+    //CUstream stream1 = 0;
+    //CUDA_CHECK( cudaStreamCreate( &stream1 ) );
     //state.params.frame_buffer += state.params.numPrims * state.params.knn / 2;
     //state.params.queries += state.params.numPrims / 2;
     //CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
     //                             &state.params,
     //                             sizeof( Params ),
     //                             cudaMemcpyHostToDevice,
-    //                             state.stream
+    //                             stream1
     //) );
 
     //OPTIX_CHECK( optixLaunch(
     //    state.pipeline,
-    //    state.stream,
+    //    stream1,
     //    reinterpret_cast<CUdeviceptr>( state.d_params ),
     //    sizeof( Params ),
     //    &state.sbt,
@@ -729,12 +742,19 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
+    for (int b = 0; b < state.batch; b++) {
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[b]  ) ) );
+    }
+    //CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
+    //CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.gas_handle             ) ) );
+    delete state.d_gas_output_buffer;
+    delete state.gas_handle;
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres              ) ) );
+    //CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres              ) ) );
 
-    delete state.ndpoints[0];
-    delete state.ndpoints[1];
+    for (int i = 0; i < state.batch; i++) {
+      delete state.ndpoints[i];
+    }
     delete state.ndpoints;
 }
 
@@ -780,8 +800,15 @@ int main( int argc, char* argv[] )
 
     // read points
     state.ndpoints = read_pc_data(outfile.c_str(), &state.params.numPrims, &state.dim);
-    std::cerr << "numPrims: " << state.params.numPrims << std::endl;
+    state.batch = state.dim/3;
+
+    if (state.dim <= 0 || state.dim > MAX_DIM) {
+      printUsageAndExit( argv[0] );
+    }
+
     std::cerr << "dim: " << state.dim << std::endl;
+    std::cerr << "batch: " << state.batch << std::endl;
+    std::cerr << "numPrims: " << state.params.numPrims << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
     std::cerr << "K: " << state.params.knn << std::endl;
 
@@ -801,13 +828,13 @@ int main( int argc, char* argv[] )
         //
         int32_t device_count = 0;
         CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
-        std::cout << "Total GPUs visible: " << device_count << std::endl;
+        std::cerr << "Total GPUs visible: " << device_count << std::endl;
   
         int32_t device_id = 1;
         cudaDeviceProp prop;
         CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
         CUDA_CHECK( cudaSetDevice( device_id ) );
-        std::cout << "\t[" << device_id << "]: " << prop.name << std::endl;
+        std::cerr << "\t[" << device_id << "]: " << prop.name << std::endl;
 
         CUDA_CHECK( cudaStreamCreate( &state.stream ) );
 
@@ -819,7 +846,7 @@ int main( int argc, char* argv[] )
         Timing::stopTiming(true);
 
         Timing::startTiming("create Geometry");
-        createGeometry ( state, 0 );
+        createGeometry ( state );
         Timing::stopTiming(true);
 
         Timing::startTiming("create Pipeline");
@@ -830,17 +857,15 @@ int main( int argc, char* argv[] )
         createSBT      ( state );
         Timing::stopTiming(true);
 
-        Timing::startTiming("init Launch Params");
-        initLaunchParams( state );
-        Timing::stopTiming(true);
-
         //
         // Do the work
         //
 
+        Timing::startTiming("compute");
+        initLaunchParams( state );
+
         sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
 
-        Timing::startTiming("optixLaunch compute time");
         sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                 output_buffer_type,
                 state.params.numPrims*state.params.knn,
@@ -848,23 +873,23 @@ int main( int argc, char* argv[] )
                 device_id
                 );
 
-        launchSubframe( output_buffer, state );
+        launchSubframe( output_buffer, state, 1 );
         Timing::stopTiming(true);
 
-        Timing::startTiming("create second Geometry");
-        createGeometry ( state, 1 );
-        Timing::stopTiming(true);
+        //Timing::startTiming("create second Geometry");
+        //createGeometry ( state, 1 );
+        //Timing::stopTiming(true);
 
-        Timing::startTiming("optixLaunch second compute time");
-        sutil::CUDAOutputBuffer<unsigned int> output_buffer2(
-                output_buffer_type,
-                state.params.numPrims*state.params.knn,
-                1,
-                device_id
-                );
+        //Timing::startTiming("optixLaunch second compute time");
+        //sutil::CUDAOutputBuffer<unsigned int> output_buffer2(
+        //        output_buffer_type,
+        //        state.params.numPrims*state.params.knn,
+        //        1,
+        //        device_id
+        //        );
 
-        launchSubframe( output_buffer2, state );
-        Timing::stopTiming(true);
+        //launchSubframe( output_buffer2, state );
+        //Timing::stopTiming(true);
 
         //
         // Check the work
@@ -872,7 +897,7 @@ int main( int argc, char* argv[] )
 
         Timing::startTiming("Neighbor copy from device to host");
         void* data = output_buffer.getHostPointer();
-        void* data1 = output_buffer2.getHostPointer();
+        //void* data1 = output_buffer2.getHostPointer();
         Timing::stopTiming(true);
 
         unsigned int totalNeighbors = 0;
@@ -880,7 +905,7 @@ int main( int argc, char* argv[] )
         double totalWrongDist = 0;
         for (unsigned int q = 0; q < state.params.numPrims; q++) {
           for (unsigned int j = 0; j < state.params.knn; j++) {
-            unsigned int p = reinterpret_cast<unsigned int*>( data1 )[ q * state.params.knn + j ];
+            unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.knn + j ];
             if (p == UINT_MAX) break;
             else {
               totalNeighbors++;
@@ -893,9 +918,9 @@ int main( int argc, char* argv[] )
                 //exit(1);
               }
             }
-            //std::cout << p << " ";
+            std::cout << p << " ";
           }
-          //std::cout << "\n";
+          std::cout << "\n";
         }
         std::cerr << "Sanity check done." << std::endl;
         std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
