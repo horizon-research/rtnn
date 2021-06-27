@@ -674,6 +674,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     state.params.frame_buffer = result_buffer_data;
     state.params.queries = state.params.points[batch];
     state.params.handle = state.gas_handle[batch];
+    state.params.batchId = batch;
 
     //std::cout << state.params.handle << std::endl;
     //std::cout << state.params.frame_buffer << std::endl;
@@ -873,7 +874,7 @@ int main( int argc, char* argv[] )
                 device_id
                 );
 
-        launchSubframe( output_buffer, state, 1 );
+        launchSubframe( output_buffer, state, 0 );
         Timing::stopTiming(true);
 
         //Timing::startTiming("create second Geometry");
@@ -909,7 +910,7 @@ int main( int argc, char* argv[] )
             if (p == UINT_MAX) break;
             else {
               totalNeighbors++;
-              float3 diff = state.ndpoints[1][p] - state.ndpoints[1][q];
+              float3 diff = state.ndpoints[0][p] - state.ndpoints[0][q];
               float dists = dot(diff, diff);
               if (dists > state.params.radius*state.params.radius) {
                 //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[p].x, state.points[p].y, state.points[p].z, i, state.points[i].x, state.points[i].y, state.points[i].z, sqrt(dists));

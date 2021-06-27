@@ -56,6 +56,7 @@ struct Params
     float            radius;
     unsigned int     numPrims;
     unsigned int     knn;
+    int              batchId;
 
     int          max_depth;
     float        scene_epsilon;

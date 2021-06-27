@@ -195,10 +195,6 @@ void initLaunchParams( WhittedState& state )
 
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
-
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
-
-    state.params.handle = state.gas_handle;
 }
 
 static void sphere_bound(float3 center, float radius, float result[6])
@@ -286,11 +282,26 @@ static void buildGas(
 void createGeometry( WhittedState &state )
 {
     //
+    // Allocate device memory for the spheres (points/queries)
+    //
+
+    CUDA_CHECK( cudaMalloc(
+        reinterpret_cast<void**>(&state.d_spheres),
+        state.params.numPrims * sizeof(float3) ) );
+
+    CUDA_CHECK( cudaMemcpy(
+        reinterpret_cast<void*>( state.d_spheres),
+        state.points,
+        state.params.numPrims * sizeof(float3),
+        cudaMemcpyHostToDevice
+    ) );
+    state.params.points = state.d_spheres;
+
+    //
     // Build Custom Primitives
     //
 
     // Load AABB into device memory
-    //OptixAabb   aabb[OBJ_COUNT];
     OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
 
@@ -302,14 +313,6 @@ void createGeometry( WhittedState &state )
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
         ), state.params.numPrims* sizeof( OptixAabb ) ) );
-    //CUDA_CHECK( cudaMemcpy(
-    //            reinterpret_cast<void*>( d_aabb ),
-    //            //&aabb,
-    //            aabb,
-    //            state.params.numPrims * sizeof( OptixAabb ),
-    //            //OBJ_COUNT * sizeof( OptixAabb ),
-    //            cudaMemcpyHostToDevice
-    //            ) );
     CUDA_CHECK( cudaMemcpyAsync(
                 reinterpret_cast<void*>( d_aabb ),
                 aabb,
@@ -321,22 +324,10 @@ void createGeometry( WhittedState &state )
     // Setup AABB build input
     uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
 
-    uint32_t* sbt_index = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
     for (unsigned int i = 0; i < state.params.numPrims; i++) {
       //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
       aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
-      // it's important to set all these indices to 0, or simply pass 0 to sbtIndexOffsetBuffer
-      //sbt_index[i] = 0;
     }
-    CUdeviceptr    d_sbt_index;
-
-    //CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), sizeof(sbt_index) ) );
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_sbt_index ), state.params.numPrims * sizeof(uint32_t) ) );
-    CUDA_CHECK( cudaMemcpy(
-        reinterpret_cast<void*>( d_sbt_index ),
-        sbt_index,
-        state.params.numPrims * sizeof(uint32_t),
-        cudaMemcpyHostToDevice ) );
 
     OptixBuildInput aabb_input = {};
     aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
@@ -344,7 +335,7 @@ void createGeometry( WhittedState &state )
     aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
     aabb_input.customPrimitiveArray.numSbtRecords = 1;
     aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
-    //aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = d_sbt_index;
+    // it's important to pass 0 to sbtIndexOffsetBuffer
     aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
     aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
     aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
@@ -538,20 +529,6 @@ void createSBT( WhittedState &state )
 {
     // Raygen program record
     {
-        // allocating device memory for the spheres (points/queries)
-        // TODO: move it to somewhere else
-        CUDA_CHECK( cudaMalloc(
-            reinterpret_cast<void**>(&state.d_spheres),
-            state.params.numPrims * sizeof(float3) ) );
-
-        CUDA_CHECK( cudaMemcpy(
-            reinterpret_cast<void*>( state.d_spheres),
-            state.points,
-            state.params.numPrims * sizeof(float3),
-            cudaMemcpyHostToDevice
-        ) );
-        state.params.points = state.d_spheres;
-
         CUdeviceptr d_raygen_record;
         CUDA_CHECK( cudaMalloc(
             reinterpret_cast<void**>( &d_raygen_record ),
@@ -660,8 +637,9 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*state.params.knn*sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
     state.params.queries = state.params.points;
-    std::cout << state.params.handle << std::endl;
+    state.params.handle = state.gas_handle;
 
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,
                                  sizeof( Params ),
@@ -781,13 +759,13 @@ int main( int argc, char* argv[] )
         //
         int32_t device_count = 0;
         CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
-        std::cout << "Total GPUs visible: " << device_count << std::endl;
+        std::cerr << "Total GPUs visible: " << device_count << std::endl;
   
         int32_t device_id = 1;
         cudaDeviceProp prop;
         CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
         CUDA_CHECK( cudaSetDevice( device_id ) );
-        std::cout << "\t[" << device_id << "]: " << prop.name << std::endl;
+        std::cerr << "\t[" << device_id << "]: " << prop.name << std::endl;
 
         CUDA_CHECK( cudaStreamCreate( &state.stream ) );
 
@@ -810,16 +788,14 @@ int main( int argc, char* argv[] )
         createSBT      ( state );
         Timing::stopTiming(true);
 
-        Timing::startTiming("init Launch Params");
-        initLaunchParams( state );
-        Timing::stopTiming(true);
-
         //
         // Do the work
         //
 
+        Timing::startTiming("compute");
+        initLaunchParams( state );
+
         sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-        Timing::startTiming("optixLaunch compute time");
 
         sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                 output_buffer_type,
@@ -858,9 +834,9 @@ int main( int argc, char* argv[] )
                 //exit(1);
               }
             }
-            //std::cout << p << " ";
+            std::cout << p << " ";
           }
-          //std::cout << "\n";
+          std::cout << "\n";
         }
         std::cerr << "Sanity check done." << std::endl;
         std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
