@@ -48,6 +48,10 @@
 #include <sutil/vec_math.h>
 #include <sutil/Timing.h>
 
+#include <thrust/sort.h>
+#include <thrust/device_vector.h>
+#include <thrust/sequence.h>
+
 #include <GLFW/glfw3.h>
 #include <iomanip>
 #include <cstring>
@@ -121,6 +125,8 @@ struct WhittedState
 //
 //------------------------------------------------------------------------------
 
+void sortByKey( unsigned int, unsigned int, void*, thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
+
 float3* read_pc_data(const char* data_file, unsigned int* N) {
   std::ifstream file;
 
@@ -142,7 +148,7 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 
   float3* points = new float3[lines];
 
-  bool isShuffle = false;
+  bool isShuffle = true;
 
   if (isShuffle) {
     std::vector<float3> vpoints;
@@ -704,6 +710,36 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_spheres              ) ) );
 }
 
+void sanityCheck( WhittedState& state, void* data ) {
+  unsigned int totalNeighbors = 0;
+  unsigned int totalWrongNeighbors = 0;
+  double totalWrongDist = 0;
+  for (unsigned int i = 0; i < state.params.numPrims; i++) {
+    for (unsigned int j = 0; j < state.params.knn; j++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
+      //std::cout << p << std::endl; break;
+      if (p == UINT_MAX) break;
+      else {
+        totalNeighbors++;
+        float3 diff = state.points[p] - state.points[i];
+        float dists = dot(diff, diff);
+        if (dists > state.params.radius*state.params.radius) {
+          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[p].x, state.points[p].y, state.points[p].z, i, state.points[i].x, state.points[i].y, state.points[i].z, sqrt(dists));
+          totalWrongNeighbors++;
+          totalWrongDist += sqrt(dists);
+          //exit(1);
+        }
+      }
+      std::cout << p << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cerr << "Sanity check done." << std::endl;
+  std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
+  std::cerr << "Avg wrong neighbor/query: " << totalWrongNeighbors/state.params.numPrims << std::endl;
+  if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
+}
+
 int main( int argc, char* argv[] )
 {
     WhittedState state;
@@ -815,33 +851,27 @@ int main( int argc, char* argv[] )
         void* data = output_buffer.getHostPointer();
         Timing::stopTiming(true);
 
-        unsigned int totalNeighbors = 0;
-        unsigned int totalWrongNeighbors = 0;
-        double totalWrongDist = 0;
+        //sanityCheck( state, data );
+
+        Timing::startTiming("Sort queries");
+        thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
+        thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
         for (unsigned int i = 0; i < state.params.numPrims; i++) {
-          for (unsigned int j = 0; j < state.params.knn; j++) {
-            unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
-            //std::cout << p << std::endl; break;
-            if (p == UINT_MAX) break;
-            else {
-              totalNeighbors++;
-              float3 diff = state.points[p] - state.points[i];
-              float dists = dot(diff, diff);
-              if (dists > state.params.radius*state.params.radius) {
-                //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.points[p].x, state.points[p].y, state.points[p].z, i, state.points[i].x, state.points[i].y, state.points[i].z, sqrt(dists));
-                totalWrongNeighbors++;
-                totalWrongDist += sqrt(dists);
-                //exit(1);
-              }
-            }
-            std::cout << p << " ";
-          }
-          std::cout << "\n";
+          unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn ];
+          h_vec_key[i] = p;
         }
-        std::cerr << "Sanity check done." << std::endl;
-        std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
-        std::cerr << "Avg wrong neighbor/query: " << totalWrongNeighbors/state.params.numPrims << std::endl;
-        if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
+        thrust::sequence(h_vec_val.begin(), h_vec_val.end());
+        thrust::device_vector<unsigned int> d_vec_key = h_vec_key;
+        thrust::device_vector<unsigned int> d_vec_val = h_vec_val;
+        state.params.d_vec_key = &d_vec_key;
+        state.params.d_vec_val = &d_vec_val;
+
+        sortByKey( state.params.numPrims, state.params.knn, data, &h_vec_key, &h_vec_val, state.params.d_vec_key, state.params.d_vec_val );
+        Timing::stopTiming(true);
+
+        for (unsigned int i = 0; i < h_vec_key.size(); i++) {
+          std::cout << h_vec_val[i] << std::endl;
+        }
 
         cleanupState( state );
     }

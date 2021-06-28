@@ -32,7 +32,6 @@ OPTIX_add_sample_executable( optixNDRangeSearch target_name
   optixNDRangeSearch.h
   camera.cu
   geometry.cu
-  shading.cu
   OPTIONS -rdc true
   )
 

@@ -26,14 +26,18 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/sort.cu
+  PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ
+  )
+
 OPTIX_add_sample_executable( optixRangeSearch target_name
   ${SAMPLES_CUDA_DIR}/helpers.h
   optixRangeSearch.cpp
   optixRangeSearch.h
   camera.cu
   geometry.cu
-  shading.cu
-  OPTIONS -rdc true
+  sort.cu
+  #OPTIONS -rdc true
   )
 
 target_link_libraries( ${target_name}
