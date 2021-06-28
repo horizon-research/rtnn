@@ -148,7 +148,7 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 
   float3* points = new float3[lines];
 
-  bool isShuffle = true;
+  bool isShuffle = false;
 
   if (isShuffle) {
     std::vector<float3> vpoints;
@@ -175,10 +175,10 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 
       sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
       points[lines] = make_float3(x, y, z);
+      //std::cerr << points[lines].x << ", " << points[lines].y << ", " << points[lines].z << std::endl;
       lines++;
     }
   }
-  //std::cerr << points[0].x << ", " << points[0].y << ", " << points[0].z << std::endl;
 
   file.close();
 
@@ -198,6 +198,8 @@ void printUsageAndExit( const char* argv0 )
 void initLaunchParams( WhittedState& state )
 {
     state.params.frame_buffer = nullptr; // Will be set when output buffer is mapped
+    state.params.d_vec_val = nullptr;
+    state.params.d_vec_key = nullptr;
 
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
@@ -604,11 +606,11 @@ void createSBT( WhittedState &state )
     }
 }
 
-//static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
-//{
-//    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
-//              << message << "\n";
-//}
+static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
+{
+    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
+              << message << "\n";
+}
 
 void createContext( WhittedState& state )
 {
@@ -730,9 +732,9 @@ void sanityCheck( WhittedState& state, void* data ) {
           //exit(1);
         }
       }
-      std::cout << p << " ";
+      //std::cout << p << " ";
     }
-    std::cout << "\n";
+    //std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
   std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
@@ -851,7 +853,7 @@ int main( int argc, char* argv[] )
         void* data = output_buffer.getHostPointer();
         Timing::stopTiming(true);
 
-        //sanityCheck( state, data );
+        sanityCheck( state, data );
 
         Timing::startTiming("Sort queries");
         thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
@@ -863,15 +865,21 @@ int main( int argc, char* argv[] )
         thrust::sequence(h_vec_val.begin(), h_vec_val.end());
         thrust::device_vector<unsigned int> d_vec_key = h_vec_key;
         thrust::device_vector<unsigned int> d_vec_val = h_vec_val;
-        state.params.d_vec_key = &d_vec_key;
-        state.params.d_vec_val = &d_vec_val;
 
-        sortByKey( state.params.numPrims, state.params.knn, data, &h_vec_key, &h_vec_val, state.params.d_vec_key, state.params.d_vec_val );
+        sortByKey( state.params.numPrims, state.params.knn, data, &h_vec_key, &h_vec_val, &d_vec_key, &d_vec_val );
         Timing::stopTiming(true);
 
         for (unsigned int i = 0; i < h_vec_key.size(); i++) {
           std::cout << h_vec_val[i] << std::endl;
         }
+	// thrust can't be used in kernel code since NVRTC supports only a
+	// limited subset of C++, so we would have to explicitly cast a thrust
+	// device vector to its raw pointer. See the problem discussed here:
+	// https://github.com/cupy/cupy/issues/3728 and
+	// https://github.com/cupy/cupy/issues/3408. See how cuNSearch does it:
+	// https://github.com/InteractiveComputerGraphics/cuNSearch/blob/master/src/cuNSearchDeviceData.cu#L152
+        state.params.d_vec_key = thrust::raw_pointer_cast(&d_vec_key[0]);
+        state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
 
         cleanupState( state );
     }

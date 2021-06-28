@@ -29,8 +29,6 @@
 #include <vector_types.h>
 #include <optix_types.h>
 #include <sutil/vec_math.h>
-//#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
 
 enum RayType
 {
@@ -52,13 +50,13 @@ struct Params
 {
     unsigned int     subframe_index;
     unsigned int*    frame_buffer;
-    float3*          points = nullptr;
-    float3*          queries = nullptr;
+    float3*          points;
+    float3*          queries;
     float            radius;
     unsigned int     numPrims;
     unsigned int     knn;
-    thrust::device_vector<unsigned int>* d_vec_val = nullptr;
-    thrust::device_vector<unsigned int>* d_vec_key = nullptr;
+    unsigned int*    d_vec_val;
+    unsigned int*    d_vec_key;
 
     int          max_depth;
     float        scene_epsilon;

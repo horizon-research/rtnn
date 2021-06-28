@@ -41,14 +41,17 @@ extern "C" __global__ void __raygen__pinhole_camera()
 {
     const uint3 idx = optixGetLaunchIndex();
     unsigned int rayIdx = idx.x;
+    //unsigned int queryIdx = rayIdx;
+    unsigned int queryIdx;
+    if (params.d_vec_val == nullptr)
+      queryIdx = rayIdx;
+    else {
+      //thrust::device_vector<unsigned int> indices = reinterpret_cast<thrust::device_vector<unsigned int>*>(params.d_vec_val);
+      queryIdx = params.d_vec_val[rayIdx];
+    }
 
-    //const GeomData* geom = (GeomData*) optixGetSbtDataPointer();
-
-    // calculate d by transforming <0, 0> from the top-left corner to the center of the image
-    //float2 d = make_float2(idx.x, idx.y) / make_float2(params.width, params.height) * 2.f - 1.f;
-
-    //float3 ray_origin = geom->spheres[rayIdx];
-    float3 ray_origin = params.queries[rayIdx];
+    //float3 ray_origin = params.queries[rayIdx];
+    float3 ray_origin = params.queries[queryIdx];
     float3 ray_direction = normalize(make_float3(1, 0, 0));
 
     unsigned int id = 0;
@@ -71,10 +74,11 @@ extern "C" __global__ void __raygen__pinhole_camera()
         RAY_TYPE_RADIANCE,
         1,
         RAY_TYPE_RADIANCE,
-        reinterpret_cast<unsigned int&>(rayIdx),
+        //reinterpret_cast<unsigned int&>(rayIdx),
+        reinterpret_cast<unsigned int&>(queryIdx),
         reinterpret_cast<unsigned int&>(id)
     );
-    //params.frame_buffer[rayIdx * params.knn] = id;
+    //params.frame_buffer[rayIdx * params.knn] = queryIdx;
     //params.frame_buffer[rayIdx * params.knn+1] = ray_origin.x;
     //params.frame_buffer[rayIdx * params.knn+2] = ray_origin.y;
     //params.frame_buffer[rayIdx * params.knn+3] = ray_origin.z;
