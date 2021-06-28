@@ -148,7 +148,7 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 
   float3* points = new float3[lines];
 
-  bool isShuffle = false;
+  bool isShuffle = true;
 
   if (isShuffle) {
     std::vector<float3> vpoints;
@@ -869,9 +869,9 @@ int main( int argc, char* argv[] )
         sortByKey( state.params.numPrims, state.params.knn, data, &h_vec_key, &h_vec_val, &d_vec_key, &d_vec_val );
         Timing::stopTiming(true);
 
-        for (unsigned int i = 0; i < h_vec_key.size(); i++) {
-          std::cout << h_vec_val[i] << std::endl;
-        }
+        //for (unsigned int i = 0; i < h_vec_key.size(); i++) {
+        //  std::cout << h_vec_val[i] << std::endl;
+        //}
 	// thrust can't be used in kernel code since NVRTC supports only a
 	// limited subset of C++, so we would have to explicitly cast a thrust
 	// device vector to its raw pointer. See the problem discussed here:
@@ -880,6 +880,16 @@ int main( int argc, char* argv[] )
 	// https://github.com/InteractiveComputerGraphics/cuNSearch/blob/master/src/cuNSearchDeviceData.cu#L152
         state.params.d_vec_key = thrust::raw_pointer_cast(&d_vec_key[0]);
         state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
+
+        Timing::startTiming("second compute");
+        launchSubframe( output_buffer, state );
+        Timing::stopTiming(true);
+
+        Timing::startTiming("Neighbor copy from device to host");
+        data = output_buffer.getHostPointer();
+        Timing::stopTiming(true);
+
+        sanityCheck( state, data );
 
         cleanupState( state );
     }
