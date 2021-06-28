@@ -76,6 +76,7 @@ extern "C" __global__ void __intersection__sphere()
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
   bool isApprox = false;
+  if (params.d_vec_val == nullptr) isApprox = true;
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();

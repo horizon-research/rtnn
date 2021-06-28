@@ -41,16 +41,13 @@ extern "C" __global__ void __raygen__pinhole_camera()
 {
     const uint3 idx = optixGetLaunchIndex();
     unsigned int rayIdx = idx.x;
-    //unsigned int queryIdx = rayIdx;
     unsigned int queryIdx;
     if (params.d_vec_val == nullptr)
       queryIdx = rayIdx;
     else {
-      //thrust::device_vector<unsigned int> indices = reinterpret_cast<thrust::device_vector<unsigned int>*>(params.d_vec_val);
       queryIdx = params.d_vec_val[rayIdx];
     }
 
-    //float3 ray_origin = params.queries[rayIdx];
     float3 ray_origin = params.queries[queryIdx];
     float3 ray_direction = normalize(make_float3(1, 0, 0));
 
@@ -64,8 +61,6 @@ extern "C" __global__ void __raygen__pinhole_camera()
         ray_direction,
         tmin,
         tmax,
-        //params.scene_epsilon,
-        //1e16f,
         0.0f,
         OptixVisibilityMask( 1 ),
         OPTIX_RAY_FLAG_NONE,
@@ -74,7 +69,6 @@ extern "C" __global__ void __raygen__pinhole_camera()
         RAY_TYPE_RADIANCE,
         1,
         RAY_TYPE_RADIANCE,
-        //reinterpret_cast<unsigned int&>(rayIdx),
         reinterpret_cast<unsigned int&>(queryIdx),
         reinterpret_cast<unsigned int&>(id)
     );

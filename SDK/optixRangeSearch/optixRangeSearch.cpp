@@ -852,13 +852,13 @@ int main( int argc, char* argv[] )
         // Check the work
         //
 
-        Timing::startTiming("Initial neighbor copy D2H");
+        Timing::startTiming("initial neighbor copy D2H");
         void* data = output_buffer.getHostPointer();
         Timing::stopTiming(true);
 
         sanityCheck( state, data );
 
-        Timing::startTiming("Sort queries");
+        Timing::startTiming("sort queries");
         thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
         thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
         for (unsigned int i = 0; i < state.params.numPrims; i++) {
