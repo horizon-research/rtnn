@@ -59,11 +59,11 @@ extern "C" __device__ void intersect_sphere()
       //optixSetPayload_1( id+1 );
 
       unsigned int id = optixGetPayload_1();
-      if (id < params.knn) {
+      if (id < params.limit) {
         unsigned int rayIdx = optixGetPayload_0();
         unsigned int primIdx = optixGetPrimitiveIndex();
-        params.frame_buffer[rayIdx * params.knn + id] = primIdx;
-        if (id + 1 == params.knn)
+        params.frame_buffer[rayIdx * params.limit + id] = primIdx;
+        if (id + 1 == params.limit)
           optixReportIntersection( 0, 0 );
         else optixSetPayload_1( id+1 );
       }
@@ -79,11 +79,11 @@ extern "C" __global__ void __intersection__sphere()
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();
-    if (id < params.knn) {
+    if (id < params.limit) {
       unsigned int rayIdx = optixGetPayload_0();
       unsigned int primIdx = optixGetPrimitiveIndex();
-      params.frame_buffer[rayIdx * params.knn + id] = primIdx;
-      if (id + 1 == params.knn)
+      params.frame_buffer[rayIdx * params.limit + id] = primIdx;
+      if (id + 1 == params.limit)
         optixReportIntersection( 0, 0 );
       else optixSetPayload_1( id+1 );
     }

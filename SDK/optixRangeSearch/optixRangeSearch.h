@@ -37,8 +37,6 @@ enum RayType
     RAY_TYPE_COUNT
 };
 
-//void sortByKey( unsigned int, unsigned int, void*, thrust::host_vector<unsigned int>&, thrust::host_vector<unsigned int>& );
-
 struct BasicLight
 {
     float3  pos;
@@ -57,6 +55,7 @@ struct Params
     unsigned int     knn;
     unsigned int*    d_vec_val;
     unsigned int*    d_vec_key;
+    unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
 
     int          max_depth;
     float        scene_epsilon;

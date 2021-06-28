@@ -125,7 +125,7 @@ struct WhittedState
 //
 //------------------------------------------------------------------------------
 
-void sortByKey( unsigned int, unsigned int, void*, thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
+void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
 
 float3* read_pc_data(const char* data_file, unsigned int* N) {
   std::ifstream file;
@@ -635,15 +635,16 @@ void createContext( WhittedState& state )
 
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
-    // Launch
     // this map() thing basically returns the cudaMalloc-ed device pointer.
     unsigned int* result_buffer_data = output_buffer.map();
 
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte has to be.
-    CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF, state.params.numPrims*state.params.knn*sizeof(unsigned int) ) );
+    CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF,
+                             state.params.numPrims * state.params.limit * sizeof(unsigned int) ) );
     state.params.frame_buffer = result_buffer_data;
+
     state.params.queries = state.params.points;
     state.params.handle = state.gas_handle;
 
@@ -713,12 +714,14 @@ void cleanupState( WhittedState& state )
 }
 
 void sanityCheck( WhittedState& state, void* data ) {
+  // this is stateful in that it relies on state.params.limit
+
   unsigned int totalNeighbors = 0;
   unsigned int totalWrongNeighbors = 0;
   double totalWrongDist = 0;
   for (unsigned int i = 0; i < state.params.numPrims; i++) {
-    for (unsigned int j = 0; j < state.params.knn; j++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn + j ];
+    for (unsigned int j = 0; j < state.params.limit; j++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.limit + j ];
       //std::cout << p << std::endl; break;
       if (p == UINT_MAX) break;
       else {
@@ -810,6 +813,8 @@ int main( int argc, char* argv[] )
         //
         // Set up OptiX state
         //
+        initLaunchParams( state );
+
         Timing::startTiming("create Context");
         createContext  ( state );
         Timing::stopTiming(true);
@@ -830,18 +835,16 @@ int main( int argc, char* argv[] )
         // Do the work
         //
 
-        Timing::startTiming("compute");
-        initLaunchParams( state );
-
+        // Free of CUDAOutputBuffer is done in the destructor.
         sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-
+        Timing::startTiming("compute");
+        state.params.limit = 1;
         sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                 output_buffer_type,
-                state.params.numPrims*state.params.knn,
+                state.params.numPrims * state.params.limit,
                 1,
                 device_id
                 );
-
         launchSubframe( output_buffer, state );
         Timing::stopTiming(true);
 
@@ -849,7 +852,7 @@ int main( int argc, char* argv[] )
         // Check the work
         //
 
-        Timing::startTiming("Neighbor copy from device to host");
+        Timing::startTiming("Initial neighbor copy D2H");
         void* data = output_buffer.getHostPointer();
         Timing::stopTiming(true);
 
@@ -859,19 +862,20 @@ int main( int argc, char* argv[] )
         thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
         thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
         for (unsigned int i = 0; i < state.params.numPrims; i++) {
-          unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.knn ];
+          unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.limit ];
           h_vec_key[i] = p;
         }
         thrust::sequence(h_vec_val.begin(), h_vec_val.end());
         thrust::device_vector<unsigned int> d_vec_key = h_vec_key;
         thrust::device_vector<unsigned int> d_vec_val = h_vec_val;
 
-        sortByKey( state.params.numPrims, state.params.knn, data, &h_vec_key, &h_vec_val, &d_vec_key, &d_vec_val );
+        sortQueries( &h_vec_key, &h_vec_val, &d_vec_key, &d_vec_val );
         Timing::stopTiming(true);
 
         //for (unsigned int i = 0; i < h_vec_key.size(); i++) {
         //  std::cout << h_vec_val[i] << std::endl;
         //}
+
 	// thrust can't be used in kernel code since NVRTC supports only a
 	// limited subset of C++, so we would have to explicitly cast a thrust
 	// device vector to its raw pointer. See the problem discussed here:
@@ -882,11 +886,18 @@ int main( int argc, char* argv[] )
         state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
 
         Timing::startTiming("second compute");
-        launchSubframe( output_buffer, state );
+        state.params.limit = state.params.knn;
+        sutil::CUDAOutputBuffer<unsigned int> output_buffer_2(
+                output_buffer_type,
+                state.params.numPrims * state.params.limit,
+                1,
+                device_id
+                );
+        launchSubframe( output_buffer_2, state );
         Timing::stopTiming(true);
 
-        Timing::startTiming("Neighbor copy from device to host");
-        data = output_buffer.getHostPointer();
+        Timing::startTiming("Neighbor copy D2H");
+        data = output_buffer_2.getHostPointer();
         Timing::stopTiming(true);
 
         sanityCheck( state, data );
