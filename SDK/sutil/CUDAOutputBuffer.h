@@ -75,6 +75,7 @@ public:
     GLuint         getPBO();
     void           deletePBO();
     PIXEL_FORMAT*  getHostPointer();
+    PIXEL_FORMAT*  getDevicePointer();
 
 private:
     void makeCurrent() { CUDA_CHECK( cudaSetDevice( m_device_idx ) ); }
@@ -378,6 +379,12 @@ void CUDAOutputBuffer<PIXEL_FORMAT>::deletePBO()
     GL_CHECK( glBindBuffer( GL_ARRAY_BUFFER, 0 ) );
     GL_CHECK( glDeleteBuffers( 1, &m_pbo ) );
     m_pbo = 0;
+}
+
+template <typename PIXEL_FORMAT>
+PIXEL_FORMAT* CUDAOutputBuffer<PIXEL_FORMAT>::getDevicePointer()
+{
+    return m_device_pixels;
 }
 
 template <typename PIXEL_FORMAT>
