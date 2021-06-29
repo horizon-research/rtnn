@@ -214,8 +214,7 @@ void initLaunchParams( WhittedState& state )
         cudaMemcpyHostToDevice,
         state.stream
     ) );
-    state.params.points = state.d_points;
-    state.params.queries = state.params.points; // might get over-written later with sorted queries
+    state.params.queries = state.d_points; // might get over-written later with sorted queries
 
     state.params.frame_buffer = nullptr; // the result buffer
     state.params.d_vec_val = nullptr; // contains the index to reorder rays

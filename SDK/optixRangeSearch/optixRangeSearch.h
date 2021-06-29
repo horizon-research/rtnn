@@ -48,13 +48,11 @@ struct Params
 {
     unsigned int     subframe_index;
     unsigned int*    frame_buffer;
-    float3*          points;
     float3*          queries;
     float            radius;
     unsigned int     numPrims;
     unsigned int     knn;
     unsigned int*    d_vec_val;
-    //unsigned int*    d_vec_key;
     unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
 
     int          max_depth;
