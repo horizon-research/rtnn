@@ -14,3 +14,16 @@ void sortQueries( thrust::host_vector<unsigned int>* h_vec_key, thrust::host_vec
   thrust::copy(d_vec_key->begin(), d_vec_key->end(), h_vec_key->begin());
   thrust::copy(d_vec_val->begin(), d_vec_val->end(), h_vec_val->begin());
 }
+
+void sortQueries( thrust::host_vector<unsigned int>* h_vec_key, thrust::host_vector<unsigned int>* h_vec_val, thrust::device_ptr<unsigned int> d_vec_key, thrust::device_vector<unsigned int>* d_vec_val, int N ) {
+  thrust::sort_by_key(d_vec_key, d_vec_key+N, d_vec_val->begin());
+
+  thrust::copy(d_vec_val->begin(), d_vec_val->end(), h_vec_val->begin());
+}
+
+void sortQueries( thrust::host_vector<unsigned int>* h_vec_val, thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_vector<unsigned int>* d_vec_val, int N ) {
+  thrust::sort_by_key(d_vec_key_ptr, d_vec_key_ptr+N, d_vec_val->begin());
+
+  //thrust::copy(d_vec_val->begin(), d_vec_val->end(), h_vec_val->begin());
+}
+

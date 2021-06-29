@@ -126,6 +126,8 @@ struct WhittedState
 //------------------------------------------------------------------------------
 
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
+void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
+void sortQueries( thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
 
 float3* read_pc_data(const char* data_file, unsigned int* N) {
   std::ifstream file;
@@ -199,7 +201,7 @@ void initLaunchParams( WhittedState& state )
 {
     state.params.frame_buffer = nullptr; // Will be set when output buffer is mapped
     state.params.d_vec_val = nullptr;
-    state.params.d_vec_key = nullptr;
+    //state.params.d_vec_key = nullptr;
 
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
@@ -289,6 +291,12 @@ static void buildGas(
 
 void createGeometry( WhittedState &state )
 {
+    // TODO: we might want to create a simple GAS for sorting queries, but need
+    // to weight the trade-off between the overhead of creating the GAS and the
+    // time saved from traversing a simpler GAS. Right now seems like creating
+    // geometry is quite heavy, whereas the inital traversal (for sorting) is
+    // quite lightweight.
+
     //
     // Allocate device memory for the spheres (points/queries)
     //
@@ -297,11 +305,12 @@ void createGeometry( WhittedState &state )
         reinterpret_cast<void**>(&state.d_spheres),
         state.params.numPrims * sizeof(float3) ) );
 
-    CUDA_CHECK( cudaMemcpy(
+    CUDA_CHECK( cudaMemcpyAsync(
         reinterpret_cast<void*>( state.d_spheres),
         state.points,
         state.params.numPrims * sizeof(float3),
-        cudaMemcpyHostToDevice
+        cudaMemcpyHostToDevice,
+        state.stream
     ) );
     state.params.points = state.d_spheres;
 
@@ -606,11 +615,11 @@ void createSBT( WhittedState &state )
     }
 }
 
-static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
-{
-    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
-              << message << "\n";
-}
+//static void context_log_cb( unsigned int level, const char* tag, const char* message, void* /*cbdata */)
+//{
+//    std::cerr << "[" << std::setw( 2 ) << level << "][" << std::setw( 12 ) << tag << "]: "
+//              << message << "\n";
+//}
 
 void createContext( WhittedState& state )
 {
@@ -633,6 +642,32 @@ void createContext( WhittedState& state )
 //
 //
 
+void launch ( WhittedState& state )
+{
+    state.params.queries = state.params.points;
+    state.params.handle = state.gas_handle;
+
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
+    CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
+                                 &state.params,
+                                 sizeof( Params ),
+                                 cudaMemcpyHostToDevice,
+                                 state.stream
+    ) );
+
+    OPTIX_CHECK( optixLaunch(
+        state.pipeline,
+        state.stream,
+        reinterpret_cast<CUdeviceptr>( state.d_params ),
+        sizeof( Params ),
+        &state.sbt,
+        state.params.numPrims, // launch width
+        1,                     // launch height
+        1                      // launch depth
+    ) );
+    CUDA_SYNC_CHECK(); // TODO: should sync only the stream
+}
+
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
     // this map() thing basically returns the cudaMalloc-ed device pointer.
@@ -641,8 +676,9 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // need to manually set the cuda-malloced device memory. note the semantics
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte has to be.
-    CUDA_CHECK( cudaMemset ( result_buffer_data, 0xFF,
-                             state.params.numPrims * state.params.limit * sizeof(unsigned int) ) );
+    CUDA_CHECK( cudaMemsetAsync ( result_buffer_data, 0xFF,
+                                  state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                                  state.stream ) );
     state.params.frame_buffer = result_buffer_data;
 
     state.params.queries = state.params.points;
@@ -690,7 +726,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     //    1                      // launch depth
     //) );
     output_buffer.unmap();
-    CUDA_SYNC_CHECK();
+    //CUDA_SYNC_CHECK();
 }
 
 
@@ -832,12 +868,13 @@ int main( int argc, char* argv[] )
         Timing::stopTiming(true);
 
         //
-        // Do the work
+        // Initial traversal (to sort the queries)
         //
+        Timing::startTiming("compute");
+
 
         // Free of CUDAOutputBuffer is done in the destructor.
         sutil::CUDAOutputBufferType output_buffer_type = sutil::CUDAOutputBufferType::CUDA_DEVICE;
-        Timing::startTiming("compute");
         state.params.limit = 1;
         sutil::CUDAOutputBuffer<unsigned int> output_buffer(
                 output_buffer_type,
@@ -845,34 +882,44 @@ int main( int argc, char* argv[] )
                 1,
                 device_id
                 );
+        output_buffer.setStream(state.stream);
+
         launchSubframe( output_buffer, state );
+        //launch( state );
         Timing::stopTiming(true);
 
+        //Timing::startTiming("initial neighbor copy D2H");
+        //void* data = output_buffer.getHostPointer();
+        unsigned int* result_buffer_data = output_buffer.map();
+        thrust::device_ptr<unsigned int> d_vec_key_ptr = thrust::device_pointer_cast(result_buffer_data);
+        //Timing::stopTiming(true);
+
+        //sanityCheck( state, data );
+
         //
-        // Check the work
+        // Sort the queries
         //
 
-        Timing::startTiming("initial neighbor copy D2H");
-        void* data = output_buffer.getHostPointer();
+        Timing::startTiming("sort queries init"); // most time spent in the following two lines
+        //thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
+        thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
+        //for (unsigned int i = 0; i < state.params.numPrims; i++) {
+        //  unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.limit ];
+        //  h_vec_key[i] = p;
+        //}
+        thrust::sequence(h_vec_val.begin(), h_vec_val.end());
+        //thrust::device_vector<unsigned int> d_vec_key = h_vec_key;
+        thrust::device_vector<unsigned int> d_vec_val = h_vec_val;
+        //dGenSequence(&d_vec_val);
         Timing::stopTiming(true);
-
-        sanityCheck( state, data );
 
         Timing::startTiming("sort queries");
-        thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
-        thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
-        for (unsigned int i = 0; i < state.params.numPrims; i++) {
-          unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.limit ];
-          h_vec_key[i] = p;
-        }
-        thrust::sequence(h_vec_val.begin(), h_vec_val.end());
-        thrust::device_vector<unsigned int> d_vec_key = h_vec_key;
-        thrust::device_vector<unsigned int> d_vec_val = h_vec_val;
-
-        sortQueries( &h_vec_key, &h_vec_val, &d_vec_key, &d_vec_val );
+        //sortQueries( &d_vec_key, &d_vec_val );
+        //sortQueries( &h_vec_key, &h_vec_val, &d_vec_key, &d_vec_val );
+        sortQueries( &h_vec_val, d_vec_key_ptr, &d_vec_val, state.params.numPrims );
         Timing::stopTiming(true);
 
-        //for (unsigned int i = 0; i < h_vec_key.size(); i++) {
+        //for (unsigned int i = 0; i < h_vec_val.size(); i++) {
         //  std::cout << h_vec_val[i] << std::endl;
         //}
 
@@ -882,8 +929,12 @@ int main( int argc, char* argv[] )
 	// https://github.com/cupy/cupy/issues/3728 and
 	// https://github.com/cupy/cupy/issues/3408. See how cuNSearch does it:
 	// https://github.com/InteractiveComputerGraphics/cuNSearch/blob/master/src/cuNSearchDeviceData.cu#L152
-        state.params.d_vec_key = thrust::raw_pointer_cast(&d_vec_key[0]);
+        //state.params.d_vec_key = thrust::raw_pointer_cast(&d_vec_key[0]);
         state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
+
+        //
+        // Actual traversal with sorted queries
+        //
 
         Timing::startTiming("second compute");
         state.params.limit = state.params.knn;
@@ -893,11 +944,12 @@ int main( int argc, char* argv[] )
                 1,
                 device_id
                 );
+        output_buffer_2.setStream(state.stream);
         launchSubframe( output_buffer_2, state );
         Timing::stopTiming(true);
 
         Timing::startTiming("Neighbor copy D2H");
-        data = output_buffer_2.getHostPointer();
+        void* data = output_buffer_2.getHostPointer();
         Timing::stopTiming(true);
 
         sanityCheck( state, data );
