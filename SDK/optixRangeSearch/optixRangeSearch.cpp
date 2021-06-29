@@ -48,9 +48,9 @@
 #include <sutil/vec_math.h>
 #include <sutil/Timing.h>
 
-#include <thrust/sort.h>
 #include <thrust/device_vector.h>
 #include <thrust/sequence.h>
+#include <thrust/gather.h>
 
 #include <GLFW/glfw3.h>
 #include <iomanip>
@@ -115,6 +115,7 @@ struct WhittedState
 
     float3*                     d_points                  = nullptr;
     float3*                     h_points                  = nullptr;
+    float3*                     h_queries                 = nullptr;
 
     OptixShaderBindingTable     sbt                       = {};
 };
@@ -128,6 +129,7 @@ struct WhittedState
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
+void gatherQueries ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3>);
 
 float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   std::ifstream file;
@@ -197,9 +199,26 @@ void printUsageAndExit( const char* argv0 )
 
 void initLaunchParams( WhittedState& state )
 {
+    //
+    // Allocate device memory for the spheres (points/queries)
+    //
+
+    CUDA_CHECK( cudaMalloc(
+        reinterpret_cast<void**>(&state.d_points),
+        state.params.numPrims * sizeof(float3) ) );
+
+    CUDA_CHECK( cudaMemcpyAsync(
+        reinterpret_cast<void*>( state.d_points ),
+        state.h_points,
+        state.params.numPrims * sizeof(float3),
+        cudaMemcpyHostToDevice,
+        state.stream
+    ) );
+    state.params.points = state.d_points;
+    state.params.queries = state.params.points; // might get over-written later with sorted queries
+
     state.params.frame_buffer = nullptr; // the result buffer
     state.params.d_vec_val = nullptr; // contains the index to reorder rays
-    state.params.queries = state.params.points;
 
     state.params.max_depth = max_trace;
     state.params.scene_epsilon = 1.e-4f;
@@ -287,7 +306,69 @@ static void buildGas(
     }
 }
 
-void createGeometry( WhittedState &state )
+void createReorderedGeometry( WhittedState &state, unsigned int* indices )
+{
+    //
+    // Build Custom Primitives
+    //
+
+    // Load AABB into device memory
+    OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
+    CUdeviceptr d_aabb;
+
+    for(unsigned int i = 0; i < state.params.numPrims; i++) {
+      sphere_bound(
+          state.h_points[indices[i]], state.params.radius,
+          reinterpret_cast<float*>(&aabb[i]));
+    }
+
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
+        ), state.params.numPrims* sizeof( OptixAabb ) ) );
+    CUDA_CHECK( cudaMemcpyAsync(
+                reinterpret_cast<void*>( d_aabb ),
+                aabb,
+                state.params.numPrims * sizeof( OptixAabb ),
+                cudaMemcpyHostToDevice,
+                state.stream
+    ) );
+
+    // Setup AABB build input
+    uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
+
+    for (unsigned int i = 0; i < state.params.numPrims; i++) {
+      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
+    }
+
+    OptixBuildInput aabb_input = {};
+    aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
+    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
+    aabb_input.customPrimitiveArray.numSbtRecords = 1;
+    aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
+    // it's important to pass 0 to sbtIndexOffsetBuffer
+    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
+    aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
+    aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
+
+
+    OptixAccelBuildOptions accel_options = {
+        OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
+        OPTIX_BUILD_OPERATION_BUILD         // operation
+    };
+
+
+    buildGas(
+        state,
+        accel_options,
+        aabb_input,
+        state.gas_handle,
+        state.d_gas_output_buffer);
+
+    CUDA_CHECK( cudaFree( (void*)d_aabb) );
+}
+
+void createSampledGeometry( WhittedState &state, int sample )
 {
     // TODO: we might want to create a simple GAS for sorting queries, but need
     // to weight the trade-off between the overhead of creating the GAS and the
@@ -296,22 +377,69 @@ void createGeometry( WhittedState &state )
     // quite lightweight.
 
     //
-    // Allocate device memory for the spheres (points/queries)
+    // Build Custom Primitives
     //
 
-    CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>(&state.d_points),
-        state.params.numPrims * sizeof(float3) ) );
+    // TODO: maybe there are other ways to generate samples
+    unsigned int numPrims = state.params.numPrims / sample;
+    // Load AABB into device memory
+    OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
+    CUdeviceptr d_aabb;
 
+    for(unsigned int i = 0; i < numPrims; i++) {
+      sphere_bound(
+          state.h_points[i*sample], state.params.radius,
+          reinterpret_cast<float*>(&aabb[i]));
+    }
+
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
+        ), numPrims* sizeof( OptixAabb ) ) );
     CUDA_CHECK( cudaMemcpyAsync(
-        reinterpret_cast<void*>( state.d_points),
-        state.h_points,
-        state.params.numPrims * sizeof(float3),
-        cudaMemcpyHostToDevice,
-        state.stream
+                reinterpret_cast<void*>( d_aabb ),
+                aabb,
+                numPrims * sizeof( OptixAabb ),
+                cudaMemcpyHostToDevice,
+                state.stream
     ) );
-    state.params.points = state.d_points;
 
+    // Setup AABB build input
+    uint32_t* aabb_input_flags = (uint32_t*)malloc(numPrims * sizeof(uint32_t));
+
+    for (unsigned int i = 0; i < numPrims; i++) {
+      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
+    }
+
+    OptixBuildInput aabb_input = {};
+    aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
+    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
+    aabb_input.customPrimitiveArray.numSbtRecords = 1;
+    aabb_input.customPrimitiveArray.numPrimitives = numPrims;
+    // it's important to pass 0 to sbtIndexOffsetBuffer
+    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
+    aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
+    aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
+
+
+    OptixAccelBuildOptions accel_options = {
+        OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
+        OPTIX_BUILD_OPERATION_BUILD         // operation
+    };
+
+
+    buildGas(
+        state,
+        accel_options,
+        aabb_input,
+        state.gas_handle,
+        state.d_gas_output_buffer);
+
+    CUDA_CHECK( cudaFree( (void*)d_aabb) );
+}
+
+void createGeometry( WhittedState &state )
+{
     //
     // Build Custom Primitives
     //
@@ -675,8 +803,8 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     ) );
     //output_buffer.unmap();
     // TODO: quick hack; if the first traversal, will sync stream before sort
-    if (state.params.limit != 1) CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
-    //CUDA_SYNC_CHECK();
+    //if (state.params.limit != 1) CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+    CUDA_SYNC_CHECK();
 }
 
 
@@ -705,17 +833,17 @@ void sanityCheck( WhittedState& state, void* data ) {
   unsigned int totalNeighbors = 0;
   unsigned int totalWrongNeighbors = 0;
   double totalWrongDist = 0;
-  for (unsigned int i = 0; i < state.params.numPrims; i++) {
-    for (unsigned int j = 0; j < state.params.limit; j++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( data )[ i * state.params.limit + j ];
+  for (unsigned int q = 0; q < state.params.numPrims; q++) {
+    for (unsigned int n = 0; n < state.params.limit; n++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.limit + n ];
       //std::cout << p << std::endl; break;
       if (p == UINT_MAX) break;
       else {
         totalNeighbors++;
-        float3 diff = state.h_points[p] - state.h_points[i];
+        float3 diff = state.h_points[p] - state.h_queries[q];
         float dists = dot(diff, diff);
         if (dists > state.params.radius*state.params.radius) {
-          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, i, state.h_points[i].x, state.h_points[i].y, state.h_points[i].z, sqrt(dists));
+          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
           totalWrongNeighbors++;
           totalWrongDist += sqrt(dists);
           //exit(1);
@@ -740,6 +868,7 @@ int main( int argc, char* argv[] )
     std::string outfile;
     bool toSort = true;
     bool isShuffle = false;
+    bool toGather = true;
 
     for( int i = 1; i < argc; ++i )
     {
@@ -772,6 +901,12 @@ int main( int argc, char* argv[] )
                 printUsageAndExit( argv[0] );
             toSort = (bool)(atoi(argv[++i]));
         }
+        else if( arg == "--gather" || arg == "-g" )
+        {
+            if( i >= argc - 1 )
+                printUsageAndExit( argv[0] );
+            toGather = (bool)(atoi(argv[++i]));
+        }
         else if( arg == "--shuffle" || arg == "-sf" )
         {
             if( i >= argc - 1 )
@@ -787,10 +922,16 @@ int main( int argc, char* argv[] )
 
     // read points
     state.h_points = read_pc_data(outfile.c_str(), &state.params.numPrims, isShuffle);
+    if (state.params.numPrims == 0)
+      printUsageAndExit( argv[0] );
+    // will be updated if queries are later sorted. this is primarily used for sanity check
+    state.h_queries = state.h_points;
+
     std::cerr << "numPrims: " << state.params.numPrims << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
     std::cerr << "K: " << state.params.knn << std::endl;
     std::cerr << "Sort? " << std::boolalpha << toSort << std::endl;
+    std::cerr << "Gather? " << std::boolalpha << toGather << std::endl;
     std::cerr << "Shuffle? " << std::boolalpha << isShuffle << std::endl;
 
     Timing::reset();
@@ -821,6 +962,10 @@ int main( int argc, char* argv[] )
 
         Timing::startTiming("create and upload Geometry");
           createGeometry ( state );
+          //if (!toSort)
+          //  createGeometry ( state );
+          //else
+          //  createSampledGeometry ( state, 2 );
         Timing::stopTiming(true);
 
         Timing::startTiming("create Pipeline");
@@ -848,9 +993,10 @@ int main( int argc, char* argv[] )
           Timing::stopTiming(true);
 
           Timing::startTiming("result copy D2H");
-            void* data = output_buffer_2.getHostPointer();
+            void* data = output_buffer_2.getHostPointer(); // TODO: this should be optimized. See cuNSearch
           Timing::stopTiming(true);
 
+          assert(state.h_queries == state.h_points);
           sanityCheck( state, data );
         } else {
           //
@@ -885,18 +1031,55 @@ int main( int argc, char* argv[] )
           Timing::stopTiming(true);
 
           Timing::startTiming("sort queries");
-            CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+            //CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+            // TODO: do sorting in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
             sortQueries( &h_vec_val, d_vec_key_ptr, &d_vec_val, state.params.numPrims );
+            //thrust::copy(d_vec_val.begin(), d_vec_val.end(), h_vec_val.begin());
           Timing::stopTiming(true);
 
           //for (unsigned int i = 0; i < h_vec_val.size(); i++) {
-          //  std::cout << h_vec_val[i] << "\t" << state.h_points[h_vec_val[i]].x << "\t" << state.h_points[h_vec_val[i]].y << "\t" << state.h_points[h_vec_val[i]].z <<  std::endl;
+          //  //std::cout << h_vec_val[i] << "\t" << state.h_points[h_vec_val[i]].x << "\t" << state.h_points[h_vec_val[i]].y << "\t" << state.h_points[h_vec_val[i]].z << std::endl;
+          //  std::cout << h_vec_val[i] << std::endl;
           //}
+
+          if (toGather) {
+            // TODO: perform a device gather before launching the actual search.
+            // Don't forget to cudaFree
+            // Should also change sanity check order
+            Timing::startTiming("gather queries");
+              float3* reordered_queries;
+              cudaMalloc(reinterpret_cast<void**>(&reordered_queries),
+                         state.params.numPrims * sizeof(float3) );
+              thrust::device_ptr<float3> d_reord_queries_ptr = thrust::device_pointer_cast(reordered_queries);
+              thrust::device_ptr<float3> d_orig_queries_ptr = thrust::device_pointer_cast(state.params.queries);
+              gatherQueries(&d_vec_val, d_orig_queries_ptr, d_reord_queries_ptr);
+              state.params.queries = thrust::raw_pointer_cast(&d_reord_queries_ptr[0]);
+            Timing::stopTiming(true);
+
+            // Copy reordered queries to host; mainly for sanity check
+            thrust::host_vector<float3> host_reord_queries(state.params.numPrims);
+            thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, host_reord_queries.begin());
+            // need a deep copy since host_reord_queries is out of scope after exiting this block
+            state.h_queries = (float3*)malloc(state.params.numPrims*sizeof(float3));
+            std::copy(host_reord_queries.begin(), host_reord_queries.end(), state.h_queries);
+            //for (unsigned int i = 0; i < state.params.numPrims; i++) {
+            //  fprintf(stdout, "orig: %f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+            //  fprintf(stdout, "reor: %f, %f, %f\n\n", state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
+            //}
+          }
+
+	  // TODO: rebuild the GAS using the new query order; empirically
+	  // building GAS in locality order helps (sorted + unshuffle is much
+	  // faster than sorted + shuffle on KITTI data).
+	  // Hmm this seems to have worse performance. Need to figure out why.
+          // TODO: this relies on the fact that h_vec_val is updated (copy in sortQueries)!!
+          //createReorderedGeometry ( state, h_vec_val.data() );
 
           //
           // Actual traversal with sorted queries
           //
 
+          //createGeometry ( state );
           Timing::startTiming("sorted compute");
 	    // thrust can't be used in kernel code since NVRTC supports only a
 	    // limited subset of C++, so we would have to explicitly cast a
@@ -912,7 +1095,7 @@ int main( int argc, char* argv[] )
                     device_id
                     );
 
-            state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
+            if (!toGather) state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
             launchSubframe( output_buffer_2, state );
           Timing::stopTiming(true);
 
@@ -922,7 +1105,6 @@ int main( int argc, char* argv[] )
 
           sanityCheck( state, data );
         }
-
 
         cleanupState( state );
     }
