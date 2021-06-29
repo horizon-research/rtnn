@@ -113,7 +113,6 @@ struct WhittedState
     Params                      params;
     Params*                     d_params                  = nullptr;
 
-    float3*                     d_points                  = nullptr;
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
 
@@ -204,17 +203,21 @@ void initLaunchParams( WhittedState& state )
     //
 
     CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>(&state.d_points),
+        reinterpret_cast<void**>(&state.params.points ),
         state.params.numPrims * sizeof(float3) ) );
 
     CUDA_CHECK( cudaMemcpyAsync(
-        reinterpret_cast<void*>( state.d_points ),
+        reinterpret_cast<void*>( state.params.points ),
         state.h_points,
         state.params.numPrims * sizeof(float3),
         cudaMemcpyHostToDevice,
         state.stream
     ) );
-    state.params.queries = state.d_points; // might get over-written later with sorted queries
+    // by default, params.queries and params.points point to the same device
+    // memory. later if we decide to reorder the queries, we will allocate new
+    // space in device memory and point params.queries to that space. this is
+    // lazy query allocation.
+    state.params.queries = state.params.points;
 
     state.params.frame_buffer = nullptr; // the result buffer
     state.params.d_vec_val = nullptr; // contains the index to reorder rays
@@ -315,14 +318,40 @@ void createReorderedGeometry( WhittedState &state, unsigned int* indices )
     OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
 
+    float3* reord_points_t = (float3*)malloc(state.params.numPrims * sizeof(float3));
+
     for(unsigned int i = 0; i < state.params.numPrims; i++) {
-     // int j = (i + 1) % state.params.numPrims;
-      //std::cout << indices[i] << ": " << state.h_points[indices[i]].x << "\t" << state.h_points[indices[i]].y << "\t" << state.h_points[indices[i]].z << std::endl;
       sphere_bound(
           state.h_points[indices[i]], state.params.radius,
-          //state.h_points[j], state.params.radius,
           reinterpret_cast<float*>(&aabb[i]));
+      // TODO: use thrust gather on device and then copy to host, similar to gathering queries
+      reord_points_t[i] = state.h_points[indices[i]];
     }
+    state.h_points = reord_points_t;
+
+    // This is to update the host and device points so that they have the same
+    // order as they are used to generate the GAS. This is important because in
+    // geometry.cu we will use points[primIdx], where the primIdx is the aabb
+    // id, which should match the point id in points' device memory. We also
+    // update the host's points memory so that sanity check doesn't have to
+    // worry about reordering it.
+    // One potential optimization is if we gather queries, we can overwrite the
+    // original state.params.points; otherwise we can't since params.queries
+    // points to the same device memory as params.points, which we don't want
+    // to overwrite.
+    float3* d_reordered_points;
+    CUDA_CHECK( cudaMalloc(
+        reinterpret_cast<void**>(&d_reordered_points),
+        state.params.numPrims * sizeof(float3) ) );
+
+    CUDA_CHECK( cudaMemcpyAsync(
+        reinterpret_cast<void*>( d_reordered_points ),
+        state.h_points,
+        state.params.numPrims * sizeof(float3),
+        cudaMemcpyHostToDevice,
+        state.stream
+    ) );
+    state.params.points = d_reordered_points;
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
         ), state.params.numPrims* sizeof( OptixAabb ) ) );
@@ -821,45 +850,17 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixModuleDestroy       ( state.camera_module           ) );
     OPTIX_CHECK( optixDeviceContextDestroy( state.context                 ) );
 
-
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
+    if (state.params.queries != state.params.points)
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
+    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points          ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_points               ) ) );
-}
 
-void sanityCheckIndices( WhittedState& state, void* data, unsigned int* indices ) {
-  // this is stateful in that it relies on state.params.limit
-
-  unsigned int totalNeighbors = 0;
-  unsigned int totalWrongNeighbors = 0;
-  double totalWrongDist = 0;
-  for (unsigned int q = 0; q < state.params.numPrims; q++) {
-    for (unsigned int n = 0; n < state.params.limit; n++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.limit + n ];
-      //std::cout << p << std::endl; break;
-      if (p == UINT_MAX) break;
-      else {
-        totalNeighbors++;
-        float3 diff = state.h_points[indices[p]] - state.h_queries[q];
-        float dists = dot(diff, diff);
-        if (dists > state.params.radius*state.params.radius) {
-          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
-          totalWrongNeighbors++;
-          totalWrongDist += sqrt(dists);
-          //exit(1);
-        }
-      }
-      //std::cout << indices[p] << " ";
-    }
-    //std::cout << "\n";
-  }
-  std::cerr << "Sanity check done." << std::endl;
-  std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.params.numPrims << std::endl;
-  std::cerr << "Total wrong neighbors: " << totalWrongNeighbors << std::endl;
-  if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
+    if (state.h_queries != state.h_points) delete state.h_queries;
+    delete state.h_points;
 }
 
 void sanityCheck( WhittedState& state, void* data ) {
@@ -884,9 +885,9 @@ void sanityCheck( WhittedState& state, void* data ) {
           //exit(1);
         }
       }
-      std::cout << p << " ";
+      //std::cout << p << " ";
     }
-    std::cout << "\n";
+    //std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
   std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.params.numPrims << std::endl;
@@ -904,6 +905,7 @@ int main( int argc, char* argv[] )
     bool toSort = true;
     bool isShuffle = false;
     bool toGather = true;
+    bool newGAS = false;
 
     for( int i = 1; i < argc; ++i )
     {
@@ -942,6 +944,12 @@ int main( int argc, char* argv[] )
                 printUsageAndExit( argv[0] );
             toGather = (bool)(atoi(argv[++i]));
         }
+        else if( arg == "--newgas" || arg == "-a" )
+        {
+            if( i >= argc - 1 )
+                printUsageAndExit( argv[0] );
+            newGAS = (bool)(atoi(argv[++i]));
+        }
         else if( arg == "--shuffle" || arg == "-sf" )
         {
             if( i >= argc - 1 )
@@ -967,6 +975,7 @@ int main( int argc, char* argv[] )
     std::cerr << "K: " << state.params.knn << std::endl;
     std::cerr << "Sort? " << std::boolalpha << toSort << std::endl;
     std::cerr << "Gather? " << std::boolalpha << toGather << std::endl;
+    std::cerr << "newGAS? " << std::boolalpha << newGAS << std::endl;
     std::cerr << "Shuffle? " << std::boolalpha << isShuffle << std::endl;
 
     Timing::reset();
@@ -1023,6 +1032,8 @@ int main( int argc, char* argv[] )
                     device_id
                     );
 
+	    assert(state.h_queries == state.h_points);
+            assert(state.params.points == state.params.queries);
             assert(state.params.d_vec_val == nullptr);
             launchSubframe( output_buffer_2, state );
           Timing::stopTiming(true);
@@ -1031,7 +1042,6 @@ int main( int argc, char* argv[] )
             void* data = output_buffer_2.getHostPointer(); // TODO: this should be optimized. See cuNSearch
           Timing::stopTiming(true);
 
-          assert(state.h_queries == state.h_points);
           sanityCheck( state, data );
         } else {
           //
@@ -1047,6 +1057,8 @@ int main( int argc, char* argv[] )
                     device_id
                     );
 
+	    assert(state.h_queries == state.h_points);
+            assert(state.params.points == state.params.queries);
             assert(state.params.d_vec_val == nullptr);
             launchSubframe( output_buffer, state );
 
@@ -1078,22 +1090,23 @@ int main( int argc, char* argv[] )
 
           if (toGather) {
             // Perform a device gather before launching the actual search.
-            // TODO: Don't forget to cudaFree
             Timing::startTiming("gather queries");
-              float3* reordered_queries;
-              cudaMalloc(reinterpret_cast<void**>(&reordered_queries),
+              float3* d_reordered_queries;
+              cudaMalloc(reinterpret_cast<void**>(&d_reordered_queries),
                          state.params.numPrims * sizeof(float3) );
-              thrust::device_ptr<float3> d_reord_queries_ptr = thrust::device_pointer_cast(reordered_queries);
+              thrust::device_ptr<float3> d_reord_queries_ptr = thrust::device_pointer_cast(d_reordered_queries);
               thrust::device_ptr<float3> d_orig_queries_ptr = thrust::device_pointer_cast(state.params.queries);
               gatherQueries(&d_vec_val, d_orig_queries_ptr, d_reord_queries_ptr);
               state.params.queries = thrust::raw_pointer_cast(&d_reord_queries_ptr[0]);
+              assert(state.params.points != state.params.queries);
             Timing::stopTiming(true);
 
             // Copy reordered queries to host; mainly for sanity check
             thrust::host_vector<float3> host_reord_queries(state.params.numPrims);
             thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, host_reord_queries.begin());
             // need a deep copy since host_reord_queries is out of scope after exiting this block
-            state.h_queries = (float3*)malloc(state.params.numPrims*sizeof(float3));
+            //state.h_queries = (float3*)malloc(state.params.numPrims*sizeof(float3));
+            state.h_queries = new float3[state.params.numPrims];
             std::copy(host_reord_queries.begin(), host_reord_queries.end(), state.h_queries);
             //for (unsigned int i = 0; i < state.params.numPrims; i++) {
             //  fprintf(stdout, "orig: %f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
@@ -1101,12 +1114,16 @@ int main( int argc, char* argv[] )
             //}
           }
 
-	  // TODO: rebuild the GAS using the new query order; empirically
-	  // building GAS in locality order helps (sorted + unshuffle is much
-	  // faster than sorted + shuffle on KITTI data).
-	  // Hmm this seems to have worse performance. Need to figure out why.
-          thrust::copy(d_vec_val.begin(), d_vec_val.end(), h_vec_val.begin());
-          createReorderedGeometry ( state, h_vec_val.data() );
+	  // Rebuild the GAS using the new query order; empirically building
+	  // GAS in locality order helps (sorted + unshuffle is much faster
+	  // than sorted + shuffle on KITTI data).
+	  // This doesn't seems to help much.
+          if (newGAS) {
+            thrust::copy(d_vec_val.begin(), d_vec_val.end(), h_vec_val.begin());
+            createReorderedGeometry ( state, h_vec_val.data() );
+	    assert(state.h_queries != state.h_points);
+            assert(state.params.points != state.params.queries);
+          }
 
           //
           // Actual traversal with sorted queries
@@ -1136,7 +1153,7 @@ int main( int argc, char* argv[] )
             void* data = output_buffer_2.getHostPointer();
           Timing::stopTiming(true);
 
-          sanityCheckIndices( state, data, h_vec_val.data() );
+          sanityCheck( state, data );
         }
 
         cleanupState( state );
