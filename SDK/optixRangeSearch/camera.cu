@@ -76,8 +76,8 @@ extern "C" __global__ void __raygen__pinhole_camera()
         reinterpret_cast<unsigned int&>(queryIdx),
         reinterpret_cast<unsigned int&>(id)
     );
-    //params.frame_buffer[rayIdx * params.knn] = queryIdx;
-    //params.frame_buffer[rayIdx * params.knn+1] = ray_origin.x;
-    //params.frame_buffer[rayIdx * params.knn+2] = ray_origin.y;
-    //params.frame_buffer[rayIdx * params.knn+3] = ray_origin.z;
+    //params.frame_buffer[queryIdx * params.knn] = queryIdx;
+    //params.frame_buffer[queryIdx * params.knn+1] = ray_origin.x;
+    //params.frame_buffer[queryIdx * params.knn+2] = ray_origin.y;
+    //params.frame_buffer[queryIdx * params.knn+3] = ray_origin.z;
 }

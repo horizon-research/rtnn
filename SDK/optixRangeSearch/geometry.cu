@@ -48,7 +48,8 @@ extern "C" __device__ void intersect_sphere()
     // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection).
 
     unsigned int primIdx = optixGetPrimitiveIndex();
-    const float3 center = params.points[primIdx];
+    //const float3 center = params.points[primIdx];
+    const float3 center = params.queries[primIdx];
 
     const float3  ray_orig = optixGetWorldRayOrigin();
 
@@ -79,6 +80,8 @@ extern "C" __global__ void __intersection__sphere()
 
   // if d_vec_val is null and limit is 1, this is the initial run for sorting
   if (params.d_vec_val == nullptr && params.limit == 1) isApprox = true;
+
+  //isApprox = true;
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();

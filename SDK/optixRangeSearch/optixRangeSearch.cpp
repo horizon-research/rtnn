@@ -128,7 +128,7 @@ struct WhittedState
 
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
-void sortQueries( thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
+void sortQueries( thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
 void gatherQueries ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3>);
 
 float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
@@ -317,8 +317,11 @@ void createReorderedGeometry( WhittedState &state, unsigned int* indices )
     CUdeviceptr d_aabb;
 
     for(unsigned int i = 0; i < state.params.numPrims; i++) {
+     // int j = (i + 1) % state.params.numPrims;
+      //std::cout << indices[i] << ": " << state.h_points[indices[i]].x << "\t" << state.h_points[indices[i]].y << "\t" << state.h_points[indices[i]].z << std::endl;
       sphere_bound(
           state.h_points[indices[i]], state.params.radius,
+          //state.h_points[j], state.params.radius,
           reinterpret_cast<float*>(&aabb[i]));
     }
 
@@ -366,6 +369,7 @@ void createReorderedGeometry( WhittedState &state, unsigned int* indices )
         state.d_gas_output_buffer);
 
     CUDA_CHECK( cudaFree( (void*)d_aabb) );
+    free(aabb);
 }
 
 void createSampledGeometry( WhittedState &state, int sample )
@@ -827,6 +831,38 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_points               ) ) );
 }
 
+void sanityCheckIndices( WhittedState& state, void* data, unsigned int* indices ) {
+  // this is stateful in that it relies on state.params.limit
+
+  unsigned int totalNeighbors = 0;
+  unsigned int totalWrongNeighbors = 0;
+  double totalWrongDist = 0;
+  for (unsigned int q = 0; q < state.params.numPrims; q++) {
+    for (unsigned int n = 0; n < state.params.limit; n++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.limit + n ];
+      //std::cout << p << std::endl; break;
+      if (p == UINT_MAX) break;
+      else {
+        totalNeighbors++;
+        float3 diff = state.h_points[indices[p]] - state.h_queries[q];
+        float dists = dot(diff, diff);
+        if (dists > state.params.radius*state.params.radius) {
+          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
+          totalWrongNeighbors++;
+          totalWrongDist += sqrt(dists);
+          //exit(1);
+        }
+      }
+      //std::cout << indices[p] << " ";
+    }
+    //std::cout << "\n";
+  }
+  std::cerr << "Sanity check done." << std::endl;
+  std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.params.numPrims << std::endl;
+  std::cerr << "Total wrong neighbors: " << totalWrongNeighbors << std::endl;
+  if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
+}
+
 void sanityCheck( WhittedState& state, void* data ) {
   // this is stateful in that it relies on state.params.limit
 
@@ -849,13 +885,13 @@ void sanityCheck( WhittedState& state, void* data ) {
           //exit(1);
         }
       }
-      //std::cout << p << " ";
+      std::cout << p << " ";
     }
-    //std::cout << "\n";
+    std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
-  std::cerr << "Avg neighbor/query: " << totalNeighbors/state.params.numPrims << std::endl;
-  std::cerr << "Avg wrong neighbor/query: " << totalWrongNeighbors/state.params.numPrims << std::endl;
+  std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.params.numPrims << std::endl;
+  std::cerr << "Total wrong neighbors: " << totalWrongNeighbors << std::endl;
   if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
 }
 
@@ -1033,8 +1069,7 @@ int main( int argc, char* argv[] )
           Timing::startTiming("sort queries");
             //CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
             // TODO: do sorting in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
-            sortQueries( &h_vec_val, d_vec_key_ptr, &d_vec_val, state.params.numPrims );
-            //thrust::copy(d_vec_val.begin(), d_vec_val.end(), h_vec_val.begin());
+            sortQueries( d_vec_key_ptr, &d_vec_val, state.params.numPrims );
           Timing::stopTiming(true);
 
           //for (unsigned int i = 0; i < h_vec_val.size(); i++) {
@@ -1043,9 +1078,8 @@ int main( int argc, char* argv[] )
           //}
 
           if (toGather) {
-            // TODO: perform a device gather before launching the actual search.
-            // Don't forget to cudaFree
-            // Should also change sanity check order
+            // Perform a device gather before launching the actual search.
+            // TODO: Don't forget to cudaFree
             Timing::startTiming("gather queries");
               float3* reordered_queries;
               cudaMalloc(reinterpret_cast<void**>(&reordered_queries),
@@ -1072,8 +1106,8 @@ int main( int argc, char* argv[] )
 	  // building GAS in locality order helps (sorted + unshuffle is much
 	  // faster than sorted + shuffle on KITTI data).
 	  // Hmm this seems to have worse performance. Need to figure out why.
-          // TODO: this relies on the fact that h_vec_val is updated (copy in sortQueries)!!
-          //createReorderedGeometry ( state, h_vec_val.data() );
+          thrust::copy(d_vec_val.begin(), d_vec_val.end(), h_vec_val.begin());
+          createReorderedGeometry ( state, h_vec_val.data() );
 
           //
           // Actual traversal with sorted queries
@@ -1103,7 +1137,7 @@ int main( int argc, char* argv[] )
             void* data = output_buffer_2.getHostPointer();
           Timing::stopTiming(true);
 
-          sanityCheck( state, data );
+          sanityCheckIndices( state, data, h_vec_val.data() );
         }
 
         cleanupState( state );
