@@ -113,6 +113,7 @@ struct WhittedState
     Params                      params;
     Params*                     d_params                  = nullptr;
 
+    float*                      d_key                    = nullptr;
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
 
@@ -127,8 +128,15 @@ struct WhittedState
 
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_vector<unsigned int>*, thrust::device_vector<unsigned int>* );
 void sortQueries( thrust::host_vector<unsigned int>*, thrust::host_vector<unsigned int>*, thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
+void sortQueries( thrust::device_vector<float>*, thrust::device_vector<unsigned int>* );
+void sortQueries( thrust::device_vector<float>*, thrust::device_ptr<unsigned int>);
+void sortQueries( thrust::device_ptr<float>, thrust::device_ptr<unsigned int>, unsigned int );
 void sortQueries( thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned int>*, int N);
+void sortQueries( thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, int N);
 void gatherQueries ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3>);
+void gatherQueries ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, thrust::device_ptr<float3>, unsigned int );
+void gatherQueries ( thrust::device_ptr<unsigned int>, thrust::device_vector<float>*, thrust::device_ptr<float>, unsigned int );
+thrust::device_ptr<unsigned int> initDeviceVal(unsigned int);
 
 float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   std::ifstream file;
@@ -858,6 +866,8 @@ void cleanupState( WhittedState& state )
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points          ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
+    if (state.d_key)
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_key                  ) ) );
 
     if (state.h_queries != state.h_points) delete state.h_queries;
     delete state.h_points;
@@ -1062,30 +1072,43 @@ int main( int argc, char* argv[] )
             assert(state.params.d_vec_val == nullptr);
             launchSubframe( output_buffer, state );
 
-            thrust::device_ptr<unsigned int> d_vec_key_ptr = thrust::device_pointer_cast(output_buffer.getDevicePointer());
+            thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(output_buffer.getDevicePointer());
           Timing::stopTiming(true);
-
-          //sanityCheck( state, data );
 
           //
           // Sort the queries
           //
 
-          Timing::startTiming("sort queries init"); // most time spent in the next line
-            thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
-            thrust::sequence(h_vec_val.begin(), h_vec_val.end());
-            thrust::device_vector<unsigned int> d_vec_val = h_vec_val;
+          Timing::startTiming("sort queries init");
+            thrust::device_ptr<unsigned int> d_vec_val_ptr = initDeviceVal(state.params.numPrims);
+            float* d_key;
+            cudaMalloc(reinterpret_cast<void**>(&d_key),
+                       state.params.numPrims * sizeof(float) );
+            thrust::device_ptr<float> d_key_ptr = thrust::device_pointer_cast(d_key);
+            thrust::host_vector<float> h_orig_points_x(state.params.numPrims);
+            // TODO: need to optimize this...
+            for (unsigned int i = 0; i < state.params.numPrims; i++) {
+              h_orig_points_x[i] = state.h_points[i].x; // could be other dimensions
+            }
+            thrust::device_vector<float> d_orig_points_x = h_orig_points_x;
+            state.d_key = d_key; // just so we have a handle to free it later
           Timing::stopTiming(true);
 
           Timing::startTiming("sort queries");
             //CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
             // TODO: do sorting in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
-            sortQueries( d_vec_key_ptr, &d_vec_val, state.params.numPrims );
+            gatherQueries(d_firsthit_idx_ptr, &d_orig_points_x, d_key_ptr, state.params.numPrims);
+            sortQueries( d_key_ptr, d_vec_val_ptr, state.params.numPrims );
           Timing::stopTiming(true);
 
+          //thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
+          //thrust::copy(d_vec_val_ptr, d_vec_val_ptr+state.params.numPrims, h_vec_val.begin());
+          //thrust::host_vector<float> h_vec_key(state.params.numPrims);
+          //thrust::copy(d_key_ptr, d_key_ptr+state.params.numPrims, h_vec_key.begin());
+
           //for (unsigned int i = 0; i < h_vec_val.size(); i++) {
-          //  //std::cout << h_vec_val[i] << "\t" << state.h_points[h_vec_val[i]].x << "\t" << state.h_points[h_vec_val[i]].y << "\t" << state.h_points[h_vec_val[i]].z << std::endl;
-          //  std::cout << h_vec_val[i] << std::endl;
+          //  std::cout << h_vec_key[i] << "\t" << h_vec_val[i] << "\t" << state.h_points[h_vec_val[i]].x << "\t" << state.h_points[h_vec_val[i]].y << "\t" << state.h_points[h_vec_val[i]].z << std::endl;
+          //  //std::cout << h_vec_val[i] << std::endl;
           //}
 
           if (toGather) {
@@ -1096,7 +1119,7 @@ int main( int argc, char* argv[] )
                          state.params.numPrims * sizeof(float3) );
               thrust::device_ptr<float3> d_reord_queries_ptr = thrust::device_pointer_cast(d_reordered_queries);
               thrust::device_ptr<float3> d_orig_queries_ptr = thrust::device_pointer_cast(state.params.queries);
-              gatherQueries(&d_vec_val, d_orig_queries_ptr, d_reord_queries_ptr);
+              gatherQueries(d_vec_val_ptr, d_orig_queries_ptr, d_reord_queries_ptr, state.params.numPrims);
               state.params.queries = thrust::raw_pointer_cast(&d_reord_queries_ptr[0]);
               assert(state.params.points != state.params.queries);
             Timing::stopTiming(true);
@@ -1118,12 +1141,12 @@ int main( int argc, char* argv[] )
 	  // GAS in locality order helps (sorted + unshuffle is much faster
 	  // than sorted + shuffle on KITTI data).
 	  // This doesn't seems to help much.
-          if (newGAS) {
-            thrust::copy(d_vec_val.begin(), d_vec_val.end(), h_vec_val.begin());
-            createReorderedGeometry ( state, h_vec_val.data() );
-	    assert(state.h_queries != state.h_points);
-            assert(state.params.points != state.params.queries);
-          }
+          //if (newGAS) {
+          //  // this relies on the fact that h_vec_val is updated from d_dev_val
+          //  createReorderedGeometry ( state, h_vec_val.data() );
+	  //  assert(state.h_queries != state.h_points);
+          //  assert(state.params.points != state.params.queries);
+          //}
 
           //
           // Actual traversal with sorted queries
@@ -1145,7 +1168,7 @@ int main( int argc, char* argv[] )
                     device_id
                     );
 
-            if (!toGather) state.params.d_vec_val = thrust::raw_pointer_cast(&d_vec_val[0]);
+            if (!toGather) state.params.d_vec_val = thrust::raw_pointer_cast(d_vec_val_ptr);
             launchSubframe( output_buffer_2, state );
           Timing::stopTiming(true);
 
