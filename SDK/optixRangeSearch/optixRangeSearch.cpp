@@ -117,6 +117,7 @@ struct WhittedState
     float*                      d_key                     = nullptr;
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
+    unsigned int*               d_r2q_map                 = nullptr;
 
     std::string                 outfile;
     unsigned int                sortMode                  = 1;
@@ -813,8 +814,8 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
-    if (state.params.d_r2q_map)
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.d_r2q_map     ) ) );
+    if (state.d_r2q_map)
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map     ) ) );
     if (state.params.queries != state.params.points)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points          ) ) );
@@ -889,7 +890,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     // first use a gather to generate the keys, then sort by keys
     gatherByKey(d_firsthit_idx_ptr, &d_orig_points_1d, d_key_ptr, state.params.numPrims);
     sortByKey( d_key_ptr, d_r2q_map_ptr, state.params.numPrims );
-    state.params.d_r2q_map = thrust::raw_pointer_cast(d_r2q_map_ptr);
+    state.d_r2q_map = thrust::raw_pointer_cast(d_r2q_map_ptr);
   Timing::stopTiming(true);
   
   // if debug, copy the sorted keys and values back to host
@@ -930,7 +931,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
     // here: https://github.com/cupy/cupy/issues/3728 and
     // https://github.com/cupy/cupy/issues/3408. See how cuNSearch does it:
     // https://github.com/InteractiveComputerGraphics/cuNSearch/blob/master/src/cuNSearchDeviceData.cu#L152
-    state.params.d_r2q_map = thrust::raw_pointer_cast(d_r2q_map_ptr);
+    state.d_r2q_map = thrust::raw_pointer_cast(d_r2q_map_ptr);
   Timing::stopTiming(true);
 
   bool debug = false;
@@ -1206,8 +1207,9 @@ int main( int argc, char* argv[] )
                     device_id
                     );
 
-            if (state.toGather) assert(state.params.d_r2q_map != nullptr);
-            else assert(state.params.d_r2q_map == nullptr);
+            assert(state.params.d_r2q_map == nullptr);
+            // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
+            if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
 
             launchSubframe( output_buffer_2, state );
           Timing::stopTiming(true);
