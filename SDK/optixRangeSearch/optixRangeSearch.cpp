@@ -124,7 +124,6 @@ struct WhittedState
     bool                        preSort                   = false;
     bool                        toGather                  = true;
     bool                        isShuffle                 = false;
-    bool                        newGAS                    = false;
 
     OptixShaderBindingTable     sbt                       = {};
 };
@@ -1028,12 +1027,6 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
       }
-      else if( arg == "--newgas" || arg == "-a" )
-      {
-          if( i >= argc - 1 )
-              printUsageAndExit( argv[0] );
-          state.newGAS = (bool)(atoi(argv[++i]));
-      }
       else if( arg == "--shuffle" || arg == "-sf" )
       {
           if( i >= argc - 1 )
@@ -1140,7 +1133,6 @@ int main( int argc, char* argv[] )
     std::cerr << "sortMode: " << state.sortMode << std::endl;
     std::cerr << "preSort? " << std::boolalpha << state.preSort << std::endl;
     std::cerr << "Gather? " << std::boolalpha << state.toGather << std::endl;
-    std::cerr << "newGAS? " << std::boolalpha << state.newGAS << std::endl;
     std::cerr << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
 
     try
