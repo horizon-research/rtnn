@@ -360,98 +360,6 @@ static void buildGas(
     }
 }
 
-void createReorderedGeometry( WhittedState &state, unsigned int* indices )
-{
-    //
-    // Build Custom Primitives
-    //
-
-    // Load AABB into device memory
-    OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
-    CUdeviceptr d_aabb;
-
-    float3* reord_points_t = (float3*)malloc(state.params.numPrims * sizeof(float3));
-
-    for(unsigned int i = 0; i < state.params.numPrims; i++) {
-      sphere_bound(
-          state.h_points[indices[i]], state.params.radius,
-          reinterpret_cast<float*>(&aabb[i]));
-      // TODO: use thrust gather on device and then copy to host, similar to gathering queries
-      reord_points_t[i] = state.h_points[indices[i]];
-    }
-    state.h_points = reord_points_t;
-
-    // This is to update the host and device points so that they have the same
-    // order as they are used to generate the GAS. This is important because in
-    // geometry.cu we will use points[primIdx], where the primIdx is the aabb
-    // id, which should match the point id in points' device memory. We also
-    // update the host's points memory so that sanity check doesn't have to
-    // worry about reordering it.
-    // One potential optimization is if we gather queries, we can overwrite the
-    // original state.params.points; otherwise we can't since params.queries
-    // points to the same device memory as params.points, which we don't want
-    // to overwrite.
-    float3* d_reordered_points;
-    CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>(&d_reordered_points),
-        state.params.numPrims * sizeof(float3) ) );
-
-    CUDA_CHECK( cudaMemcpyAsync(
-        reinterpret_cast<void*>( d_reordered_points ),
-        state.h_points,
-        state.params.numPrims * sizeof(float3),
-        cudaMemcpyHostToDevice,
-        state.stream
-    ) );
-    state.params.points = d_reordered_points;
-
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-        ), state.params.numPrims* sizeof( OptixAabb ) ) );
-    CUDA_CHECK( cudaMemcpyAsync(
-                reinterpret_cast<void*>( d_aabb ),
-                aabb,
-                state.params.numPrims * sizeof( OptixAabb ),
-                cudaMemcpyHostToDevice,
-                state.stream
-    ) );
-
-    // Setup AABB build input
-    uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
-
-    for (unsigned int i = 0; i < state.params.numPrims; i++) {
-      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
-    }
-
-    OptixBuildInput aabb_input = {};
-    aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
-    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
-    aabb_input.customPrimitiveArray.numSbtRecords = 1;
-    aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
-    // it's important to pass 0 to sbtIndexOffsetBuffer
-    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
-    aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
-    aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
-
-
-    OptixAccelBuildOptions accel_options = {
-        OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
-        OPTIX_BUILD_OPERATION_BUILD         // operation
-    };
-
-
-    buildGas(
-        state,
-        accel_options,
-        aabb_input,
-        state.gas_handle,
-        state.d_gas_output_buffer);
-
-    CUDA_CHECK( cudaFree( (void*)d_aabb) );
-    free(aabb);
-}
-
 void createSampledGeometry( WhittedState &state, int sample )
 {
     // TODO: we might want to create a simple GAS for sorting queries, but need
@@ -1271,17 +1179,6 @@ int main( int argc, char* argv[] )
           if (state.toGather) {
             gatherQueries( state, d_indices_ptr );
           }
-
-	  // Rebuild the GAS using the new query order; empirically building
-	  // GAS in locality order helps (sorted + unshuffle is much faster
-	  // than sorted + shuffle on KITTI data).
-	  // This doesn't seems to help much.
-          //if (newGAS) {
-          //  // this relies on the fact that h_vec_val is updated from d_dev_val
-          //  createReorderedGeometry ( state, h_vec_val.data() );
-	  //  assert(state.h_queries != state.h_points);
-          //  assert(state.params.points != state.params.queries);
-          //}
 
           //
           // Actual traversal with sorted queries
