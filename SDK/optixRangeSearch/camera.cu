@@ -42,15 +42,15 @@ extern "C" __global__ void __raygen__pinhole_camera()
     const uint3 idx = optixGetLaunchIndex();
     unsigned int rayIdx = idx.x;
 
-    // if d_vec_val is null, it could be 1) an unsorted run, 2) an initial run
+    // if d_r2q_map is null, it could be 1) an unsorted run, 2) an initial run
     // for sorting, or 3) a sorted run with queries pre-gathered. Either case,
     // we directly map rays to queries.
 
     unsigned int queryIdx;
-    if (params.d_vec_val == nullptr)
+    if (params.d_r2q_map == nullptr)
       queryIdx = rayIdx;
     else
-      queryIdx = params.d_vec_val[rayIdx];
+      queryIdx = params.d_r2q_map[rayIdx];
 
     float3 ray_origin = params.queries[queryIdx];
     float3 ray_direction = normalize(make_float3(1, 0, 0));

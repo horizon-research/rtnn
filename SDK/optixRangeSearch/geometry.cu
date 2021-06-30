@@ -77,8 +77,8 @@ extern "C" __global__ void __intersection__sphere()
 
   bool isApprox = false;
 
-  // if d_vec_val is null and limit is 1, this is the initial run for sorting
-  if (params.d_vec_val == nullptr && params.limit == 1) isApprox = true;
+  // if d_r2q_map is null and limit is 1, this is the initial run for sorting
+  if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();

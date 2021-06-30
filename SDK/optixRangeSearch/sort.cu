@@ -53,7 +53,7 @@ void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_pt
   thrust::gather(d_key_ptr, d_key_ptr + N, d_orig_val_ptr, d_new_val_ptr);
 }
 
-thrust::device_ptr<unsigned int> initDeviceVal(unsigned int numPrims) {
+thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
   unsigned int* d_init_val;
   cudaMalloc(reinterpret_cast<void**>(&d_init_val),
              numPrims * sizeof(unsigned int) );
