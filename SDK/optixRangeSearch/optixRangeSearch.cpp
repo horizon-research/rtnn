@@ -122,7 +122,8 @@ struct WhittedState
     std::string                 outfile;
     unsigned int                sortMode                  = 1;
     bool                        preSort                   = false;
-    bool                        toGather                  = true;
+    float                       sortingGAS                = 1;
+    bool                        toGather                  = false;
     bool                        isShuffle                 = false;
 
     OptixShaderBindingTable     sbt                       = {};
@@ -326,7 +327,6 @@ static void buildGas(
 
     OPTIX_CHECK( optixAccelBuild(
         state.context,
-        //0,
         state.stream,
         &accel_options,
         &build_input,
@@ -349,7 +349,8 @@ static void buildGas(
         CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
 
         // use handle as input and output
-        OPTIX_CHECK( optixAccelCompact( state.context, 0, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
+        //OPTIX_CHECK( optixAccelCompact( state.context, 0, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
+        OPTIX_CHECK( optixAccelCompact( state.context, state.stream, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
         CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
     }
@@ -359,7 +360,7 @@ static void buildGas(
     }
 }
 
-void createSampledGeometry( WhittedState &state, int sample )
+void createSortingGeometry( WhittedState &state, float sortingGAS )
 {
     // TODO: we might want to create a simple GAS for sorting queries, but need
     // to weight the trade-off between the overhead of creating the GAS and the
@@ -367,19 +368,17 @@ void createSampledGeometry( WhittedState &state, int sample )
     // geometry is quite heavy, whereas the inital traversal (for sorting) is
     // quite lightweight.
 
-    //
     // Build Custom Primitives
-    //
 
-    // TODO: maybe there are other ways to generate samples
-    unsigned int numPrims = state.params.numPrims / sample;
+    unsigned int numPrims = state.params.numPrims;
     // Load AABB into device memory
     OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
 
+    float newRadius = state.params.radius/sortingGAS;
     for(unsigned int i = 0; i < numPrims; i++) {
       sphere_bound(
-          state.h_points[i*sample], state.params.radius,
+          state.h_points[i], newRadius,
           reinterpret_cast<float*>(&aabb[i]));
     }
 
@@ -758,6 +757,39 @@ void createContext( WhittedState& state )
 //
 //
 
+void launch( unsigned int* result_buffer_data, WhittedState& state )
+{
+    state.params.frame_buffer = result_buffer_data;
+
+    // need to manually set the cuda-malloced device memory. note the semantics
+    // of cudamemset: it sets #count number of BYTES to value; literally think
+    // about what each byte has to be.
+    CUDA_CHECK( cudaMemsetAsync ( result_buffer_data, 0xFF,
+                                  state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                                  state.stream ) );
+
+    state.params.handle = state.gas_handle;
+
+    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
+    CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
+                                 &state.params,
+                                 sizeof( Params ),
+                                 cudaMemcpyHostToDevice,
+                                 state.stream
+    ) );
+
+    OPTIX_CHECK( optixLaunch(
+        state.pipeline,
+        state.stream,
+        reinterpret_cast<CUdeviceptr>( state.d_params ),
+        sizeof( Params ),
+        &state.sbt,
+        state.params.numPrims, // launch width
+        1,                     // launch height
+        1                      // launch depth
+    ) );
+}
+
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
     // this map() thing basically returns the cudaMalloc-ed device pointer.
@@ -795,7 +827,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     //output_buffer.unmap();
     // TODO: quick hack; if the first traversal, will sync stream before sort
     //if (state.params.limit != 1) CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
-    CUDA_SYNC_CHECK();
+    //CUDA_SYNC_CHECK();
 }
 
 
@@ -1015,6 +1047,14 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.sortMode = atoi(argv[++i]);
       }
+      else if( arg == "--sortingGAS" || arg == "-sg" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.sortingGAS = std::stof(argv[++i]);
+          if (state.sortingGAS <= 0)
+              printUsageAndExit( argv[0] );
+      }
       else if( arg == "--presort" || arg == "-ps" )
       {
           if( i >= argc - 1 )
@@ -1058,7 +1098,7 @@ void uploadPreProcPoints( WhittedState& state ) {
   Timing::startTiming("upload Points");
     uploadPoints ( state );
   Timing::stopTiming(true);
-  
+
   if (state.preSort) {
     Timing::startTiming("presort Points");
       preSortPoints ( state );
@@ -1070,46 +1110,132 @@ void setupOptiX( WhittedState& state ) {
   Timing::startTiming("create Context");
     createContext  ( state );
   Timing::stopTiming(true);
-  
+
+  // creating GAS can be done async with the rest two.
   Timing::startTiming("create and upload Geometry");
-    createGeometry ( state );
-    //if (!sortMode)
-    //  createGeometry ( state );
-    //else
-    //  createSampledGeometry ( state, 2 );
+    if (!state.sortMode)
+      createGeometry ( state );
+    else
+      createSortingGeometry ( state, state.sortingGAS );
   Timing::stopTiming(true);
-  
+ 
   Timing::startTiming("create Pipeline");
     createPipeline ( state );
   Timing::stopTiming(true);
-  
+
   Timing::startTiming("create SBT");
     createSBT      ( state );
   Timing::stopTiming(true);
 }
 
 void nonsortedSearch( WhittedState& state, int32_t device_id ) {
-  Timing::startTiming("unsorted compute");
-    state.params.limit = state.params.knn;
-    sutil::CUDAOutputBuffer<unsigned int> output_buffer(
+  Timing::startTiming("total unsorted time");
+    Timing::startTiming("unsorted compute");
+      state.params.limit = state.params.knn;
+      sutil::CUDAOutputBuffer<unsigned int> output_buffer(
+              sutil::CUDAOutputBufferType::CUDA_DEVICE,
+              state.params.numPrims * state.params.limit,
+              1,
+              device_id
+              );
+
+      assert(state.h_queries == state.h_points);
+      assert(state.params.points == state.params.queries);
+      assert(state.params.d_r2q_map == nullptr);
+      launchSubframe( output_buffer, state );
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
+    Timing::stopTiming(true);
+
+    // cudaMallocHost is time consuming; must be hidden behind async launch
+    void* data;
+    cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
+
+    Timing::startTiming("result copy D2H");
+      CUDA_CHECK( cudaMemcpyAsync(
+                      static_cast<void*>( data ),
+                      output_buffer.getDevicePointer(),
+                      state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                      cudaMemcpyDeviceToHost,
+                      state.stream
+                      ) );
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
+    Timing::stopTiming(true);
+  Timing::stopTiming(true);
+
+  sanityCheck( state, data );
+  CUDA_CHECK( cudaFreeHost(data) ); // TODO: just so we can measure time
+}
+
+sutil::CUDAOutputBuffer<unsigned int>* searchTraversal(WhittedState& state, int32_t device_id) {
+  if ( state.sortingGAS != 1 ) {
+    Timing::startTiming("create search GAS");
+      createGeometry ( state );
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+    Timing::stopTiming(true);
+  }
+
+  Timing::startTiming("total sorted");
+    Timing::startTiming("sorted compute");
+      state.params.limit = state.params.knn;
+      sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
+          new sutil::CUDAOutputBuffer<unsigned int>(
+              sutil::CUDAOutputBufferType::CUDA_DEVICE,
+              state.params.numPrims * state.params.limit,
+              1,
+              device_id
+              );
+
+      assert(state.params.d_r2q_map == nullptr);
+      // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
+      if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
+
+      launchSubframe( *output_buffer, state );
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+    Timing::stopTiming(true);
+
+    void* data;
+    cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
+
+    Timing::startTiming("result copy D2H");
+      CUDA_CHECK( cudaMemcpyAsync(
+                      static_cast<void*>( data ),
+                      output_buffer->getDevicePointer(),
+                      state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                      cudaMemcpyDeviceToHost,
+                      state.stream
+                      ) );
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+    Timing::stopTiming(true);
+  Timing::stopTiming(true);
+
+  sanityCheck( state, data );
+  CUDA_CHECK( cudaFreeHost(data) ); // TODO: just so we can measure time
+
+  return output_buffer;
+}
+
+sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int32_t device_id) {
+
+  Timing::startTiming("initial traversal");
+    state.params.limit = 1;
+    sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
+        new sutil::CUDAOutputBuffer<unsigned int>(
             sutil::CUDAOutputBufferType::CUDA_DEVICE,
             state.params.numPrims * state.params.limit,
             1,
             device_id
             );
 
-    assert(state.h_queries == state.h_points);
+    assert(state.h_points == state.h_queries);
     assert(state.params.points == state.params.queries);
     assert(state.params.d_r2q_map == nullptr);
-    launchSubframe( output_buffer, state );
+
+    launchSubframe( *output_buffer, state );
+    // TODO: could delay this until sort, but initial traversal is lightweight anyways
+    CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
   Timing::stopTiming(true);
 
-  // TODO: this should be optimized. See cuNSearch
-  Timing::startTiming("result copy D2H");
-    void* data = output_buffer.getHostPointer();
-  Timing::stopTiming(true);
-
-  sanityCheck( state, data );
+  return output_buffer;
 }
 
 int main( int argc, char* argv[] )
@@ -1132,6 +1258,7 @@ int main( int argc, char* argv[] )
     std::cerr << "K: " << state.params.knn << std::endl;
     std::cerr << "sortMode: " << state.sortMode << std::endl;
     std::cerr << "preSort? " << std::boolalpha << state.preSort << std::endl;
+    std::cerr << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when sortMode != 0
     std::cerr << "Gather? " << std::boolalpha << state.toGather << std::endl;
     std::cerr << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
 
@@ -1154,22 +1281,9 @@ int main( int argc, char* argv[] )
           nonsortedSearch(state, device_id);
         } else {
           // Initial traversal (to sort the queries)
-          // Free of CUDAOutputBuffer is done in the destructor.
-          Timing::startTiming("initial traversal");
-            state.params.limit = 1;
-            sutil::CUDAOutputBuffer<unsigned int> output_buffer(
-                    sutil::CUDAOutputBufferType::CUDA_DEVICE,
-                    state.params.numPrims * state.params.limit,
-                    1,
-                    device_id
-                    );
-
-            assert(state.h_points == state.h_queries);
-            assert(state.params.points == state.params.queries);
-            assert(state.params.d_r2q_map == nullptr);
-            launchSubframe( output_buffer, state );
-            thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(output_buffer.getDevicePointer());
-          Timing::stopTiming(true);
+          sutil::CUDAOutputBuffer<unsigned int>* init_res_buffer = initialTraversal(state, device_id);
+          thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(init_res_buffer->getDevicePointer());
+          assert(init_res_buffer != nullptr && d_firsthit_idx_ptr != nullptr);
 
           // Sort the queries
           thrust::device_ptr<unsigned int> d_indices_ptr;
@@ -1181,6 +1295,7 @@ int main( int argc, char* argv[] )
             std::cerr << "Wrong sortMode" << std::endl;
             printUsageAndExit( argv[0] );
           }
+          delete init_res_buffer; // calls the CUDAOutputBuffer destructor.
 
           // Gather the queries
           // TODO: this doesn't appear to be useful. we need to transpose res buffer to improve global mem coalescing
@@ -1189,28 +1304,9 @@ int main( int argc, char* argv[] )
           }
 
           // Actual traversal with sorted queries
-          //createGeometry ( state );
-          Timing::startTiming("sorted compute");
-            state.params.limit = state.params.knn;
-            sutil::CUDAOutputBuffer<unsigned int> output_buffer_2(
-                    sutil::CUDAOutputBufferType::CUDA_DEVICE,
-                    state.params.numPrims * state.params.limit,
-                    1,
-                    device_id
-                    );
-
-            assert(state.params.d_r2q_map == nullptr);
-            // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
-            if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
-
-            launchSubframe( output_buffer_2, state );
-          Timing::stopTiming(true);
-
-          Timing::startTiming("result copy D2H");
-            void* data = output_buffer_2.getHostPointer();
-          Timing::stopTiming(true);
-
-          sanityCheck( state, data );
+          sutil::CUDAOutputBuffer<unsigned int>* res_buffer = searchTraversal(state, device_id);
+          assert(res_buffer != nullptr);
+          delete res_buffer; // calls the CUDAOutputBuffer destructor.
         }
 
         cleanupState( state );
