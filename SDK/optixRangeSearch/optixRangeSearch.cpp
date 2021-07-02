@@ -1020,13 +1020,14 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
   // Copy reordered queries to host for sanity check
   thrust::host_vector<float3> host_reord_queries(state.params.numPrims);
   thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, state.h_queries);
-  // need a deep copy since host_reord_queries is out of scope after exiting this block
-  //thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, host_reord_queries.begin());
-  //state.h_queries = new float3[state.params.numPrims];
-  //std::copy(host_reord_queries.begin(), host_reord_queries.end(), state.h_queries);
   assert(state.h_points != state.h_queries);
 
-  //state.h_points = state.h_queries; // if we want to create a new GAS using the sorted points, we could do this.
+  // if we want to create a new GAS using the sorted points, we have to do
+  // this. but this makes it necessarily to copy the reordered queries from
+  // device, and make it impossible to hide this new GAS rebuild latency ---
+  // unless the gain from reordering is much higher.
+  //state.h_points = state.h_queries;
+  //state.params.points = state.params.queries;
 
   bool debug = false;
   if (debug) {
@@ -1189,14 +1190,14 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
 }
 
 void searchTraversal(WhittedState& state, int32_t device_id) {
-  //if ( state.sortingGAS != 1 ) {
-    Timing::startTiming("create search GAS");
-      createGeometry ( state );
-      CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
-    Timing::stopTiming(true);
-  //}
-
   Timing::startTiming("total sorted");
+    if ( state.sortingGAS != 1 ) {
+      Timing::startTiming("create search GAS");
+        createGeometry ( state );
+        CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+      Timing::stopTiming(true);
+    }
+
     Timing::startTiming("sorted compute");
       state.params.limit = state.params.knn;
       sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
@@ -1212,7 +1213,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
 
       launchSubframe( *output_buffer, state );
-      CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
+      //CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
     Timing::stopTiming(true);
 
     void* data;
