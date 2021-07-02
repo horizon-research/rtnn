@@ -1019,8 +1019,9 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
 
   // Copy reordered queries to host for sanity check
   thrust::host_vector<float3> host_reord_queries(state.params.numPrims);
+  state.h_queries = new float3[state.params.numPrims]; // don't overwrite h_points
   thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, state.h_queries);
-  assert(state.h_points != state.h_queries);
+  if (state.h_points == state.h_queries) throw std::runtime_error("h_points == h_queries");;
 
   // if we want to create a new GAS using the sorted points, we have to do
   // this. but this makes it necessarily to copy the reordered queries from
@@ -1117,16 +1118,83 @@ void setupCUDA( WhittedState& state, int32_t device_id ) {
   CUDA_CHECK( cudaStreamCreate( &state.stream ) );
 }
 
+void gridSort(WhittedState& state) {
+  float3 cpuMin, cpuMax;
+  cpuMin = make_float3(std::numeric_limits<float>().max());
+  cpuMax = make_float3(std::numeric_limits<float>().min());
+  
+  float3 *points = state.h_points;
+  for (size_t i = 0; i < state.params.numPrims; i++)
+  {
+    cpuMin.x = std::min(cpuMin.x, points[i].x);
+    cpuMin.y = std::min(cpuMin.y, points[i].y);
+    cpuMin.z = std::min(cpuMin.z, points[i].z);
+    
+    cpuMax.x = std::max(cpuMax.x, points[i].x);
+    cpuMax.y = std::max(cpuMax.y, points[i].y);
+    cpuMax.z = std::max(cpuMax.z, points[i].z);
+  }
+
+  fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", cpuMin.x, cpuMin.y, cpuMin.z, cpuMax.x, cpuMax.y, cpuMax.z);
+
+  float cellSize = state.params.radius/2;
+  uint3 gridDim = make_uint3((cpuMax.x-cpuMin.x)/cellSize + 1, (cpuMax.y-cpuMin.y)/cellSize + 1, (cpuMax.z-cpuMin.z)/cellSize + 1);
+  unsigned int numOfCells = gridDim.x * gridDim.y * gridDim.z;
+  fprintf(stdout, "%u, %u, %u\n", gridDim.x, gridDim.y, gridDim.z);
+
+  thrust::host_vector<unsigned int> numOfPointsInEachCell(numOfCells);
+  thrust::fill(numOfPointsInEachCell.begin(), numOfPointsInEachCell.end(), 0);
+
+  for (size_t i = 0; i < state.params.numPrims; i++) {
+    int cell_x_idx = (points[i].x - cpuMin.x) / cellSize;
+    int cell_y_idx = (points[i].y - cpuMin.y) / cellSize;
+    int cell_z_idx = (points[i].z - cpuMin.z) / cellSize;
+
+    int cell_idx = (cell_x_idx * gridDim.y + cell_y_idx) * gridDim.z + cell_z_idx;
+    numOfPointsInEachCell[cell_idx]++;
+  }
+
+  thrust::host_vector<unsigned int> startIdxOfEachCell(numOfCells);
+  thrust::fill(startIdxOfEachCell.begin(), startIdxOfEachCell.end(), 0);
+  thrust::exclusive_scan(numOfPointsInEachCell.begin(), numOfPointsInEachCell.end(), startIdxOfEachCell.begin());
+
+  thrust::host_vector<unsigned int> curIdxInEachCell(numOfCells);
+  thrust::fill(curIdxInEachCell.begin(), curIdxInEachCell.end(), 0);
+
+  float3* h_reord_points = (float3*)malloc(state.params.numPrims* sizeof(float3));
+
+  for (size_t i = 0; i < state.params.numPrims; i++) {
+    int cell_x_idx = (points[i].x - cpuMin.x) / cellSize;
+    int cell_y_idx = (points[i].y - cpuMin.y) / cellSize;
+    int cell_z_idx = (points[i].z - cpuMin.z) / cellSize;
+
+    int cell_idx = (cell_x_idx * gridDim.y + cell_y_idx) * gridDim.z + cell_z_idx;
+
+    int writeIdx = startIdxOfEachCell[cell_idx] + curIdxInEachCell[cell_idx];
+    curIdxInEachCell[cell_idx]++;
+    h_reord_points[writeIdx] = state.h_points[i];
+  }
+
+  delete state.h_points;
+  state.h_points = h_reord_points;
+  state.h_queries = state.h_points;
+
+  //for (size_t i = 0; i < state.params.numPrims; i++) {
+  //  fprintf(stdout, "%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+  //}
+}
+
 void uploadPreProcPoints( WhittedState& state ) {
+  if (state.preSort) {
+    Timing::startTiming("presort Points");
+      //preSortPoints ( state );
+      gridSort(state);
+    Timing::stopTiming(true);
+  }
+
   Timing::startTiming("upload Points");
     uploadPoints ( state );
   Timing::stopTiming(true);
-
-  if (state.preSort) {
-    Timing::startTiming("presort Points");
-      preSortPoints ( state );
-    Timing::stopTiming(true);
-  }
 }
 
 void setupOptiX( WhittedState& state ) {
@@ -1213,13 +1281,13 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
 
       launchSubframe( *output_buffer, state );
-      //CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
     Timing::stopTiming(true);
 
-    void* data;
-    cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
-
     Timing::startTiming("result copy D2H");
+      void* data;
+      cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
+
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       output_buffer->getDevicePointer(),
