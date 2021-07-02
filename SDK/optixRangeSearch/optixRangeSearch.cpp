@@ -213,6 +213,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --radius | -r               Search radius\n";
     std::cerr << "         --knn | -k                  Max K returned\n";
     std::cerr << "         --sort | -s                 Sort mode\n";
+    std::cerr << "         --sortingGAS | -sg          Param for SortingGAS\n";
     std::cerr << "         --gather | -g               Whether to gather after sort \n";
     std::cerr << "         --help | -h                 Print this usage message\n";
     exit( 0 );
@@ -220,6 +221,9 @@ void printUsageAndExit( const char* argv0 )
 
 void preSortPoints ( WhittedState& state ) {
   // pre sort queries based on point coordinates (x/y/z)
+  // what we are really doing is to sort both points and queries, since they
+  // point to the same memory. but we know sorting points has little impact
+  // (doesn't hurt).
   unsigned int N = state.params.numPrims;
 
   // create 1d points as the sorting key and upload it to device memory
@@ -252,7 +256,7 @@ void uploadPoints ( WhittedState& state ) {
   // Optionally sort the points/queries
 
   CUDA_CHECK( cudaMalloc(
-      reinterpret_cast<void**>(&state.params.points ),
+      reinterpret_cast<void**>( &state.params.points ),
       state.params.numPrims * sizeof(float3) ) );
   
   CUDA_CHECK( cudaMemcpyAsync(
@@ -262,6 +266,23 @@ void uploadPoints ( WhittedState& state ) {
       cudaMemcpyHostToDevice,
       state.stream
   ) );
+
+  // below is what we need to do if queries and points are separate, or if we
+  // want to presort points not the queries.
+  //state.h_queries = (float3*)malloc(state.params.numPrims * sizeof(float3));
+  //std::copy(state.h_points, state.h_points + state.params.numPrims, state.h_queries);
+  //CUDA_CHECK( cudaMalloc(
+  //    reinterpret_cast<void**>( &state.params.queries),
+  //    state.params.numPrims * sizeof(float3) ) );
+  //
+  //CUDA_CHECK( cudaMemcpyAsync(
+  //    reinterpret_cast<void*>( state.params.queries ),
+  //    state.h_queries,
+  //    state.params.numPrims * sizeof(float3),
+  //    cudaMemcpyHostToDevice,
+  //    state.stream
+  //) );
+
   // by default, params.queries and params.points point to the same device
   // memory. later if we decide to reorder the queries, we will allocate new
   // space in device memory and point params.queries to that space. this is
@@ -792,8 +813,6 @@ void launch( unsigned int* result_buffer_data, WhittedState& state )
 
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
-    // this map() thing basically returns the cudaMalloc-ed device pointer.
-    //unsigned int* result_buffer_data = output_buffer.map();
     unsigned int* result_buffer_data = output_buffer.getDevicePointer();
     state.params.frame_buffer = result_buffer_data;
 
@@ -997,14 +1016,17 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
     state.params.queries = thrust::raw_pointer_cast(&d_reord_queries_ptr[0]);
     assert(state.params.points != state.params.queries);
   Timing::stopTiming(true);
-  
+
   // Copy reordered queries to host for sanity check
-  // need a deep copy since host_reord_queries is out of scope after exiting this block
   thrust::host_vector<float3> host_reord_queries(state.params.numPrims);
-  thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, host_reord_queries.begin());
-  state.h_queries = new float3[state.params.numPrims];
-  std::copy(host_reord_queries.begin(), host_reord_queries.end(), state.h_queries);
+  thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, state.h_queries);
+  // need a deep copy since host_reord_queries is out of scope after exiting this block
+  //thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, host_reord_queries.begin());
+  //state.h_queries = new float3[state.params.numPrims];
+  //std::copy(host_reord_queries.begin(), host_reord_queries.end(), state.h_queries);
   assert(state.h_points != state.h_queries);
+
+  //state.h_points = state.h_queries; // if we want to create a new GAS using the sorted points, we could do this.
 
   bool debug = false;
   if (debug) {
@@ -1166,13 +1188,13 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
   CUDA_CHECK( cudaFreeHost(data) ); // TODO: just so we can measure time
 }
 
-sutil::CUDAOutputBuffer<unsigned int>* searchTraversal(WhittedState& state, int32_t device_id) {
-  if ( state.sortingGAS != 1 ) {
+void searchTraversal(WhittedState& state, int32_t device_id) {
+  //if ( state.sortingGAS != 1 ) {
     Timing::startTiming("create search GAS");
       createGeometry ( state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
     Timing::stopTiming(true);
-  }
+  //}
 
   Timing::startTiming("total sorted");
     Timing::startTiming("sorted compute");
@@ -1190,7 +1212,7 @@ sutil::CUDAOutputBuffer<unsigned int>* searchTraversal(WhittedState& state, int3
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
 
       launchSubframe( *output_buffer, state );
-      CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+      CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
     Timing::stopTiming(true);
 
     void* data;
@@ -1211,7 +1233,7 @@ sutil::CUDAOutputBuffer<unsigned int>* searchTraversal(WhittedState& state, int3
   sanityCheck( state, data );
   CUDA_CHECK( cudaFreeHost(data) ); // TODO: just so we can measure time
 
-  return output_buffer;
+  delete output_buffer; // calls the CUDAOutputBuffer destructor.
 }
 
 sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int32_t device_id) {
@@ -1250,6 +1272,7 @@ int main( int argc, char* argv[] )
     state.h_points = read_pc_data(state.outfile.c_str(), &state.params.numPrims, state.isShuffle);
     if (state.params.numPrims == 0)
       printUsageAndExit( argv[0] );
+
     // will be updated if queries are later sorted. this is primarily used for sanity check
     state.h_queries = state.h_points;
 
@@ -1304,9 +1327,7 @@ int main( int argc, char* argv[] )
           }
 
           // Actual traversal with sorted queries
-          sutil::CUDAOutputBuffer<unsigned int>* res_buffer = searchTraversal(state, device_id);
-          assert(res_buffer != nullptr);
-          delete res_buffer; // calls the CUDAOutputBuffer destructor.
+          searchTraversal(state, device_id);
         }
 
         cleanupState( state );
