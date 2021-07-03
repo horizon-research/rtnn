@@ -1237,7 +1237,7 @@ void gridSort(WhittedState& state, bool morton) {
                        thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
                        thrust::raw_pointer_cast(d_CellOffsets_ptr),
                        thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
-                       thrust::raw_pointer_cast(d_SortIndices_ptr),
+                       thrust::raw_pointer_cast(d_SortIndices_ptr), // TODO: remove this in e2e perf measurement
                        thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                        );
 
@@ -1248,6 +1248,13 @@ void gridSort(WhittedState& state, bool morton) {
   thrust::device_ptr<float3> d_points_ptr = thrust::device_pointer_cast(state.params.points);
   thrust::copy(d_points_ptr, d_points_ptr + state.params.numPrims, state.h_points);
   state.h_queries = state.h_points;
+
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellOffsets_ptr) ) );
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr) ) );
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_SortIndices_ptr) ) );
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr) ) );
 
   debug = false;
   if (debug) {
