@@ -124,7 +124,8 @@ struct WhittedState
 
     std::string                 outfile;
     unsigned int                sortMode                  = 1;
-    bool                        preSort                   = false;
+    int                         preSortMode               = 1; // morton order
+    float                       crRatio                   = 8; // celSize = radius / crRatio
     float                       sortingGAS                = 1;
     bool                        toGather                  = false;
     bool                        isShuffle                 = false;
@@ -156,12 +157,12 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, 
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, float, int3*, int3*);
-void kInsertParticles_Morton(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*);
+void kInsertParticles_Morton(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void computeMinMax(WhittedState&);
-void computeCellInformation(WhittedState&);
+void gridSort(WhittedState&, bool);
 
 float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   std::ifstream file;
@@ -234,11 +235,10 @@ void printUsageAndExit( const char* argv0 )
     exit( 0 );
 }
 
-void preSortPoints ( WhittedState& state ) {
+void oneDSort ( WhittedState& state ) {
   // pre sort queries based on point coordinates (x/y/z)
   // what we are really doing is to sort both points and queries, since they
-  // point to the same memory. but we know sorting points has little impact
-  // (doesn't hurt).
+  // point to the same memory.
   unsigned int N = state.params.numPrims;
 
   // create 1d points as the sorting key and upload it to device memory
@@ -247,7 +247,6 @@ void preSortPoints ( WhittedState& state ) {
     h_key[i] = state.h_points[i].x;
   }
 
-  // TODO: need to CUDAFree this
   float* d_key = nullptr;
   CUDA_CHECK( cudaMalloc(
       reinterpret_cast<void**>(&d_key),
@@ -258,8 +257,10 @@ void preSortPoints ( WhittedState& state ) {
   // actual sort
   thrust::device_ptr<float3> d_points_ptr = thrust::device_pointer_cast(state.params.points);
   sortByKey( d_key_ptr, d_points_ptr, N );
+  CUDA_CHECK( cudaFree( (void*)d_key ) );
 
-  // copy the sorted points to host (for sanity check)
+  // TODO: lift it outside of this function and combine with other sorts?
+  // copy the sorted points to host so that we build the GAS in the same order
   // note that the h_queries at this point still point to what h_points points to
   //fprintf(stdout, "%f, %f, %f\n", state.h_points[1024].x, state.h_points[1024].y, state.h_points[1024].z);
   thrust::copy(d_points_ptr, d_points_ptr + N, state.h_points);
@@ -793,39 +794,6 @@ void createContext( WhittedState& state )
 //
 //
 
-void launch( unsigned int* result_buffer_data, WhittedState& state )
-{
-    state.params.frame_buffer = result_buffer_data;
-
-    // need to manually set the cuda-malloced device memory. note the semantics
-    // of cudamemset: it sets #count number of BYTES to value; literally think
-    // about what each byte has to be.
-    CUDA_CHECK( cudaMemsetAsync ( result_buffer_data, 0xFF,
-                                  state.params.numPrims * state.params.limit * sizeof(unsigned int),
-                                  state.stream ) );
-
-    state.params.handle = state.gas_handle;
-
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
-    CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
-                                 &state.params,
-                                 sizeof( Params ),
-                                 cudaMemcpyHostToDevice,
-                                 state.stream
-    ) );
-
-    OPTIX_CHECK( optixLaunch(
-        state.pipeline,
-        state.stream,
-        reinterpret_cast<CUdeviceptr>( state.d_params ),
-        sizeof( Params ),
-        &state.sbt,
-        state.params.numPrims, // launch width
-        1,                     // launch height
-        1                      // launch depth
-    ) );
-}
-
 void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
 {
     unsigned int* result_buffer_data = output_buffer.getDevicePointer();
@@ -1098,7 +1066,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.preSort = (bool)(atoi(argv[++i]));
+          state.preSortMode = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--gather" || arg == "-g" )
       {
@@ -1177,7 +1145,7 @@ thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
   return d_memory_ptr;
 }
 
-void computeCellInformation(WhittedState& state) {
+void gridSort(WhittedState& state, bool morton) {
   float3 sceneMin = state.Min;
   float3 sceneMax = state.Max;
 
@@ -1186,7 +1154,7 @@ void computeCellInformation(WhittedState& state) {
   gridInfo.SquaredSearchRadius = state.params.radius * state.params.radius;
   gridInfo.GridMin = sceneMin;
 
-  float cellSize = state.params.radius/8;
+  float cellSize = state.params.radius/state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceil(gridSize.x / cellSize));
   gridInfo.GridDimension.y = static_cast<unsigned int>(ceil(gridSize.y / cellSize));
@@ -1198,7 +1166,9 @@ void computeCellInformation(WhittedState& state) {
   gridInfo.GridDimension.z += 4;
   gridInfo.GridMin -= make_float3(cellSize, cellSize, cellSize) * (float)2;
 
-  //One meta grid cell contains 8x8x8 grild cells. (512)
+  //One meta grid cell contains 8x8x8 grild cells (512) if
+  //CUDA_META_GRID_GROUP_SIZE is 8. We use metagrids for calculating morton
+  //curve. the morton curve is calculated for each metagrid.
   gridInfo.MetaGridDimension.x = static_cast<unsigned int>(ceil(gridInfo.GridDimension.x / (float)CUDA_META_GRID_GROUP_SIZE));
   gridInfo.MetaGridDimension.y = static_cast<unsigned int>(ceil(gridInfo.GridDimension.y / (float)CUDA_META_GRID_GROUP_SIZE));
   gridInfo.MetaGridDimension.z = static_cast<unsigned int>(ceil(gridInfo.GridDimension.z / (float)CUDA_META_GRID_GROUP_SIZE));
@@ -1231,7 +1201,8 @@ void computeCellInformation(WhittedState& state) {
                           state.params.points,
                           thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
                           thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
-                          thrust::raw_pointer_cast(d_LocalSortedIndices_ptr)
+                          thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
+                          morton
                           );
 
   bool debug = false;
@@ -1259,31 +1230,50 @@ void computeCellInformation(WhittedState& state) {
                        thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                        );
 
+  // or we can use d_SortIndices_ptr to gather, but that would require allocating new memory since we can't do in-place gather
   sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.points), state.params.numPrims);
 
-  CUDA_CHECK( cudaMemcpy(
-                  static_cast<void*>( state.h_points ),
-                  state.params.points,
-                  state.params.numPrims * sizeof(float3),
-                  cudaMemcpyDeviceToHost
-                  ) );
+  // TODO: do this in a stream
+  thrust::device_ptr<float3> d_points_ptr = thrust::device_pointer_cast(state.params.points);
+  thrust::copy(d_points_ptr, d_points_ptr + state.params.numPrims, state.h_points);
+  //CUDA_CHECK( cudaMemcpyAsync(
+  //                static_cast<void*>( state.h_points ),
+  //                state.params.points,
+  //                state.params.numPrims * sizeof(float3),
+  //                cudaMemcpyDeviceToHost,
+  //                state.stream
+  //                ) );
   state.h_queries = state.h_points;
 
-  // Debug
-  //thrust::host_vector<uint> temp(state.params.numPrims);
-  //thrust::copy(d_SortIndices_ptr, d_SortIndices_ptr + state.params.numPrims, temp.begin());
-  //for (unsigned int i = 0; i < state.params.numPrims; i++) {
-  //  fprintf(stdout, "%u (%f, %f, %f)\n", temp[i], state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
-  //}
+  debug = false;
+  if (debug) {
+    thrust::host_vector<uint> temp(state.params.numPrims);
+    thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + state.params.numPrims, temp.begin());
+    for (unsigned int i = 0; i < state.params.numPrims; i++) {
+      fprintf(stdout, "%u (%f, %f, %f)\n", temp[i], state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+    }
+  }
 }
 
-void zSortGPU(WhittedState& state) {
-  computeMinMax(state);
-  computeCellInformation(state);
+void preSortGPU(WhittedState& state) {
+  int preSortMode = state.preSortMode;
+  if (preSortMode == 3) {
+    oneDSort(state);
+  } else {
+    computeMinMax(state);
+
+    bool morton; // false for raster order
+    if (preSortMode == 1) morton = true;
+    else {
+      assert(preSortMode == 2);
+      morton = false;
+    }
+    gridSort(state, morton);
+  }
 }
 
-void rasterSortCPU(WhittedState& state) {
-  // TODO: change this to a CUDA implementation
+void preSortCPU(WhittedState& state) {
+  // This is only raster sort.
   float3 cpuMin, cpuMax;
   cpuMin = make_float3(std::numeric_limits<float>().max());
   cpuMax = make_float3(std::numeric_limits<float>().min());
@@ -1302,10 +1292,11 @@ void rasterSortCPU(WhittedState& state) {
 
   //fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", cpuMin.x, cpuMin.y, cpuMin.z, cpuMax.x, cpuMax.y, cpuMax.z);
 
-  float cellSize = state.params.radius;
+  float cellSize = state.params.radius/state.crRatio;
   uint3 gridDim = make_uint3((cpuMax.x-cpuMin.x)/cellSize + 1, (cpuMax.y-cpuMin.y)/cellSize + 1, (cpuMax.z-cpuMin.z)/cellSize + 1);
   unsigned int numOfCells = gridDim.x * gridDim.y * gridDim.z;
   fprintf(stdout, "Grid dimension: %u, %u, %u\n", gridDim.x, gridDim.y, gridDim.z);
+  fprintf(stdout, "Number of cells: %u\n", numOfCells);
   fprintf(stdout, "Cell size: %f\n", cellSize);
 
   thrust::host_vector<unsigned int> numOfPointsInEachCell(numOfCells);
@@ -1318,7 +1309,6 @@ void rasterSortCPU(WhittedState& state) {
 
     int cell_idx = (cell_x_idx * gridDim.y + cell_y_idx) * gridDim.z + cell_z_idx;
     numOfPointsInEachCell[cell_idx]++;
-    //fprintf(stdout, "%ul, %d\n", i, cell_idx);
   }
 
   thrust::host_vector<unsigned int> startIdxOfEachCell(numOfCells);
@@ -1354,8 +1344,11 @@ void rasterSortCPU(WhittedState& state) {
       state.stream
   ) );
 
-  for (size_t i = 0; i < state.params.numPrims; i++) {
-    fprintf(stdout, "%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+  bool debug = false;
+  if (debug) {
+    for (size_t i = 0; i < state.params.numPrims; i++) {
+      fprintf(stdout, "%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+    }
   }
 }
 
@@ -1364,14 +1357,12 @@ void uploadPreProcPoints( WhittedState& state ) {
     uploadPoints ( state );
   Timing::stopTiming(true);
 
-  if (state.preSort) {
+  if (state.preSortMode) {
     Timing::startTiming("presort Points");
-      //preSortPoints ( state );
-      //rasterSortCPU(state);
-      zSortGPU(state);
+      //preSortCPU(state);
+      preSortGPU(state);
     Timing::stopTiming(true);
   }
-  //exit(1);
 }
 
 void setupOptiX( WhittedState& state ) {
@@ -1415,10 +1406,10 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
     Timing::stopTiming(true);
 
     // cudaMallocHost is time consuming; must be hidden behind async launch
-    void* data;
-    cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
-
     Timing::startTiming("result copy D2H");
+      void* data;
+      cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
+
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       output_buffer.getDevicePointer(),
@@ -1522,14 +1513,17 @@ int main( int argc, char* argv[] )
     // will be updated if queries are later sorted. this is primarily used for sanity check
     state.h_queries = state.h_points;
 
+    std::cerr << "========================================" << std::endl;
     std::cerr << "numPrims: " << state.params.numPrims << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
     std::cerr << "K: " << state.params.knn << std::endl;
     std::cerr << "sortMode: " << state.sortMode << std::endl;
-    std::cerr << "preSort? " << std::boolalpha << state.preSort << std::endl;
+    std::cerr << "preSort? " << std::boolalpha << state.preSortMode << std::endl;
+    std::cerr << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2
     std::cerr << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when sortMode != 0
     std::cerr << "Gather? " << std::boolalpha << state.toGather << std::endl;
-    std::cerr << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
+    //std::cerr << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
+    std::cerr << "========================================" << std::endl << std::endl;
 
     try
     {
