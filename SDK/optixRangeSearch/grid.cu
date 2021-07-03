@@ -81,6 +81,8 @@ __global__ void kInsertParticles_Morton(
 
   // this stores the within-cell sorted indices of particles
   localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
+
+  //printf("%u, %u, (%d, %d, %d)\n", particleIndex, cellIndex, gridCell.x, gridCell.y, gridCell.z);
 }
 
 __global__ void kCountingSortIndices(
@@ -88,7 +90,8 @@ __global__ void kCountingSortIndices(
   const uint *particleCellIndices,
   const uint *cellOffsets,
   const uint *localSortedIndices,
-  uint *sortIndicesDest
+  uint *sortIndicesDest,
+  uint *posInSortedPoints
 )
 {
   uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -97,7 +100,10 @@ __global__ void kCountingSortIndices(
   uint gridCellIndex = particleCellIndices[particleIndex];
 
   uint sortIndex = localSortedIndices[particleIndex] + cellOffsets[gridCellIndex];
-  sortIndicesDest[sortIndex] = particleIndex;
+  sortIndicesDest[sortIndex] = particleIndex; // use this if we gather later
+  posInSortedPoints[particleIndex] = sortIndex; // use this if we sort by key later
+
+  //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
 }
 
 
@@ -165,14 +171,16 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       unsigned int* d_ParticleCellIndices,
       unsigned int* d_CellOffsets,
       unsigned int* d_TempSortIndices,
-      unsigned int* d_SortIndices
+      unsigned int* d_SortIndices,
+      unsigned int* d_posInSortedPoints
       ) {
   kCountingSortIndices <<<numOfBlocks, threadsPerBlock>>> (
       gridInfo,
       d_ParticleCellIndices,
       d_CellOffsets,
       d_TempSortIndices,
-      d_SortIndices
+      d_SortIndices,
+      d_posInSortedPoints
       );
 }
 
