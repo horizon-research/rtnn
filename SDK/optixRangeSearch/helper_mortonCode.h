@@ -1,6 +1,5 @@
 #pragma once
 #include <cuda_runtime.h>
-//#include "Types.h"
 
 //https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
 // "Insert" a 0 bit after each of the 16 low bits of x

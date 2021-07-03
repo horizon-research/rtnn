@@ -1,9 +1,7 @@
-#include <thrust/sort.h>
 #include <thrust/device_vector.h>
+#include <thrust/sort.h>
 #include <thrust/sequence.h>
 #include <thrust/gather.h>
-
-#include <iostream>
 
 // this can't be in the main cpp file since the file containing cuda kernels to
 // be compiled by nvcc needs to have .cu extensions. See here:
@@ -57,12 +55,35 @@ void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_pt
   thrust::gather(d_key_ptr, d_key_ptr + N, d_orig_val_ptr, d_new_val_ptr);
 }
 
+thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
+  unsigned int* d_memory;
+  cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(unsigned int) );
+  thrust::device_ptr<unsigned int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
-  unsigned int* d_init_val;
-  cudaMalloc(reinterpret_cast<void**>(&d_init_val),
-             numPrims * sizeof(unsigned int) );
-  thrust::device_ptr<unsigned int> d_init_val_ptr = thrust::device_pointer_cast(d_init_val);
+  //unsigned int* d_init_val;
+  //cudaMalloc(reinterpret_cast<void**>(&d_init_val),
+  //           numPrims * sizeof(unsigned int) );
+  //thrust::device_ptr<unsigned int> d_init_val_ptr = thrust::device_pointer_cast(d_init_val);
+
+  thrust::device_ptr<unsigned int> d_init_val_ptr = getThrustDevicePtr(numPrims);
   thrust::sequence(d_init_val_ptr, d_init_val_ptr + numPrims);
 
   return d_init_val_ptr;
 }
+
+void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr) {
+  thrust::exclusive_scan(
+    d_src_ptr,
+    d_src_ptr + N,
+    d_dest_ptr);
+}
+
+void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int value) {
+  thrust::fill(d_src_ptr, d_src_ptr + N, value);
+}
+
