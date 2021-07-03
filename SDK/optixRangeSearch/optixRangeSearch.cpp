@@ -62,6 +62,8 @@
 #include <cstdlib>
 #include <cassert>
 
+#undef NDEBUG // TODO: revisit this
+
 #include "optixRangeSearch.h"
 
 
@@ -127,6 +129,9 @@ struct WhittedState
     bool                        toGather                  = false;
     bool                        isShuffle                 = false;
 
+    float3                      Min;
+    float3                      Max;
+
     OptixShaderBindingTable     sbt                       = {};
 };
 
@@ -143,11 +148,20 @@ void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_vector<unsigned
 void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int );
 void sortByKey( thrust::device_vector<float>*, thrust::device_ptr<float3> );
 void sortByKey( thrust::device_ptr<float>, thrust::device_ptr<float3>, unsigned int );
+void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, unsigned int );
 void gatherByKey ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3> );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, thrust::device_ptr<float3>, unsigned int );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float>*, thrust::device_ptr<float>, unsigned int );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
+
+void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, float, int3*, int3*);
+void kInsertParticles_Morton(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*);
+void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
+void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
+void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
+void computeMinMax(WhittedState&);
+void computeCellInformation(WhittedState&);
 
 float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   std::ifstream file;
@@ -945,7 +959,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
   Timing::stopTiming(true);
   
   // if debug, copy the sorted keys and values back to host
-  bool debug = false;
+  bool debug = true;
   if (debug) {
     thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
     thrust::copy(d_r2q_map_ptr, d_r2q_map_ptr+state.params.numPrims, h_vec_val.begin());
@@ -1119,7 +1133,166 @@ void setupCUDA( WhittedState& state, int32_t device_id ) {
   CUDA_CHECK( cudaStreamCreate( &state.stream ) );
 }
 
-void gridSort(WhittedState& state) {
+void computeMinMax(WhittedState& state)
+{
+  thrust::host_vector<int3> h_MinMax(2);
+  h_MinMax[0] = make_int3(std::numeric_limits<int>().max(), std::numeric_limits<int>().max(), std::numeric_limits<int>().max());
+  h_MinMax[1] = make_int3(std::numeric_limits<int>().min(), std::numeric_limits<int>().min(), std::numeric_limits<int>().min());
+
+  thrust::device_vector<int3> d_MinMax = h_MinMax;
+
+  unsigned int threadsPerBlock = 64;
+  unsigned int numOfBlocks = state.params.numPrims / threadsPerBlock + 1;
+  kComputeMinMax(numOfBlocks,
+                 threadsPerBlock,
+                 state.params.points,
+                 state.params.numPrims,
+                 state.params.radius,
+                 thrust::raw_pointer_cast(&d_MinMax[0]),
+                 thrust::raw_pointer_cast(&d_MinMax[1])
+                 );
+
+  h_MinMax = d_MinMax;
+
+  int3 minCell = h_MinMax[0];
+  int3 maxCell = h_MinMax[1];
+ 
+  state.Min.x = minCell.x * state.params.radius;
+  state.Min.y = minCell.y * state.params.radius;
+  state.Min.z = minCell.z * state.params.radius;
+ 
+  state.Max.x = maxCell.x * state.params.radius;
+  state.Max.y = maxCell.y * state.params.radius;
+  state.Max.z = maxCell.z * state.params.radius;
+
+  //fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
+}
+
+thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
+  unsigned int* d_memory;
+  cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(unsigned int) );
+  thrust::device_ptr<unsigned int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
+void computeCellInformation(WhittedState& state) {
+  float3 sceneMin = state.Min;
+  float3 sceneMax = state.Max;
+
+  GridInfo gridInfo;
+  gridInfo.ParticleCount = static_cast<uint>(state.params.numPrims);
+  gridInfo.SquaredSearchRadius = state.params.radius * state.params.radius;
+  gridInfo.GridMin = sceneMin;
+
+  float cellSize = state.params.radius/8;
+  float3 gridSize = sceneMax - sceneMin;
+  gridInfo.GridDimension.x = static_cast<unsigned int>(ceil(gridSize.x / cellSize));
+  gridInfo.GridDimension.y = static_cast<unsigned int>(ceil(gridSize.y / cellSize));
+  gridInfo.GridDimension.z = static_cast<unsigned int>(ceil(gridSize.z / cellSize));
+
+  //Increase grid by 2 cells in each direciton (+4 in each dimension) to skip bounds checks in the kernel
+  gridInfo.GridDimension.x += 4;
+  gridInfo.GridDimension.y += 4;
+  gridInfo.GridDimension.z += 4;
+  gridInfo.GridMin -= make_float3(cellSize, cellSize, cellSize) * (float)2;
+
+  //One meta grid cell contains 8x8x8 grild cells. (512)
+  gridInfo.MetaGridDimension.x = static_cast<unsigned int>(ceil(gridInfo.GridDimension.x / (float)CUDA_META_GRID_GROUP_SIZE));
+  gridInfo.MetaGridDimension.y = static_cast<unsigned int>(ceil(gridInfo.GridDimension.y / (float)CUDA_META_GRID_GROUP_SIZE));
+  gridInfo.MetaGridDimension.z = static_cast<unsigned int>(ceil(gridInfo.GridDimension.z / (float)CUDA_META_GRID_GROUP_SIZE));
+
+  // Adjust grid size to multiple of cell size
+  gridSize.x = gridInfo.GridDimension.x * cellSize;
+  gridSize.y = gridInfo.GridDimension.y * cellSize;
+  gridSize.z = gridInfo.GridDimension.z * cellSize;
+
+  gridInfo.GridDelta.x = gridInfo.GridDimension.x / gridSize.x;
+  gridInfo.GridDelta.y = gridInfo.GridDimension.y / gridSize.y;
+  gridInfo.GridDelta.z = gridInfo.GridDimension.z / gridSize.z;
+
+  uint numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * CUDA_META_GRID_BLOCK_SIZE;
+  fprintf(stdout, "Grid dimension: %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
+  fprintf(stdout, "Number of cells: %u\n", numberOfCells);
+  fprintf(stdout, "Cell size: %f\n", cellSize);
+  fprintf(stdout, "Grid delta: %f, %f, %f\n", gridInfo.GridDelta.x, gridInfo.GridDelta.y, gridInfo.GridDelta.z);
+ 
+  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(state.params.numPrims);
+  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells);
+  fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
+  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr = getThrustDevicePtr(state.params.numPrims);
+
+  unsigned int threadsPerBlock = 64;
+  unsigned int numOfBlocks = state.params.numPrims / threadsPerBlock + 1;
+  kInsertParticles_Morton(numOfBlocks,
+                          threadsPerBlock,
+                          gridInfo,
+                          state.params.points,
+                          thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
+                          thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
+                          thrust::raw_pointer_cast(d_LocalSortedIndices_ptr)
+                          );
+
+  bool debug = false;
+  if (debug) {
+    thrust::host_vector<unsigned int> temp(numberOfCells);
+    thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, temp.begin());
+    for (unsigned int i = 0; i < numberOfCells; i++) {
+      fprintf(stdout, "%u\n", temp[i]);
+    }
+  }
+
+  thrust::device_ptr<unsigned int> d_CellOffsets_ptr = getThrustDevicePtr(numberOfCells);
+  fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
+  exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
+
+  thrust::device_ptr<unsigned int> d_SortIndices_ptr = getThrustDevicePtr(state.params.numPrims);
+  kCountingSortIndices(numOfBlocks,
+                       threadsPerBlock,
+                       gridInfo,
+                       thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
+                       thrust::raw_pointer_cast(d_CellOffsets_ptr),
+                       thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
+                       thrust::raw_pointer_cast(d_SortIndices_ptr)
+                       );
+
+  //kCountingSortIndices <<<numOfBlocks, threadsPerBlock>>> (
+  //    gridInfo,
+  //    thrust::raw_pointer_cast(&d_ParticleCellIndices[0]),
+  //    thrust::raw_pointer_cast(&d_CellOffsets[0]),
+  //    thrust::raw_pointer_cast(&d_TempSortIndices[0]),
+  //    thrust::raw_pointer_cast(&d_SortIndices[0])
+  //    );
+
+  //thrust::device_ptr<unsigned int> d_ReversedSortIndices_ptr = d_SortIndices_ptr;
+  //CudaHelper::DeviceSynchronize();
+
+  //sortByKey(d_ReversedSortIndices_ptr, thrust::device_pointer_cast(state.params.points), state.params.numPrims);
+  sortByKey(d_SortIndices_ptr, thrust::device_pointer_cast(state.params.points), state.params.numPrims);
+
+  CUDA_CHECK( cudaMemcpy(
+                  static_cast<void*>( state.h_points ),
+                  state.params.points,
+                  state.params.numPrims * sizeof(float3),
+                  cudaMemcpyDeviceToHost
+                  ) );
+  state.h_queries = state.h_points;
+
+  // Debug
+  //thrust::host_vector<uint> temp_d_SortIndices(state.params.numPrims);
+  //thrust::copy(d_SortIndices_ptr, d_SortIndices_ptr + state.params.numPrims, temp_d_SortIndices.begin());
+  //for (unsigned int i = 0; i < state.params.numPrims; i++) {
+  //  fprintf(stdout, "%u (%f, %f, %f)\n", temp_d_SortIndices[i], state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+  //}
+}
+
+void zSortGPU(WhittedState& state) {
+  computeMinMax(state);
+  computeCellInformation(state);
+}
+
+void rasterSortCPU(WhittedState& state) {
   // TODO: change this to a CUDA implementation
   float3 cpuMin, cpuMax;
   cpuMin = make_float3(std::numeric_limits<float>().max());
@@ -1137,12 +1310,13 @@ void gridSort(WhittedState& state) {
     cpuMax.z = std::max(cpuMax.z, points[i].z);
   }
 
-  fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", cpuMin.x, cpuMin.y, cpuMin.z, cpuMax.x, cpuMax.y, cpuMax.z);
+  //fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", cpuMin.x, cpuMin.y, cpuMin.z, cpuMax.x, cpuMax.y, cpuMax.z);
 
   float cellSize = state.params.radius/8;
   uint3 gridDim = make_uint3((cpuMax.x-cpuMin.x)/cellSize + 1, (cpuMax.y-cpuMin.y)/cellSize + 1, (cpuMax.z-cpuMin.z)/cellSize + 1);
   unsigned int numOfCells = gridDim.x * gridDim.y * gridDim.z;
-  fprintf(stdout, "%u, %u, %u\n", gridDim.x, gridDim.y, gridDim.z);
+  fprintf(stdout, "Grid dimension: %u, %u, %u\n", gridDim.x, gridDim.y, gridDim.z);
+  fprintf(stdout, "Cell size: %f\n", cellSize);
 
   thrust::host_vector<unsigned int> numOfPointsInEachCell(numOfCells);
   thrust::fill(numOfPointsInEachCell.begin(), numOfPointsInEachCell.end(), 0);
@@ -1202,9 +1376,11 @@ void uploadPreProcPoints( WhittedState& state ) {
   if (state.preSort) {
     Timing::startTiming("presort Points");
       //preSortPoints ( state );
-      gridSort(state);
+      //rasterSortCPU(state);
+      zSortGPU(state);
     Timing::stopTiming(true);
   }
+  //exit(1);
 }
 
 void setupOptiX( WhittedState& state ) {

@@ -26,9 +26,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/sort.cu
-  PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ
-  )
+# These CUDA files need to be compiled as OBJ, not as PTX
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/sort.cu PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/grid.cu PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
 
 OPTIX_add_sample_executable( optixRangeSearch target_name
   ${SAMPLES_CUDA_DIR}/helpers.h
@@ -37,6 +37,11 @@ OPTIX_add_sample_executable( optixRangeSearch target_name
   camera.cu
   geometry.cu
   sort.cu
+  grid.cu
+  #Common.h
+  #Types.h
+  helper_linearIndex.h
+  helper_mortonCode.h
   #OPTIONS -rdc true
   )
 

@@ -37,6 +37,10 @@ void sortByKey( thrust::device_ptr<float> d_key_ptr, thrust::device_ptr<float3> 
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
+void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<float3> d_val_ptr, unsigned int N ) {
+  thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
+}
+
 void gatherByKey ( thrust::device_vector<unsigned int>* d_vec_val, thrust::device_ptr<float3> d_orig_val_ptr, thrust::device_ptr<float3> d_new_val_ptr ) {
   thrust::gather(d_vec_val->begin(), d_vec_val->end(), d_orig_val_ptr, d_new_val_ptr);
 }

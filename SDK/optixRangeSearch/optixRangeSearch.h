@@ -30,6 +30,19 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
+#define CUDA_META_GRID_GROUP_SIZE 1
+#define CUDA_META_GRID_BLOCK_SIZE (CUDA_META_GRID_GROUP_SIZE*CUDA_META_GRID_GROUP_SIZE*CUDA_META_GRID_GROUP_SIZE)
+
+struct GridInfo
+{
+  float3 GridMin;
+  unsigned int ParticleCount;
+  float3 GridDelta;
+  uint3 GridDimension;
+  uint3 MetaGridDimension;
+  float SquaredSearchRadius;
+};
+
 enum RayType
 {
     RAY_TYPE_RADIANCE  = 0,
@@ -194,3 +207,4 @@ struct OcclusionPRD
 {
     float3 attenuation;
 };
+
