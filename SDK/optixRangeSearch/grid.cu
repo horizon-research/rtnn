@@ -2,34 +2,35 @@
 #include "helper_linearIndex.h"
 #include "optixRangeSearch.h"
 
-#include <thrust/sort.h>
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
+#include <stdio.h>
 
 /* GPU code */
 inline __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridInfo, int3 gridCell)
 {
   int3 metaGridCell = make_int3(
-    gridCell.x / CUDA_META_GRID_GROUP_SIZE,
-    gridCell.y / CUDA_META_GRID_GROUP_SIZE,
-    gridCell.z / CUDA_META_GRID_GROUP_SIZE);
+    gridCell.x / GridInfo.meta_grid_dim,
+    gridCell.y / GridInfo.meta_grid_dim,
+    gridCell.z / GridInfo.meta_grid_dim);
 
-  gridCell.x %= CUDA_META_GRID_GROUP_SIZE;
-  gridCell.y %= CUDA_META_GRID_GROUP_SIZE;
-  gridCell.z %= CUDA_META_GRID_GROUP_SIZE;
+  gridCell.x %= GridInfo.meta_grid_dim;
+  gridCell.y %= GridInfo.meta_grid_dim;
+  gridCell.z %= GridInfo.meta_grid_dim;
   uint metaGridIndex = CellIndicesToLinearIndex(GridInfo.MetaGridDimension, metaGridCell);
-  return metaGridIndex * CUDA_META_GRID_BLOCK_SIZE + MortonCode3(gridCell.x, gridCell.y, gridCell.z);
+
+  //printf("(%d, %d, %d), (%d, %d, %d), %u, %u, %u\n", metaGridCell.x, metaGridCell.y, metaGridCell.z, gridCell.x, gridCell.y, gridCell.z, metaGridIndex, metaGridIndex * GridInfo.meta_grid_size, MortonCode3(gridCell.x, gridCell.y, gridCell.z));
+
+  return metaGridIndex * GridInfo.meta_grid_size + MortonCode3(gridCell.x, gridCell.y, gridCell.z);
 }
 
 __global__ void kComputeMinMax(
   const float3 *particles,
-  uint particleCount,
+  unsigned int particleCount,
   float searchRadius,
   int3 *minCell,
   int3 *maxCell
 )
 {
-  uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (particleIndex >= particleCount) return;
   const float3 particle = particles[particleIndex];
 
@@ -84,6 +85,7 @@ __global__ void kInsertParticles_Morton(
 
   float3 gridCellF = (particles[particleIndex] - GridInfo.GridMin) * GridInfo.GridDelta;
   int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
+
   unsigned int cellIndex = ToCellIndex_MortonMetaGrid(GridInfo, gridCell);
   particleCellIndices[particleIndex] = cellIndex;
 
@@ -165,13 +167,3 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       );
 }
 
-void exclusiveScan(thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_CellOffsets_ptr) {
-  thrust::exclusive_scan(
-    d_CellParticleCounts_ptr,
-    d_CellParticleCounts_ptr + N,
-    d_CellOffsets_ptr);
-}
-
-void fillByValue(thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr, unsigned int N, int value) {
-  thrust::fill(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + N, value);
-}

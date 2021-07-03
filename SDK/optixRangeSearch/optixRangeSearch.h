@@ -30,8 +30,8 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-#define CUDA_META_GRID_GROUP_SIZE 1
-#define CUDA_META_GRID_BLOCK_SIZE (CUDA_META_GRID_GROUP_SIZE*CUDA_META_GRID_GROUP_SIZE*CUDA_META_GRID_GROUP_SIZE)
+//#define CUDA_META_GRID_GROUP_SIZE 1
+//#define CUDA_META_GRID_BLOCK_SIZE (CUDA_META_GRID_GROUP_SIZE*CUDA_META_GRID_GROUP_SIZE*CUDA_META_GRID_GROUP_SIZE)
 
 struct GridInfo
 {
@@ -40,7 +40,8 @@ struct GridInfo
   float3 GridDelta;
   uint3 GridDimension;
   uint3 MetaGridDimension;
-  float SquaredSearchRadius;
+  unsigned int meta_grid_dim;
+  unsigned int meta_grid_size;
 };
 
 enum RayType
