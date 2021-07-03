@@ -123,7 +123,7 @@ struct WhittedState
     unsigned int*               d_r2q_map                 = nullptr;
 
     std::string                 outfile;
-    unsigned int                sortMode                  = 1;
+    unsigned int                sortMode                  = 2;
     int                         preSortMode               = 1; // morton order
     float                       crRatio                   = 8; // celSize = radius / crRatio
     float                       sortingGAS                = 1;
@@ -1198,7 +1198,6 @@ void gridSort(WhittedState& state, bool morton) {
   fprintf(stdout, "Length of a meta grid: %u\n", gridInfo.meta_grid_dim);
   fprintf(stdout, "Number of cells: %u\n", numberOfCells);
   fprintf(stdout, "Cell size: %f\n", cellSize);
-  //fprintf(stdout, "Grid delta: %f, %f, %f\n", gridInfo.GridDelta.x, gridInfo.GridDelta.y, gridInfo.GridDelta.z);
  
   thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(state.params.numPrims);
   thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells);
