@@ -60,6 +60,7 @@
 #include <string>
 #include <random>
 #include <cstdlib>
+#include <cassert>
 
 #include "optixRangeSearch.h"
 
@@ -1119,6 +1120,7 @@ void setupCUDA( WhittedState& state, int32_t device_id ) {
 }
 
 void gridSort(WhittedState& state) {
+  // TODO: change this to a CUDA implementation
   float3 cpuMin, cpuMax;
   cpuMin = make_float3(std::numeric_limits<float>().max());
   cpuMax = make_float3(std::numeric_limits<float>().min());
@@ -1137,7 +1139,7 @@ void gridSort(WhittedState& state) {
 
   fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", cpuMin.x, cpuMin.y, cpuMin.z, cpuMax.x, cpuMax.y, cpuMax.z);
 
-  float cellSize = state.params.radius/2;
+  float cellSize = state.params.radius/8;
   uint3 gridDim = make_uint3((cpuMax.x-cpuMin.x)/cellSize + 1, (cpuMax.y-cpuMin.y)/cellSize + 1, (cpuMax.z-cpuMin.z)/cellSize + 1);
   unsigned int numOfCells = gridDim.x * gridDim.y * gridDim.z;
   fprintf(stdout, "%u, %u, %u\n", gridDim.x, gridDim.y, gridDim.z);
@@ -1179,22 +1181,30 @@ void gridSort(WhittedState& state) {
   state.h_points = h_reord_points;
   state.h_queries = state.h_points;
 
+  CUDA_CHECK( cudaMemcpyAsync(
+      reinterpret_cast<void*>( state.params.points ),
+      state.h_points,
+      state.params.numPrims * sizeof(float3),
+      cudaMemcpyHostToDevice,
+      state.stream
+  ) );
+
   //for (size_t i = 0; i < state.params.numPrims; i++) {
   //  fprintf(stdout, "%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
   //}
 }
 
 void uploadPreProcPoints( WhittedState& state ) {
+  Timing::startTiming("upload Points");
+    uploadPoints ( state );
+  Timing::stopTiming(true);
+
   if (state.preSort) {
     Timing::startTiming("presort Points");
       //preSortPoints ( state );
       gridSort(state);
     Timing::stopTiming(true);
   }
-
-  Timing::startTiming("upload Points");
-    uploadPoints ( state );
-  Timing::stopTiming(true);
 }
 
 void setupOptiX( WhittedState& state ) {
