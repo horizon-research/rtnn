@@ -974,8 +974,16 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
     thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
     thrust::copy(d_r2q_map_ptr, d_r2q_map_ptr+state.params.numPrims, h_vec_val.begin());
 
+    thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
+    thrust::copy(d_firsthit_idx_ptr, d_firsthit_idx_ptr+state.params.numPrims, h_vec_key.begin());
+
     for (unsigned int i = 0; i < h_vec_val.size(); i++) {
-      std::cout << h_vec_val[i] << "\t" << state.h_points[h_vec_val[i]].x << "\t" << state.h_points[h_vec_val[i]].y << "\t" << state.h_points[h_vec_val[i]].z << std::endl;
+      std::cout << h_vec_key[i] << "\t"
+                << h_vec_val[i] << "\t"
+                << state.h_points[h_vec_val[i]].x << "\t"
+                << state.h_points[h_vec_val[i]].y << "\t"
+                << state.h_points[h_vec_val[i]].z
+                << std::endl;
     }
   }
 
@@ -1118,6 +1126,7 @@ void setupCUDA( WhittedState& state, int32_t device_id ) {
 
 void computeMinMax(WhittedState& state)
 {
+  // TODO: change these to unit3 since gridInfo.GridDimension is unit3
   thrust::host_vector<int3> h_MinMax(2);
   h_MinMax[0] = make_int3(std::numeric_limits<int>().max(), std::numeric_limits<int>().max(), std::numeric_limits<int>().max());
   h_MinMax[1] = make_int3(std::numeric_limits<int>().min(), std::numeric_limits<int>().min(), std::numeric_limits<int>().min());
@@ -1138,10 +1147,10 @@ void computeMinMax(WhittedState& state)
 
   h_MinMax = d_MinMax;
 
+  // minCell encloses the scene but maxCell doesn't (floor and int in the kernel) so increment by 1 to enclose the scene.
   int3 minCell = h_MinMax[0];
-  int3 maxCell = h_MinMax[1];
+  int3 maxCell = h_MinMax[1] + make_int3(1, 1, 1);
  
-  // state.Min encloses the scene btu state.Max doesn't (floor and int in the kernel)
   state.Min.x = minCell.x * state.params.radius;
   state.Min.y = minCell.y * state.params.radius;
   state.Min.z = minCell.z * state.params.radius;
@@ -1150,7 +1159,7 @@ void computeMinMax(WhittedState& state)
   state.Max.y = maxCell.y * state.params.radius;
   state.Max.z = maxCell.z * state.params.radius;
 
-  //fprintf(stdout, "scene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
+  fprintf(stdout, "scene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
 }
 
 void gridSort(WhittedState& state, bool morton) {
@@ -1163,16 +1172,9 @@ void gridSort(WhittedState& state, bool morton) {
 
   float cellSize = state.params.radius/state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
-  gridInfo.GridDimension.x = static_cast<unsigned int>(ceil(gridSize.x / cellSize));
-  gridInfo.GridDimension.y = static_cast<unsigned int>(ceil(gridSize.y / cellSize));
-  gridInfo.GridDimension.z = static_cast<unsigned int>(ceil(gridSize.z / cellSize));
-
-  // TODO: Can we increase only by 1?
-  // Increase grid by 2 cells in each direciton (+4 in each dimension) to skip bounds checks in the kernel
-  gridInfo.GridDimension.x += 4;
-  gridInfo.GridDimension.y += 4;
-  gridInfo.GridDimension.z += 4;
-  gridInfo.GridMin -= make_float3(cellSize, cellSize, cellSize) * (float)2;
+  gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));
+  gridInfo.GridDimension.y = static_cast<unsigned int>(ceilf(gridSize.y / cellSize));
+  gridInfo.GridDimension.z = static_cast<unsigned int>(ceilf(gridSize.z / cellSize));
 
   // Adjust grid size to multiple of cell size
   gridSize.x = gridInfo.GridDimension.x * cellSize;
@@ -1192,12 +1194,12 @@ void gridSort(WhittedState& state, bool morton) {
   // So if meta_grid_dim is 1, this is basically the same as raster order
   // across all cells. If meta_grid_dim is the same as GridDimension, this
   // calculates one single morton curve for the entire grid.
-  gridInfo.MetaGridDimension.x = static_cast<unsigned int>(ceil(gridInfo.GridDimension.x / (float)gridInfo.meta_grid_dim));
-  gridInfo.MetaGridDimension.y = static_cast<unsigned int>(ceil(gridInfo.GridDimension.y / (float)gridInfo.meta_grid_dim));
-  gridInfo.MetaGridDimension.z = static_cast<unsigned int>(ceil(gridInfo.GridDimension.z / (float)gridInfo.meta_grid_dim));
+  gridInfo.MetaGridDimension.x = static_cast<unsigned int>(ceilf(gridInfo.GridDimension.x / (float)gridInfo.meta_grid_dim));
+  gridInfo.MetaGridDimension.y = static_cast<unsigned int>(ceilf(gridInfo.GridDimension.y / (float)gridInfo.meta_grid_dim));
+  gridInfo.MetaGridDimension.z = static_cast<unsigned int>(ceilf(gridInfo.GridDimension.z / (float)gridInfo.meta_grid_dim));
 
   // metagrids will slightly increase the total cells
-  uint numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * gridInfo.meta_grid_size;
+  unsigned int numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * gridInfo.meta_grid_size;
   fprintf(stdout, "Grid dimension (without meta grids): %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
   fprintf(stdout, "Grid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
   fprintf(stdout, "Meta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
@@ -1206,7 +1208,7 @@ void gridSort(WhittedState& state, bool morton) {
   fprintf(stdout, "Cell size: %f\n", cellSize);
  
   thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(state.params.numPrims);
-  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells);
+  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells); // this takes a lot of memory
   fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
   thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr = getThrustDevicePtr(state.params.numPrims);
 

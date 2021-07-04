@@ -35,9 +35,9 @@ __global__ void kComputeMinMax(
   const float3 particle = particles[particleIndex];
 
   int3 cell;
-  cell.x = (int)floor(particle.x / searchRadius);
-  cell.y = (int)floor(particle.y / searchRadius);
-  cell.z = (int)floor(particle.z / searchRadius);
+  cell.x = (int)floorf(particle.x / searchRadius);
+  cell.y = (int)floorf(particle.y / searchRadius);
+  cell.z = (int)floorf(particle.z / searchRadius);
 
   atomicMin(&(minCell->x), cell.x);
   atomicMin(&(minCell->y), cell.y);
