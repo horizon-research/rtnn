@@ -151,14 +151,14 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       GridInfo gridInfo,
       unsigned int* d_ParticleCellIndices,
       unsigned int* d_CellOffsets,
-      unsigned int* d_TempSortIndices,
+      unsigned int* d_LocalSortedIndices,
       unsigned int* d_posInSortedPoints
       ) {
   kCountingSortIndices <<<numOfBlocks, threadsPerBlock>>> (
       gridInfo,
       d_ParticleCellIndices,
       d_CellOffsets,
-      d_TempSortIndices,
+      d_LocalSortedIndices,
       d_posInSortedPoints
       );
 }
