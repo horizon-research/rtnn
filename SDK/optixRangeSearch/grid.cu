@@ -100,7 +100,6 @@ __global__ void kCountingSortIndices(
   const uint *particleCellIndices,
   const uint *cellOffsets,
   const uint *localSortedIndices,
-  uint *sortIndicesDest,
   uint *posInSortedPoints
 )
 {
@@ -110,8 +109,7 @@ __global__ void kCountingSortIndices(
   uint gridCellIndex = particleCellIndices[particleIndex];
 
   uint sortIndex = localSortedIndices[particleIndex] + cellOffsets[gridCellIndex];
-  sortIndicesDest[sortIndex] = particleIndex; // use this if we gather later
-  posInSortedPoints[particleIndex] = sortIndex; // use this if we sort by key later
+  posInSortedPoints[particleIndex] = sortIndex;
 
   //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
 }
@@ -154,7 +152,6 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       unsigned int* d_ParticleCellIndices,
       unsigned int* d_CellOffsets,
       unsigned int* d_TempSortIndices,
-      unsigned int* d_SortIndices,
       unsigned int* d_posInSortedPoints
       ) {
   kCountingSortIndices <<<numOfBlocks, threadsPerBlock>>> (
@@ -162,7 +159,6 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       d_ParticleCellIndices,
       d_CellOffsets,
       d_TempSortIndices,
-      d_SortIndices,
       d_posInSortedPoints
       );
 }

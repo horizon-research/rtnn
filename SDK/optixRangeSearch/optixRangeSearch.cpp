@@ -161,7 +161,7 @@ void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, float, int3*, int3*);
 void kInsertParticles_Morton(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
-void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
+void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
 void computeMinMax(WhittedState&);
 void gridSort(WhittedState&, bool);
 
@@ -1229,7 +1229,6 @@ void gridSort(WhittedState& state, bool morton) {
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
   exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
 
-  thrust::device_ptr<unsigned int> d_SortIndices_ptr = getThrustDevicePtr(state.params.numPrims);
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr = getThrustDevicePtr(state.params.numPrims);
   kCountingSortIndices(numOfBlocks,
                        threadsPerBlock,
@@ -1237,11 +1236,9 @@ void gridSort(WhittedState& state, bool morton) {
                        thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
                        thrust::raw_pointer_cast(d_CellOffsets_ptr),
                        thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
-                       thrust::raw_pointer_cast(d_SortIndices_ptr), // TODO: remove this in e2e perf measurement
                        thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                        );
 
-  // or we can use d_SortIndices_ptr to gather, but that would require allocating new memory since we can't do in-place gather
   sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.points), state.params.numPrims);
 
   // TODO: do this in a stream
@@ -1253,7 +1250,6 @@ void gridSort(WhittedState& state, bool morton) {
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellOffsets_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr) ) );
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_SortIndices_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr) ) );
 
   debug = false;
