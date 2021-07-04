@@ -173,7 +173,7 @@ float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   file.open(data_file);
   if( !file.good() ) {
     std::cerr << "Could not read the frame data...\n";
-    //assert(0);
+    assert(0);
   }
 
   char line[1024];
@@ -243,14 +243,13 @@ void printUsageAndExit( const char* argv0 )
 
 void oneDSort ( WhittedState& state ) {
   // pre sort queries based on point coordinates (x/y/z)
-  // what we are really doing is to sort both points and queries, since they
-  // point to the same memory.
   unsigned int N = state.params.numPrims;
 
+  // TODO: do this whole thing on GPU.
   // create 1d points as the sorting key and upload it to device memory
   thrust::host_vector<float> h_key(N);
   for(unsigned int i = 0; i < N; i++) {
-    h_key[i] = state.h_points[i].x;
+    h_key[i] = state.h_queries[i].x;
   }
 
   float* d_key = nullptr;
@@ -261,16 +260,14 @@ void oneDSort ( WhittedState& state ) {
   thrust::copy(h_key.begin(), h_key.end(), d_key_ptr);
 
   // actual sort
-  thrust::device_ptr<float3> d_points_ptr = thrust::device_pointer_cast(state.params.points);
-  sortByKey( d_key_ptr, d_points_ptr, N );
+  thrust::device_ptr<float3> d_queries_ptr = thrust::device_pointer_cast(state.params.queries);
+  sortByKey( d_key_ptr, d_queries_ptr, N );
   CUDA_CHECK( cudaFree( (void*)d_key ) );
 
   // TODO: lift it outside of this function and combine with other sorts?
-  // copy the sorted points to host so that we build the GAS in the same order
+  // copy the sorted queries to host so that we build the GAS in the same order
   // note that the h_queries at this point still point to what h_points points to
-  //fprintf(stdout, "%f, %f, %f\n", state.h_points[1024].x, state.h_points[1024].y, state.h_points[1024].z);
-  thrust::copy(d_points_ptr, d_points_ptr + N, state.h_points);
-  //fprintf(stdout, "%f, %f, %f\n", state.h_points[1024].x, state.h_points[1024].y, state.h_points[1024].z);
+  thrust::copy(d_queries_ptr, d_queries_ptr + N, state.h_queries);
 }
 
 void uploadPoints ( WhittedState& state ) {
@@ -289,6 +286,12 @@ void uploadPoints ( WhittedState& state ) {
       state.stream
   ) );
 
+  // by default, params.queries and params.points point to the same device
+  // memory. later if we decide to reorder the queries, we will allocate new
+  // space in device memory and point params.queries to that space. this is
+  // lazy query allocation.
+  state.params.queries = state.params.points;
+
   // below is what we need to do if queries and points are separate, or if we
   // want to presort points not the queries.
   //state.h_queries = (float3*)malloc(state.params.numPrims * sizeof(float3));
@@ -304,12 +307,6 @@ void uploadPoints ( WhittedState& state ) {
   //    cudaMemcpyHostToDevice,
   //    state.stream
   //) );
-
-  // by default, params.queries and params.points point to the same device
-  // memory. later if we decide to reorder the queries, we will allocate new
-  // space in device memory and point params.queries to that space. this is
-  // lazy query allocation.
-  state.params.queries = state.params.points;
 }
 
 void initLaunchParams( WhittedState& state )
@@ -1138,7 +1135,7 @@ void computeMinMax(WhittedState& state)
   // compare only the ints since atomicAdd has only int version
   kComputeMinMax(numOfBlocks,
                  threadsPerBlock,
-                 state.params.points,
+                 state.params.queries,
                  state.params.numPrims,
                  state.params.radius,
                  thrust::raw_pointer_cast(&d_MinMax[0]),
@@ -1217,7 +1214,7 @@ void gridSort(WhittedState& state, bool morton) {
   kInsertParticles_Morton(numOfBlocks,
                           threadsPerBlock,
                           gridInfo,
-                          state.params.points,
+                          state.params.queries,
                           thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
                           thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
                           thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
@@ -1247,12 +1244,13 @@ void gridSort(WhittedState& state, bool morton) {
                        thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                        );
 
-  sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.points), state.params.numPrims);
+  // in-place sort; no new device memory is allocated
+  sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.queries), state.params.numPrims);
 
   // TODO: do this in a stream
-  thrust::device_ptr<float3> d_points_ptr = thrust::device_pointer_cast(state.params.points);
-  thrust::copy(d_points_ptr, d_points_ptr + state.params.numPrims, state.h_points);
-  state.h_queries = state.h_points;
+  thrust::device_ptr<float3> d_queries_ptr = thrust::device_pointer_cast(state.params.queries);
+  thrust::copy(d_queries_ptr, d_queries_ptr + state.params.numPrims, state.h_queries);
+  assert(state.h_points == state.h_queries);
 
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
@@ -1265,7 +1263,7 @@ void gridSort(WhittedState& state, bool morton) {
     thrust::host_vector<uint> temp(state.params.numPrims);
     thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + state.params.numPrims, temp.begin());
     for (unsigned int i = 0; i < state.params.numPrims; i++) {
-      fprintf(stdout, "%u (%f, %f, %f)\n", temp[i], state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+      fprintf(stdout, "%u (%f, %f, %f)\n", temp[i], state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
     }
   }
 }
@@ -1522,8 +1520,6 @@ int main( int argc, char* argv[] )
 
     // read points
     state.h_points = read_pc_data(state.outfile.c_str(), &state.params.numPrims, state.isShuffle);
-    if (state.params.numPrims == 0)
-      printUsageAndExit( argv[0] );
 
     // will be updated if queries are later sorted. this is primarily used for sanity check
     state.h_queries = state.h_points;
