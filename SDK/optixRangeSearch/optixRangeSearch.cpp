@@ -129,6 +129,7 @@ struct WhittedState
     float                       crRatio                   = 8; // celSize = radius / crRatio
     float                       sortingGAS                = 1;
     bool                        toGather                  = false;
+    bool                        reorderPoints             = false;
     bool                        isShuffle                 = false;
 
     float3                      Min;
@@ -234,7 +235,8 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --presort | -ps             preSort mode\n";
     std::cerr << "         --crratio| -cr              cell/radius ratio\n";
     std::cerr << "         --sortingGAS | -sg          Param for SortingGAS\n";
-    std::cerr << "         --gather | -g               Whether to gather after sort \n";
+    std::cerr << "         --gather | -g               Whether to gather queries after sort \n";
+    std::cerr << "         --reorderpoints | -rp       Whether to reorder points after query sort \n";
     std::cerr << "         --help | -h                 Print this usage message\n";
     exit( 0 );
 }
@@ -1007,13 +1009,12 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
   thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, state.h_queries);
   assert (state.h_points != state.h_queries);
 
-  // if we want to create a new GAS using the sorted points, we have to do
-  // this. but this makes it necessarily to copy the reordered queries from
-  // device, and make it impossible to hide this new GAS rebuild latency ---
-  // unless the gain from reordering is much higher.
-  state.h_points = state.h_queries;
-  state.params.points = state.params.queries;
-  // TODO: then free the original points in device memory
+  if (state.reorderPoints) {
+    // will rebuild the GAS later
+    state.h_points = state.h_queries;
+    CUDA_CHECK( cudaFree( (void*)state.params.points ) );
+    state.params.points = state.params.queries;
+  }
 
   bool debug = false;
   if (debug) {
@@ -1073,6 +1074,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
+      }
+      else if( arg == "--reorderpoints" || arg == "-rp" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.reorderPoints = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--sortingGAS" || arg == "-sg" )
       {
@@ -1433,12 +1440,12 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
 
 void searchTraversal(WhittedState& state, int32_t device_id) {
   Timing::startTiming("total sorted");
-    //if ( state.sortingGAS != 1 ) {
+    if ( (state.sortingGAS != 1) || (state.reorderPoints) ) {
       Timing::startTiming("create search GAS");
         createGeometry ( state );
         CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
       Timing::stopTiming(true);
-    //}
+    }
 
     Timing::startTiming("sorted compute");
       state.params.limit = state.params.knn;
@@ -1524,10 +1531,11 @@ int main( int argc, char* argv[] )
     std::cerr << "radius: " << state.params.radius << std::endl;
     std::cerr << "K: " << state.params.knn << std::endl;
     std::cerr << "sortMode: " << state.sortMode << std::endl;
-    std::cerr << "preSort? " << std::boolalpha << state.preSortMode << std::endl;
+    std::cerr << "preSortMode: " << std::boolalpha << state.preSortMode << std::endl;
     std::cerr << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2
     std::cerr << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when sortMode != 0
     std::cerr << "Gather? " << std::boolalpha << state.toGather << std::endl;
+    std::cerr << "reorderPoints? " << std::boolalpha << state.reorderPoints << std::endl;
     //std::cerr << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
     std::cerr << "========================================" << std::endl << std::endl;
 
@@ -1566,7 +1574,26 @@ int main( int argc, char* argv[] )
           }
           delete init_res_buffer; // calls the CUDAOutputBuffer destructor.
 
-          // Gather the queries; minimally useful for large point clouds.
+	  // Gather the queries according to the query order, which by itself
+	  // is not useful, since we access each query only once (in the RG
+	  // program) anyways. in reality we see little gain by gathering
+	  // queries. but if queries and points point to the same device
+	  // memory, gathering queries effectively reordering the points too.
+	  // we access points in the IS program (get query origin using the hit
+	  // primIdx), and so it would be nice to coalesce memory by reordering
+	  // points. but note two things. First, we access only one point and
+	  // only once in each IS program and the bulk of memory access is to
+	  // the BVH which is out of our control, so better memory coalescing
+	  // has less effect that in traditional grid-search. Second, if the
+	  // points are presorted using a decent ordering (raster scan or
+	  // z-order), this reordering has almost zero effect. empirically, we
+	  // get 10% search time reduction for large point clouds. but this
+	  // comes at a chilling overhead that we need to rebuild the GAS (to
+	  // make sure the ID of a box in GAS is the ID of the sphere in device
+	  // memory; otherwise IS program is in correct), which is on the
+	  // critical path and whose overhead can't be hidden. so almost always
+	  // this optimization leads to performance degradation, both toGather
+	  // and reorderPoints are disabled by default.
           if (state.toGather) {
             gatherQueries( state, d_indices_ptr );
           }
