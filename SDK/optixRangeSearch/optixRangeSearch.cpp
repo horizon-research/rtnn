@@ -133,10 +133,19 @@ struct WhittedState
     bool                        isShuffle                 = false;
     bool                        samepq                    = true;
 
+    unsigned int                numPoints                 = 0;
+    unsigned int                numQueries                = 0;
+
     float3                      Min;
     float3                      Max;
 
     OptixShaderBindingTable     sbt                       = {};
+};
+
+enum ParticleType
+{
+    POINT = 0,
+    QUERY = 1
 };
 
 //------------------------------------------------------------------------------
@@ -165,8 +174,8 @@ void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, float, int3*, int3*);
 void kInsertParticles_Morton(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
-void computeMinMax(WhittedState&);
-void gridSort(WhittedState&, bool);
+void computeMinMax(WhittedState&, bool);
+void gridSort(WhittedState&, bool, bool);
 
 float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   std::ifstream file;
@@ -242,15 +251,26 @@ void printUsageAndExit( const char* argv0 )
     exit( 0 );
 }
 
-void oneDSort ( WhittedState& state ) {
-  // pre sort queries based on point coordinates (x/y/z)
-  unsigned int N = state.params.numPrims;
+void oneDSort ( WhittedState& state, bool type ) {
+  // sort points/queries based on coordinates (x/y/z)
+  unsigned int N;
+  float3* particles;
+  float3* h_particles;
+  if (type == POINT) {
+    N = state.numPoints;
+    particles = state.params.points;
+    h_particles = state.h_points;
+  } else {
+    N = state.numQueries;
+    particles = state.params.queries;
+    h_particles = state.h_queries;
+  }
 
   // TODO: do this whole thing on GPU.
   // create 1d points as the sorting key and upload it to device memory
   thrust::host_vector<float> h_key(N);
   for(unsigned int i = 0; i < N; i++) {
-    h_key[i] = state.h_queries[i].x;
+    h_key[i] = h_particles[i].x;
   }
 
   float* d_key = nullptr;
@@ -261,56 +281,57 @@ void oneDSort ( WhittedState& state ) {
   thrust::copy(h_key.begin(), h_key.end(), d_key_ptr);
 
   // actual sort
-  thrust::device_ptr<float3> d_queries_ptr = thrust::device_pointer_cast(state.params.queries);
-  sortByKey( d_key_ptr, d_queries_ptr, N );
+  thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
+  sortByKey( d_key_ptr, d_particles_ptr, N );
   CUDA_CHECK( cudaFree( (void*)d_key ) );
 
   // TODO: lift it outside of this function and combine with other sorts?
   // copy the sorted queries to host so that we build the GAS in the same order
   // note that the h_queries at this point still point to what h_points points to
-  thrust::copy(d_queries_ptr, d_queries_ptr + N, state.h_queries);
+  thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 }
 
-void uploadPoints ( WhittedState& state ) {
-  // Allocate device memory for points/queries
-  // Optionally sort the points/queries
+void uploadData ( WhittedState& state ) {
+  Timing::startTiming("upload Points and Queries");
+    // Allocate device memory for points/queries
 
-  CUDA_CHECK( cudaMalloc(
-      reinterpret_cast<void**>( &state.params.points ),
-      state.params.numPrims * sizeof(float3) ) );
-  
-  CUDA_CHECK( cudaMemcpyAsync(
-      reinterpret_cast<void*>( state.params.points ),
-      state.h_points,
-      state.params.numPrims * sizeof(float3),
-      cudaMemcpyHostToDevice,
-      state.stream
-  ) );
-
-  if (state.samepq) {
-    // by default, params.queries and params.points point to the same device
-    // memory. later if we decide to reorder the queries, we will allocate new
-    // space in device memory and point params.queries to that space. this is
-    // lazy query allocation.
-    state.params.queries = state.params.points;
-  } else {
-    // below is what we need to do if queries and points are separate, or if we
-    // want to presort points not the queries.
-    // TODO: lots of assertions need to change
-    state.h_queries = (float3*)malloc(state.params.numPrims * sizeof(float3));
-    std::copy(state.h_points, state.h_points + state.params.numPrims, state.h_queries);
     CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>( &state.params.queries),
-        state.params.numPrims * sizeof(float3) ) );
+        reinterpret_cast<void**>( &state.params.points ),
+        state.numPoints * sizeof(float3) ) );
     
     CUDA_CHECK( cudaMemcpyAsync(
-        reinterpret_cast<void*>( state.params.queries ),
-        state.h_queries,
-        state.params.numPrims * sizeof(float3),
+        reinterpret_cast<void*>( state.params.points ),
+        state.h_points,
+        state.numPoints * sizeof(float3),
         cudaMemcpyHostToDevice,
         state.stream
     ) );
-  }
+
+    if (state.samepq) {
+      // by default, params.queries and params.points point to the same device
+      // memory. later if we decide to reorder the queries, we will allocate new
+      // space in device memory and point params.queries to that space. this is
+      // lazy query allocation.
+      state.params.queries = state.params.points;
+    } else {
+      // below is what we need to do if queries and points are separate, or if we
+      // want to presort points not the queries.
+      // TODO: lots of assertions need to change
+      state.h_queries = (float3*)malloc(state.numQueries * sizeof(float3));
+      std::copy(state.h_points, state.h_points + state.numQueries, state.h_queries); // TODO this needs fixing
+      CUDA_CHECK( cudaMalloc(
+          reinterpret_cast<void**>( &state.params.queries),
+          state.numQueries * sizeof(float3) ) );
+      
+      CUDA_CHECK( cudaMemcpyAsync(
+          reinterpret_cast<void*>( state.params.queries ),
+          state.h_queries,
+          state.numQueries * sizeof(float3),
+          cudaMemcpyHostToDevice,
+          state.stream
+      ) );
+    }
+  Timing::stopTiming(true);
 }
 
 void initLaunchParams( WhittedState& state )
@@ -414,7 +435,7 @@ void createSortingGeometry( WhittedState &state, float sortingGAS )
 
     // Build Custom Primitives
 
-    unsigned int numPrims = state.params.numPrims;
+    unsigned int numPrims = state.numPoints;
     // Load AABB into device memory
     OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
@@ -479,29 +500,30 @@ void createGeometry( WhittedState &state )
     //
 
     // Load AABB into device memory
-    OptixAabb* aabb = (OptixAabb*)malloc(state.params.numPrims * sizeof(OptixAabb));
+    unsigned int numPrims = state.numPoints;
+    OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
 
-    for(unsigned int i = 0; i < state.params.numPrims; i++) {
+    for(unsigned int i = 0; i < numPrims; i++) {
       sphere_bound(
           state.h_points[i], state.params.radius,
           reinterpret_cast<float*>(&aabb[i]));
     }
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-        ), state.params.numPrims* sizeof( OptixAabb ) ) );
+        ), numPrims * sizeof( OptixAabb ) ) );
     CUDA_CHECK( cudaMemcpyAsync(
                 reinterpret_cast<void*>( d_aabb ),
                 aabb,
-                state.params.numPrims * sizeof( OptixAabb ),
+                numPrims * sizeof( OptixAabb ),
                 cudaMemcpyHostToDevice,
                 state.stream
     ) );
 
     // Setup AABB build input
-    uint32_t* aabb_input_flags = (uint32_t*)malloc(state.params.numPrims * sizeof(uint32_t));
+    uint32_t* aabb_input_flags = (uint32_t*)malloc(numPrims * sizeof(uint32_t));
 
-    for (unsigned int i = 0; i < state.params.numPrims; i++) {
+    for (unsigned int i = 0; i < numPrims; i++) {
       //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
       aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
     }
@@ -511,7 +533,7 @@ void createGeometry( WhittedState &state )
     aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
     aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
     aabb_input.customPrimitiveArray.numSbtRecords = 1;
-    aabb_input.customPrimitiveArray.numPrimitives = state.params.numPrims;
+    aabb_input.customPrimitiveArray.numPrimitives = numPrims;
     // it's important to pass 0 to sbtIndexOffsetBuffer
     aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
     aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
@@ -806,7 +828,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
     // of cudamemset: it sets #count number of BYTES to value; literally think
     // about what each byte has to be.
     CUDA_CHECK( cudaMemsetAsync ( result_buffer_data, 0xFF,
-                                  state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                                  state.numQueries * state.params.limit * sizeof(unsigned int),
                                   state.stream ) );
 
     state.params.handle = state.gas_handle;
@@ -825,7 +847,7 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
         reinterpret_cast<CUdeviceptr>( state.d_params ),
         sizeof( Params ),
         &state.sbt,
-        state.params.numPrims, // launch width
+        state.numQueries, // launch width
         1,                     // launch height
         1                      // launch depth
     ) );
@@ -869,7 +891,7 @@ void sanityCheck( WhittedState& state, void* data ) {
   unsigned int totalNeighbors = 0;
   unsigned int totalWrongNeighbors = 0;
   double totalWrongDist = 0;
-  for (unsigned int q = 0; q < state.params.numPrims; q++) {
+  for (unsigned int q = 0; q < state.numQueries; q++) {
     for (unsigned int n = 0; n < state.params.limit; n++) {
       unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.limit + n ];
       //std::cout << p << std::endl; break;
@@ -890,7 +912,7 @@ void sanityCheck( WhittedState& state, void* data ) {
     //std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
-  std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.params.numPrims << std::endl;
+  std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.numQueries << std::endl;
   std::cerr << "Total wrong neighbors: " << totalWrongNeighbors << std::endl;
   if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
 }
@@ -902,20 +924,20 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     // allocate device memory for storing the keys, which will be generated by a gather and used in sort_by_keys
     float* d_key;
     cudaMalloc(reinterpret_cast<void**>(&d_key),
-               state.params.numPrims * sizeof(float) );
+               state.numQueries * sizeof(float) );
     thrust::device_ptr<float> d_key_ptr = thrust::device_pointer_cast(d_key);
     state.d_key = d_key; // just so we have a handle to free it later
   
     // create indices for gather and upload to device
-    thrust::host_vector<float> h_orig_points_1d(state.params.numPrims);
-    // TODO: need to optimize this...
-    for (unsigned int i = 0; i < state.params.numPrims; i++) {
+    thrust::host_vector<float> h_orig_points_1d(state.numQueries);
+    // TODO: do this in CUDA
+    for (unsigned int i = 0; i < state.numQueries; i++) {
       h_orig_points_1d[i] = state.h_points[i].z; // could be other dimensions
     }
     thrust::device_vector<float> d_orig_points_1d = h_orig_points_1d;
 
     // initialize a sequence to be sorted, which will become the r2q map
-    thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.params.numPrims);
+    thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.numQueries);
     // TODO: need to free this
   Timing::stopTiming(true);
   
@@ -924,26 +946,26 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     // TODO: do thrust work in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
 
     // first use a gather to generate the keys, then sort by keys
-    gatherByKey(d_firsthit_idx_ptr, &d_orig_points_1d, d_key_ptr, state.params.numPrims);
-    sortByKey( d_key_ptr, d_r2q_map_ptr, state.params.numPrims );
+    gatherByKey(d_firsthit_idx_ptr, &d_orig_points_1d, d_key_ptr, state.numQueries);
+    sortByKey( d_key_ptr, d_r2q_map_ptr, state.numQueries );
     state.d_r2q_map = thrust::raw_pointer_cast(d_r2q_map_ptr);
   Timing::stopTiming(true);
   
   // if debug, copy the sorted keys and values back to host
   bool debug = false;
   if (debug) {
-    thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
-    thrust::copy(d_r2q_map_ptr, d_r2q_map_ptr+state.params.numPrims, h_vec_val.begin());
+    thrust::host_vector<unsigned int> h_vec_val(state.numQueries);
+    thrust::copy(d_r2q_map_ptr, d_r2q_map_ptr+state.numQueries, h_vec_val.begin());
 
-    thrust::host_vector<float> h_vec_key(state.params.numPrims);
-    thrust::copy(d_key_ptr, d_key_ptr+state.params.numPrims, h_vec_key.begin());
+    thrust::host_vector<float> h_vec_key(state.numQueries);
+    thrust::copy(d_key_ptr, d_key_ptr+state.numQueries, h_vec_key.begin());
     
     for (unsigned int i = 0; i < h_vec_val.size(); i++) {
       std::cout << h_vec_key[i] << "\t" 
                 << h_vec_val[i] << "\t" 
-                << state.h_points[h_vec_val[i]].x << "\t"
-                << state.h_points[h_vec_val[i]].y << "\t"
-                << state.h_points[h_vec_val[i]].z
+                << state.h_queries[h_vec_val[i]].x << "\t"
+                << state.h_queries[h_vec_val[i]].y << "\t"
+                << state.h_queries[h_vec_val[i]].z
                 << std::endl;
     }
   }
@@ -956,11 +978,11 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
 
   // initialize a sequence to be sorted, which will become the r2q map
   Timing::startTiming("sort queries init");
-    thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.params.numPrims);
+    thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.numQueries);
   Timing::stopTiming(true);
 
   Timing::startTiming("sort queries");
-    sortByKey( d_firsthit_idx_ptr, d_r2q_map_ptr, state.params.numPrims );
+    sortByKey( d_firsthit_idx_ptr, d_r2q_map_ptr, state.numQueries );
     // thrust can't be used in kernel code since NVRTC supports only a
     // limited subset of C++, so we would have to explicitly cast a
     // thrust device vector to its raw pointer. See the problem discussed
@@ -972,18 +994,18 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
 
   bool debug = false;
   if (debug) {
-    thrust::host_vector<unsigned int> h_vec_val(state.params.numPrims);
-    thrust::copy(d_r2q_map_ptr, d_r2q_map_ptr+state.params.numPrims, h_vec_val.begin());
+    thrust::host_vector<unsigned int> h_vec_val(state.numQueries);
+    thrust::copy(d_r2q_map_ptr, d_r2q_map_ptr+state.numQueries, h_vec_val.begin());
 
-    thrust::host_vector<unsigned int> h_vec_key(state.params.numPrims);
-    thrust::copy(d_firsthit_idx_ptr, d_firsthit_idx_ptr+state.params.numPrims, h_vec_key.begin());
+    thrust::host_vector<unsigned int> h_vec_key(state.numQueries);
+    thrust::copy(d_firsthit_idx_ptr, d_firsthit_idx_ptr+state.numQueries, h_vec_key.begin());
 
     for (unsigned int i = 0; i < h_vec_val.size(); i++) {
       std::cout << h_vec_key[i] << "\t"
                 << h_vec_val[i] << "\t"
-                << state.h_points[h_vec_val[i]].x << "\t"
-                << state.h_points[h_vec_val[i]].y << "\t"
-                << state.h_points[h_vec_val[i]].z
+                << state.h_queries[h_vec_val[i]].x << "\t"
+                << state.h_queries[h_vec_val[i]].y << "\t"
+                << state.h_queries[h_vec_val[i]].z
                 << std::endl;
     }
   }
@@ -998,14 +1020,14 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
     // allocate device memory for reordered/gathered queries
     float3* d_reordered_queries;
     cudaMalloc(reinterpret_cast<void**>(&d_reordered_queries),
-               state.params.numPrims * sizeof(float3) );
+               state.numQueries * sizeof(float3) );
     thrust::device_ptr<float3> d_reord_queries_ptr = thrust::device_pointer_cast(d_reordered_queries);
 
     // get pointer to original queries in device memory
     thrust::device_ptr<float3> d_orig_queries_ptr = thrust::device_pointer_cast(state.params.queries);
 
     // gather by key, which is generated by the previous sort
-    gatherByKey(d_indices_ptr, d_orig_queries_ptr, d_reord_queries_ptr, state.params.numPrims);
+    gatherByKey(d_indices_ptr, d_orig_queries_ptr, d_reord_queries_ptr, state.numQueries);
 
     //state.params.queries = thrust::raw_pointer_cast(&d_reord_queries_ptr[0]);
     state.params.queries = thrust::raw_pointer_cast(d_reord_queries_ptr);
@@ -1013,9 +1035,9 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
   Timing::stopTiming(true);
 
   // Copy reordered queries to host for sanity check
-  thrust::host_vector<float3> host_reord_queries(state.params.numPrims);
-  state.h_queries = new float3[state.params.numPrims]; // don't overwrite h_points
-  thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.params.numPrims, state.h_queries);
+  thrust::host_vector<float3> host_reord_queries(state.numQueries);
+  state.h_queries = new float3[state.numQueries]; // don't overwrite h_points
+  thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+state.numQueries, state.h_queries);
   assert (state.h_points != state.h_queries);
 
   if (state.reorderPoints) {
@@ -1023,14 +1045,6 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
     state.h_points = state.h_queries;
     CUDA_CHECK( cudaFree( (void*)state.params.points ) );
     state.params.points = state.params.queries;
-  }
-
-  bool debug = false;
-  if (debug) {
-    for (unsigned int i = 0; i < state.params.numPrims; i++) {
-      fprintf(stdout, "orig: %f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
-      fprintf(stdout, "reor: %f, %f, %f\n\n", state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
-    }
   }
 }
 
@@ -1125,8 +1139,18 @@ void setupCUDA( WhittedState& state, int32_t device_id ) {
   CUDA_CHECK( cudaStreamCreate( &state.stream ) );
 }
 
-void computeMinMax(WhittedState& state)
+void computeMinMax(WhittedState& state, bool type)
 {
+  unsigned int N;
+  float3* particles;
+  if (type == POINT) {
+    N = state.numPoints;
+    particles = state.params.points;
+  } else {
+    N = state.numQueries;
+    particles = state.params.queries;
+  }
+
   // TODO: change these to unit3 since gridInfo.GridDimension is unit3
   thrust::host_vector<int3> h_MinMax(2);
   h_MinMax[0] = make_int3(std::numeric_limits<int>().max(), std::numeric_limits<int>().max(), std::numeric_limits<int>().max());
@@ -1135,13 +1159,13 @@ void computeMinMax(WhittedState& state)
   thrust::device_vector<int3> d_MinMax = h_MinMax;
 
   unsigned int threadsPerBlock = 64;
-  unsigned int numOfBlocks = state.params.numPrims / threadsPerBlock + 1;
+  unsigned int numOfBlocks = N / threadsPerBlock + 1;
   // compare only the ints since atomicAdd has only int version
   kComputeMinMax(numOfBlocks,
                  threadsPerBlock,
-                 state.params.queries,
-                 state.params.numPrims,
-                 state.params.radius,
+                 particles,
+                 N,
+                 state.params.radius, // TODO: we don't really need radius here.
                  thrust::raw_pointer_cast(&d_MinMax[0]),
                  thrust::raw_pointer_cast(&d_MinMax[1])
                  );
@@ -1165,15 +1189,28 @@ void computeMinMax(WhittedState& state)
   //fprintf(stdout, "scene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
 }
 
-void gridSort(WhittedState& state, bool morton) {
+void gridSort(WhittedState& state, bool type, bool morton) {
+  unsigned int N;
+  float3* particles;
+  float3* h_particles;
+  if (type == POINT) {
+    N = state.numPoints;
+    particles = state.params.points;
+    h_particles = state.h_points;
+  } else {
+    N = state.numQueries;
+    particles = state.params.queries;
+    h_particles = state.h_queries;
+  }
+
   float3 sceneMin = state.Min;
   float3 sceneMax = state.Max;
 
   GridInfo gridInfo;
-  gridInfo.ParticleCount = state.params.numPrims;
+  gridInfo.ParticleCount = N;
   gridInfo.GridMin = sceneMin;
 
-  float cellSize = state.params.radius/state.crRatio;
+  float cellSize = state.params.radius/state.crRatio; // TODO: change cellSize as a input parameter to the function
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));
   gridInfo.GridDimension.y = static_cast<unsigned int>(ceilf(gridSize.y / cellSize));
@@ -1210,17 +1247,17 @@ void gridSort(WhittedState& state, bool morton) {
   fprintf(stdout, "Number of cells: %u\n", numberOfCells);
   fprintf(stdout, "Cell size: %f\n", cellSize);
  
-  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(state.params.numPrims);
+  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(N);
   thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells); // this takes a lot of memory
   fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
-  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr = getThrustDevicePtr(state.params.numPrims);
+  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr = getThrustDevicePtr(N);
 
   unsigned int threadsPerBlock = 64;
-  unsigned int numOfBlocks = state.params.numPrims / threadsPerBlock + 1;
+  unsigned int numOfBlocks = N / threadsPerBlock + 1;
   kInsertParticles_Morton(numOfBlocks,
                           threadsPerBlock,
                           gridInfo,
-                          state.params.queries,
+                          particles,
                           thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
                           thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
                           thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
@@ -1240,7 +1277,7 @@ void gridSort(WhittedState& state, bool morton) {
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
   exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
 
-  thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr = getThrustDevicePtr(state.params.numPrims);
+  thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr = getThrustDevicePtr(N);
   kCountingSortIndices(numOfBlocks,
                        threadsPerBlock,
                        gridInfo,
@@ -1251,11 +1288,11 @@ void gridSort(WhittedState& state, bool morton) {
                        );
 
   // in-place sort; no new device memory is allocated
-  sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.queries), state.params.numPrims);
+  sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
 
   // TODO: do this in a stream
-  thrust::device_ptr<float3> d_queries_ptr = thrust::device_pointer_cast(state.params.queries);
-  thrust::copy(d_queries_ptr, d_queries_ptr + state.params.numPrims, state.h_queries);
+  thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
+  thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
   //assert(state.h_points == state.h_queries);
 
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
@@ -1266,10 +1303,10 @@ void gridSort(WhittedState& state, bool morton) {
 
   debug = false;
   if (debug) {
-    thrust::host_vector<uint> temp(state.params.numPrims);
-    thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + state.params.numPrims, temp.begin());
-    for (unsigned int i = 0; i < state.params.numPrims; i++) {
-      fprintf(stdout, "%u (%f, %f, %f)\n", temp[i], state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
+    thrust::host_vector<uint> temp(N);
+    thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + N, temp.begin());
+    for (unsigned int i = 0; i < N; i++) {
+      fprintf(stdout, "%u (%f, %f, %f)\n", temp[i], h_particles[i].x, h_particles[i].y, h_particles[i].z);
     }
   }
 }
@@ -1277,9 +1314,9 @@ void gridSort(WhittedState& state, bool morton) {
 void preSortGPU(WhittedState& state) {
   int preSortMode = state.preSortMode;
   if (preSortMode == 3) {
-    oneDSort(state);
+    oneDSort(state, QUERY);
   } else {
-    computeMinMax(state);
+    computeMinMax(state, QUERY);
 
     bool morton; // false for raster order
     if (preSortMode == 1) morton = true;
@@ -1287,31 +1324,43 @@ void preSortGPU(WhittedState& state) {
       assert(preSortMode == 2);
       morton = false;
     }
-    gridSort(state, morton);
+    gridSort(state, QUERY, morton);
   }
 }
 
-void preSortCPU(WhittedState& state) {
+void rasterSortCPU(WhittedState& state, bool type) {
   // This is only raster sort.
+  unsigned int N;
+  float3* particles;
+  float3* h_particles;
+  if (type == POINT) {
+    N = state.numPoints;
+    particles = state.params.points;
+    h_particles = state.h_points;
+  } else {
+    N = state.numQueries;
+    particles = state.params.queries;
+    h_particles = state.h_queries;
+  }
+
   float3 cpuMin, cpuMax;
   cpuMin = make_float3(std::numeric_limits<float>().max());
   cpuMax = make_float3(std::numeric_limits<float>().min());
   
-  float3 *points = state.h_points;
-  for (size_t i = 0; i < state.params.numPrims; i++)
+  for (size_t i = 0; i < N; i++)
   {
-    cpuMin.x = std::min(cpuMin.x, points[i].x);
-    cpuMin.y = std::min(cpuMin.y, points[i].y);
-    cpuMin.z = std::min(cpuMin.z, points[i].z);
+    cpuMin.x = std::min(cpuMin.x, particles[i].x);
+    cpuMin.y = std::min(cpuMin.y, particles[i].y);
+    cpuMin.z = std::min(cpuMin.z, particles[i].z);
     
-    cpuMax.x = std::max(cpuMax.x, points[i].x);
-    cpuMax.y = std::max(cpuMax.y, points[i].y);
-    cpuMax.z = std::max(cpuMax.z, points[i].z);
+    cpuMax.x = std::max(cpuMax.x, particles[i].x);
+    cpuMax.y = std::max(cpuMax.y, particles[i].y);
+    cpuMax.z = std::max(cpuMax.z, particles[i].z);
   }
 
   //fprintf(stdout, "(%f, %f, %f), (%f, %f, %f)\n", cpuMin.x, cpuMin.y, cpuMin.z, cpuMax.x, cpuMax.y, cpuMax.z);
 
-  float cellSize = state.params.radius/state.crRatio;
+  float cellSize = state.params.radius/state.crRatio; // TODO: make this an input argument
   uint3 gridDim = make_uint3((cpuMax.x-cpuMin.x)/cellSize + 1, (cpuMax.y-cpuMin.y)/cellSize + 1, (cpuMax.z-cpuMin.z)/cellSize + 1);
   unsigned int numOfCells = gridDim.x * gridDim.y * gridDim.z;
   fprintf(stdout, "Grid dimension: %u, %u, %u\n", gridDim.x, gridDim.y, gridDim.z);
@@ -1321,10 +1370,10 @@ void preSortCPU(WhittedState& state) {
   thrust::host_vector<unsigned int> numOfPointsInEachCell(numOfCells);
   thrust::fill(numOfPointsInEachCell.begin(), numOfPointsInEachCell.end(), 0);
 
-  for (size_t i = 0; i < state.params.numPrims; i++) {
-    int cell_x_idx = (points[i].x - cpuMin.x) / cellSize;
-    int cell_y_idx = (points[i].y - cpuMin.y) / cellSize;
-    int cell_z_idx = (points[i].z - cpuMin.z) / cellSize;
+  for (size_t i = 0; i < N; i++) {
+    int cell_x_idx = (particles[i].x - cpuMin.x) / cellSize;
+    int cell_y_idx = (particles[i].y - cpuMin.y) / cellSize;
+    int cell_z_idx = (particles[i].z - cpuMin.z) / cellSize;
 
     int cell_idx = (cell_x_idx * gridDim.y + cell_y_idx) * gridDim.z + cell_z_idx;
     numOfPointsInEachCell[cell_idx]++;
@@ -1337,48 +1386,44 @@ void preSortCPU(WhittedState& state) {
   thrust::host_vector<unsigned int> curIdxInEachCell(numOfCells);
   thrust::fill(curIdxInEachCell.begin(), curIdxInEachCell.end(), 0);
 
-  float3* h_reord_points = (float3*)malloc(state.params.numPrims* sizeof(float3));
+  float3* h_reord_particles = (float3*)malloc(N* sizeof(float3));
 
-  for (size_t i = 0; i < state.params.numPrims; i++) {
-    int cell_x_idx = (points[i].x - cpuMin.x) / cellSize;
-    int cell_y_idx = (points[i].y - cpuMin.y) / cellSize;
-    int cell_z_idx = (points[i].z - cpuMin.z) / cellSize;
+  for (size_t i = 0; i < N; i++) {
+    int cell_x_idx = (particles[i].x - cpuMin.x) / cellSize;
+    int cell_y_idx = (particles[i].y - cpuMin.y) / cellSize;
+    int cell_z_idx = (particles[i].z - cpuMin.z) / cellSize;
 
     int cell_idx = (cell_x_idx * gridDim.y + cell_y_idx) * gridDim.z + cell_z_idx;
 
     int writeIdx = startIdxOfEachCell[cell_idx] + curIdxInEachCell[cell_idx];
     curIdxInEachCell[cell_idx]++;
-    h_reord_points[writeIdx] = state.h_points[i];
+    h_reord_particles[writeIdx] = h_particles[i];
   }
 
-  delete state.h_points;
-  state.h_points = h_reord_points;
-  state.h_queries = state.h_points;
-
-  CUDA_CHECK( cudaMemcpyAsync(
-      reinterpret_cast<void*>( state.params.points ),
-      state.h_points,
-      state.params.numPrims * sizeof(float3),
-      cudaMemcpyHostToDevice,
-      state.stream
-  ) );
+  delete h_particles;
+  h_particles = h_reord_particles;
 
   bool debug = false;
   if (debug) {
-    for (size_t i = 0; i < state.params.numPrims; i++) {
-      fprintf(stdout, "%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
+    for (size_t i = 0; i < N; i++) {
+      fprintf(stdout, "%f, %f, %f\n", h_particles[i].x, h_particles[i].y, h_particles[i].z);
     }
   }
 }
 
-void uploadPreProcPoints( WhittedState& state ) {
-  Timing::startTiming("upload Points");
-    uploadPoints ( state );
-  Timing::stopTiming(true);
-
+void sortPoints( WhittedState& state ) {
   if (state.preSortMode) {
     Timing::startTiming("presort Points");
-      //preSortCPU(state);
+      //rasterSortCPU(state, POINT);
+      //state.h_queries = state.h_points;
+      //CUDA_CHECK( cudaMemcpyAsync(
+      //    reinterpret_cast<void*>( state.numPoints ),
+      //    state.h_points,
+      //    state.numPoints * sizeof(float3),
+      //    cudaMemcpyHostToDevice,
+      //    state.stream
+      //) );
+
       preSortGPU(state);
     Timing::stopTiming(true);
   }
@@ -1412,7 +1457,7 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
       state.params.limit = state.params.knn;
       sutil::CUDAOutputBuffer<unsigned int> output_buffer(
               sutil::CUDAOutputBufferType::CUDA_DEVICE,
-              state.params.numPrims * state.params.limit,
+              state.numQueries * state.params.limit,
               1,
               device_id
               );
@@ -1427,12 +1472,12 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
     // cudaMallocHost is time consuming; must be hidden behind async launch
     Timing::startTiming("result copy D2H");
       void* data;
-      cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
+      cudaMallocHost(reinterpret_cast<void**>(&data), state.numQueries * state.params.limit * sizeof(unsigned int));
 
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       output_buffer.getDevicePointer(),
-                      state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                      state.numQueries * state.params.limit * sizeof(unsigned int),
                       cudaMemcpyDeviceToHost,
                       state.stream
                       ) );
@@ -1458,7 +1503,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
       sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
           new sutil::CUDAOutputBuffer<unsigned int>(
               sutil::CUDAOutputBufferType::CUDA_DEVICE,
-              state.params.numPrims * state.params.limit,
+              state.numQueries * state.params.limit,
               1,
               device_id
               );
@@ -1473,12 +1518,12 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 
     Timing::startTiming("result copy D2H");
       void* data;
-      cudaMallocHost(reinterpret_cast<void**>(&data), state.params.numPrims * state.params.limit * sizeof(unsigned int));
+      cudaMallocHost(reinterpret_cast<void**>(&data), state.numQueries * state.params.limit * sizeof(unsigned int));
 
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       output_buffer->getDevicePointer(),
-                      state.params.numPrims * state.params.limit * sizeof(unsigned int),
+                      state.numQueries * state.params.limit * sizeof(unsigned int),
                       cudaMemcpyDeviceToHost,
                       state.stream
                       ) );
@@ -1499,7 +1544,7 @@ sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int
     sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
         new sutil::CUDAOutputBuffer<unsigned int>(
             sutil::CUDAOutputBufferType::CUDA_DEVICE,
-            state.params.numPrims * state.params.limit,
+            state.numQueries * state.params.limit,
             1,
             device_id
             );
@@ -1525,13 +1570,14 @@ int main( int argc, char* argv[] )
     parseArgs( state, argc, argv );
 
     // read points
-    state.h_points = read_pc_data(state.outfile.c_str(), &state.params.numPrims, state.isShuffle);
+    state.h_points = read_pc_data(state.outfile.c_str(), &state.numPoints, state.isShuffle);
+    state.numQueries = state.numPoints;
 
     // will be updated if queries are later sorted. this is primarily used for sanity check
     state.h_queries = state.h_points;
 
     std::cerr << "========================================" << std::endl;
-    std::cerr << "numPrims: " << state.params.numPrims << std::endl;
+    std::cerr << "numPoints: " << state.numPoints << std::endl;
     std::cerr << "radius: " << state.params.radius << std::endl;
     std::cerr << "K: " << state.params.knn << std::endl;
     std::cerr << "sortMode: " << state.sortMode << std::endl;
@@ -1551,7 +1597,8 @@ int main( int argc, char* argv[] )
 
         Timing::reset();
 
-        uploadPreProcPoints(state);
+        uploadData(state);
+        sortPoints(state);
 
         // Set up OptiX state
         setupOptiX(state);
