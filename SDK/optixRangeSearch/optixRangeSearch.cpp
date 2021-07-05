@@ -131,6 +131,7 @@ struct WhittedState
     bool                        toGather                  = false;
     bool                        reorderPoints             = false;
     bool                        isShuffle                 = false;
+    bool                        samepq                    = true;
 
     float3                      Min;
     float3                      Max;
@@ -286,27 +287,30 @@ void uploadPoints ( WhittedState& state ) {
       state.stream
   ) );
 
-  // by default, params.queries and params.points point to the same device
-  // memory. later if we decide to reorder the queries, we will allocate new
-  // space in device memory and point params.queries to that space. this is
-  // lazy query allocation.
-  state.params.queries = state.params.points;
-
-  // below is what we need to do if queries and points are separate, or if we
-  // want to presort points not the queries.
-  //state.h_queries = (float3*)malloc(state.params.numPrims * sizeof(float3));
-  //std::copy(state.h_points, state.h_points + state.params.numPrims, state.h_queries);
-  //CUDA_CHECK( cudaMalloc(
-  //    reinterpret_cast<void**>( &state.params.queries),
-  //    state.params.numPrims * sizeof(float3) ) );
-  //
-  //CUDA_CHECK( cudaMemcpyAsync(
-  //    reinterpret_cast<void*>( state.params.queries ),
-  //    state.h_queries,
-  //    state.params.numPrims * sizeof(float3),
-  //    cudaMemcpyHostToDevice,
-  //    state.stream
-  //) );
+  if (state.samepq) {
+    // by default, params.queries and params.points point to the same device
+    // memory. later if we decide to reorder the queries, we will allocate new
+    // space in device memory and point params.queries to that space. this is
+    // lazy query allocation.
+    state.params.queries = state.params.points;
+  } else {
+    // below is what we need to do if queries and points are separate, or if we
+    // want to presort points not the queries.
+    // TODO: lots of assertions need to change
+    state.h_queries = (float3*)malloc(state.params.numPrims * sizeof(float3));
+    std::copy(state.h_points, state.h_points + state.params.numPrims, state.h_queries);
+    CUDA_CHECK( cudaMalloc(
+        reinterpret_cast<void**>( &state.params.queries),
+        state.params.numPrims * sizeof(float3) ) );
+    
+    CUDA_CHECK( cudaMemcpyAsync(
+        reinterpret_cast<void*>( state.params.queries ),
+        state.h_queries,
+        state.params.numPrims * sizeof(float3),
+        cudaMemcpyHostToDevice,
+        state.stream
+    ) );
+  }
 }
 
 void initLaunchParams( WhittedState& state )
@@ -1145,6 +1149,7 @@ void computeMinMax(WhittedState& state)
   h_MinMax = d_MinMax;
 
   // minCell encloses the scene but maxCell doesn't (floor and int in the kernel) so increment by 1 to enclose the scene.
+  // TODO: consider minus 1 fro minCell too to avoid the numerical precision issue
   int3 minCell = h_MinMax[0];
   int3 maxCell = h_MinMax[1] + make_int3(1, 1, 1);
  
@@ -1156,7 +1161,8 @@ void computeMinMax(WhittedState& state)
   state.Max.y = maxCell.y * state.params.radius;
   state.Max.z = maxCell.z * state.params.radius;
 
-  fprintf(stdout, "scene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
+  //fprintf(stdout, "cell boundary: (%d, %d, %d), (%d, %d, %d)\n", minCell.x, minCell.y, minCell.z, maxCell.x, maxCell.y, maxCell.z);
+  //fprintf(stdout, "scene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
 }
 
 void gridSort(WhittedState& state, bool morton) {
@@ -1250,7 +1256,7 @@ void gridSort(WhittedState& state, bool morton) {
   // TODO: do this in a stream
   thrust::device_ptr<float3> d_queries_ptr = thrust::device_pointer_cast(state.params.queries);
   thrust::copy(d_queries_ptr, d_queries_ptr + state.params.numPrims, state.h_queries);
-  assert(state.h_points == state.h_queries);
+  //assert(state.h_points == state.h_queries);
 
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
@@ -1411,8 +1417,8 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
               device_id
               );
 
-      assert(state.h_queries == state.h_points);
-      assert(state.params.points == state.params.queries);
+      //assert(state.h_queries == state.h_points);
+      //assert(state.params.points == state.params.queries);
       assert(state.params.d_r2q_map == nullptr);
       launchSubframe( output_buffer, state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
@@ -1498,8 +1504,8 @@ sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int
             device_id
             );
 
-    assert(state.h_points == state.h_queries);
-    assert(state.params.points == state.params.queries);
+    //assert(state.h_points == state.h_queries);
+    //assert(state.params.points == state.params.queries);
     assert(state.params.d_r2q_map == nullptr);
 
     launchSubframe( *output_buffer, state );
