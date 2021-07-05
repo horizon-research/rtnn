@@ -127,7 +127,7 @@ void kComputeMinMax (unsigned int numOfBlocks, unsigned int threadsPerBlock, flo
       );
 }
 
-void kInsertParticles_Morton(unsigned int numOfBlocks, unsigned int threadsPerBlock, GridInfo gridInfo, float3* points, unsigned int* d_ParticleCellIndices, unsigned int* d_CellParticleCounts, unsigned int* d_TempSortIndices, bool morton) {
+void kInsertParticles(unsigned int numOfBlocks, unsigned int threadsPerBlock, GridInfo gridInfo, float3* points, unsigned int* d_ParticleCellIndices, unsigned int* d_CellParticleCounts, unsigned int* d_TempSortIndices, bool morton) {
   if (morton) {
     kInsertParticles_Morton <<<numOfBlocks, threadsPerBlock>>> (
         gridInfo,
