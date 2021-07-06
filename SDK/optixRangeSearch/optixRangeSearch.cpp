@@ -178,7 +178,7 @@ void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, u
 void computeMinMax(WhittedState&, ParticleType);
 void gridSort(WhittedState&, ParticleType, bool);
 
-void read_pc_data(const char* data_file, unsigned int* N, float3** points) {
+float3* read_pc_data(const char* data_file, unsigned int* N) {
   std::ifstream file;
 
   file.open(data_file);
@@ -209,9 +209,9 @@ void read_pc_data(const char* data_file, unsigned int* N, float3** points) {
     lines++;
   }
 
-  *points = t_points;
-
   file.close();
+
+  return t_points;
 }
 
 void printUsageAndExit( const char* argv0 )
@@ -294,11 +294,6 @@ void uploadData ( WhittedState& state ) {
       // lazy query allocation.
       state.params.queries = state.params.points;
     } else {
-      // below is what we need to do if queries and points are separate, or if we
-      // want to presort points not the queries.
-      // TODO: lots of assertions need to change
-      state.h_queries = (float3*)malloc(state.numQueries * sizeof(float3));
-      std::copy(state.h_points, state.h_points + state.numQueries, state.h_queries); // TODO this needs fixing
       CUDA_CHECK( cudaMalloc(
           reinterpret_cast<void**>( &state.params.queries),
           state.numQueries * sizeof(float3) ) );
@@ -311,6 +306,7 @@ void uploadData ( WhittedState& state ) {
           state.stream
       ) );
     }
+    CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
 }
 
@@ -922,9 +918,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
   Timing::stopTiming(true);
   
   Timing::startTiming("gas-sort queries");
-    //CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
     // TODO: do thrust work in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
-
     // first use a gather to generate the keys, then sort by keys
     gatherByKey(d_firsthit_idx_ptr, &d_orig_points_1d, d_key_ptr, state.numQueries);
     sortByKey( d_key_ptr, d_r2q_map_ptr, state.numQueries );
@@ -1190,7 +1184,7 @@ void computeMinMax(WhittedState& state, ParticleType type)
   h_MinMax = d_MinMax;
 
   // minCell encloses the scene but maxCell doesn't (floor and int in the kernel) so increment by 1 to enclose the scene.
-  // TODO: consider minus 1 fro minCell too to avoid the numerical precision issue
+  // TODO: consider minus 1 for minCell too to avoid the numerical precision issue
   int3 minCell = h_MinMax[0];
   int3 maxCell = h_MinMax[1] + make_int3(1, 1, 1);
  
@@ -1242,7 +1236,7 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
   gridInfo.GridDelta.y = gridInfo.GridDimension.y / gridSize.y;
   gridInfo.GridDelta.z = gridInfo.GridDimension.z / gridSize.z;
 
-  // TODO: revisit this later. morton code can only be correctly calcuated for a cubic, where each dimension is of the same size;
+  // TODO: revisit this later. morton code can only be correctly calcuated for a cubic, where each dimension is of the same size.
   gridInfo.meta_grid_dim = std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z});
   gridInfo.meta_grid_size = gridInfo.meta_grid_dim * gridInfo.meta_grid_dim * gridInfo.meta_grid_dim;
 
@@ -1330,7 +1324,7 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
 void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
   if (!sortMode) return;
 
-  // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host
+  // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.
   std::string typeName = ((type == POINT) ? "points" : "queries");
   Timing::startTiming("sort " + typeName);
     if (sortMode == 3) {
@@ -1482,12 +1476,12 @@ sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int
 }
 
 void readData(WhittedState& state) {
-  read_pc_data(state.pfile.c_str(), &state.numPoints, &state.h_points);
+  state.h_points = read_pc_data(state.pfile.c_str(), &state.numPoints);
   state.numQueries = state.numPoints;
   state.h_queries = state.h_points;
 
   if (!state.qfile.empty()) {
-    read_pc_data(state.qfile.c_str(), &state.numQueries, &state.h_queries);
+    state.h_queries = read_pc_data(state.qfile.c_str(), &state.numQueries);
     // overwrite the samepq option from commandline
     state.samepq = false;
   }
@@ -1505,6 +1499,7 @@ int main( int argc, char* argv[] )
 
   std::cout << "========================================" << std::endl;
   std::cout << "numPoints: " << state.numPoints << std::endl;
+  std::cout << "numQueries: " << state.numQueries << std::endl;
   std::cout << "radius: " << state.params.radius << std::endl;
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
