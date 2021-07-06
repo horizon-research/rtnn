@@ -123,7 +123,8 @@ struct WhittedState
     float3*                     h_queries                 = nullptr;
     unsigned int*               d_r2q_map                 = nullptr;
 
-    std::string                 outfile;
+    std::string                 pfile;
+    std::string                 qfile;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
@@ -178,7 +179,7 @@ void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, u
 void computeMinMax(WhittedState&, ParticleType);
 void gridSort(WhittedState&, ParticleType, bool);
 
-float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
+void read_pc_data(const char* data_file, unsigned int* N, float3** points, bool isShuffle ) {
   std::ifstream file;
 
   file.open(data_file);
@@ -197,7 +198,7 @@ float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
   file.seekg(0, std::ios::beg);
   *N = lines;
 
-  float3* points = new float3[lines];
+  float3* t_points = new float3[lines];
 
   if (isShuffle) {
     std::vector<float3> vpoints;
@@ -215,7 +216,7 @@ float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
 
     unsigned int i = 0;
     for (std::vector<float3>::iterator it = vpoints.begin(); it != vpoints.end(); it++) {
-      points[i++] = *it;
+      t_points[i++] = *it;
     }
   } else {
     std::vector<float3> vpoints;
@@ -224,15 +225,15 @@ float3* read_pc_data(const char* data_file, unsigned int* N, bool isShuffle ) {
       double x, y, z;
 
       sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
-      points[lines] = make_float3(x, y, z);
-      //std::cerr << points[lines].x << ", " << points[lines].y << ", " << points[lines].z << std::endl;
+      t_points[lines] = make_float3(x, y, z);
+      //std::cerr << t_points[lines].x << ", " << t_points[lines].y << ", " << t_points[lines].z << std::endl;
       lines++;
     }
   }
 
-  file.close();
+  *points = t_points;
 
-  return points;
+  file.close();
 }
 
 void printUsageAndExit( const char* argv0 )
@@ -296,7 +297,6 @@ void oneDSort ( WhittedState& state, ParticleType type ) {
 void uploadData ( WhittedState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
-
     CUDA_CHECK( cudaMalloc(
         reinterpret_cast<void**>( &state.params.points ),
         state.numPoints * sizeof(float3) ) );
@@ -1083,11 +1083,17 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       {
           printUsageAndExit( argv[0] );
       }
-      else if( arg == "--file" || arg == "-f" )
+      else if( arg == "--pfile" || arg == "-f" )
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.outfile = argv[++i];
+          state.pfile = argv[++i];
+      }
+      else if( arg == "--qfile" || arg == "-q" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.qfile = argv[++i];
       }
       else if( arg == "--knn" || arg == "-k" )
       {
@@ -1100,6 +1106,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.params.radius = std::stof(argv[++i]);
+      }
+      else if( arg == "--samepq" || arg == "-spq" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.samepq = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--qgassort" || arg == "-s" )
       {
@@ -1497,88 +1509,94 @@ sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int
   return output_buffer;
 }
 
+void readData(WhittedState& state) {
+  read_pc_data(state.pfile.c_str(), &state.numPoints, &state.h_points, state.isShuffle);
+  state.numQueries = state.numPoints;
+  state.h_queries = state.h_points;
+
+  if (!state.qfile.empty()) {
+    read_pc_data(state.qfile.c_str(), &state.numQueries, &state.h_queries, state.isShuffle);
+    // overwrite the samepq option from commandline
+    state.samepq = false;
+  }
+}
+
 int main( int argc, char* argv[] )
 {
-    WhittedState state;
-    state.params.radius = 2;
-    state.params.knn = 50;
+  WhittedState state;
+  state.params.radius = 2;
+  state.params.knn = 50;
 
-    parseArgs( state, argc, argv );
+  parseArgs( state, argc, argv );
 
-    // read points
-    state.h_points = read_pc_data(state.outfile.c_str(), &state.numPoints, state.isShuffle);
+  readData(state);
 
-    state.numQueries = state.numPoints;
-    state.h_queries = state.h_points;
-    // TODO: fix this
-    state.samepq = true;
+  std::cout << "========================================" << std::endl;
+  std::cout << "numPoints: " << state.numPoints << std::endl;
+  std::cout << "radius: " << state.params.radius << std::endl;
+  std::cout << "K: " << state.params.knn << std::endl;
+  std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
+  std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
+  std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
+  std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
+  std::cout << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2
+  std::cout << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when qGasSortMode != 0
+  std::cout << "Gather? " << std::boolalpha << state.toGather << std::endl;
+  std::cout << "reorderPoints? " << std::boolalpha << state.reorderPoints << std::endl; // only useful under samepq and toGather
+  //std::cout << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
+  std::cout << "========================================" << std::endl << std::endl;
 
-    std::cout << "========================================" << std::endl;
-    std::cout << "numPoints: " << state.numPoints << std::endl;
-    std::cout << "radius: " << state.params.radius << std::endl;
-    std::cout << "K: " << state.params.knn << std::endl;
-    std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
-    std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
-    std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
-    std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
-    std::cout << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2
-    std::cout << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when qGasSortMode != 0
-    std::cout << "Gather? " << std::boolalpha << state.toGather << std::endl;
-    std::cout << "reorderPoints? " << std::boolalpha << state.reorderPoints << std::endl; // only useful under samepq and toGather
-    //std::cout << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
-    std::cout << "========================================" << std::endl << std::endl;
+  try
+  {
+    // Set up CUDA device and stream
+    int32_t device_id = 1;
+    setupCUDA(state, device_id);
 
-    try
-    {
-      // Set up CUDA device and stream
-      int32_t device_id = 1;
-      setupCUDA(state, device_id);
+    Timing::reset();
 
-      Timing::reset();
+    uploadData(state);
+    sortParticles(state, POINT, state.pointSortMode);
 
-      uploadData(state);
-      sortParticles(state, POINT, state.pointSortMode);
+    // Set up OptiX state, which includes creating the GAS (using the current order of points).
+    setupOptiX(state);
 
-      // Set up OptiX state, which includes creating the GAS (using the current order of points).
-      setupOptiX(state);
+    initLaunchParams( state );
 
-      initLaunchParams( state );
+    // when samepq, queries are sorted using the point sort mode.
+    if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
 
-      // when samepq, queries are sorted using the point sort mode.
-      if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
+    if (!state.qGasSortMode) {
+      nonsortedSearch(state, device_id);
+    } else {
+      // Initial traversal (to sort the queries)
+      sutil::CUDAOutputBuffer<unsigned int>* init_res_buffer = initialTraversal(state, device_id);
+      thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(init_res_buffer->getDevicePointer());
+      assert(init_res_buffer != nullptr);
 
-      if (!state.qGasSortMode) {
-        nonsortedSearch(state, device_id);
-      } else {
-        // Initial traversal (to sort the queries)
-        sutil::CUDAOutputBuffer<unsigned int>* init_res_buffer = initialTraversal(state, device_id);
-        thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(init_res_buffer->getDevicePointer());
-        assert(init_res_buffer != nullptr);
+      // Sort the queries
+      thrust::device_ptr<unsigned int> d_indices_ptr;
+      if (state.qGasSortMode == 1)
+        d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr);
+      else if (state.qGasSortMode == 2)
+        d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr);
+      else assert(0);
+      delete init_res_buffer; // calls the CUDAOutputBuffer destructor.
 
-        // Sort the queries
-        thrust::device_ptr<unsigned int> d_indices_ptr;
-        if (state.qGasSortMode == 1)
-          d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr);
-        else if (state.qGasSortMode == 2)
-          d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr);
-        else assert(0);
-        delete init_res_buffer; // calls the CUDAOutputBuffer destructor.
-
-        if (state.toGather) {
-          gatherQueries( state, d_indices_ptr );
-        }
-
-        // Actual traversal with sorted queries
-        searchTraversal(state, device_id);
+      if (state.toGather) {
+        gatherQueries( state, d_indices_ptr );
       }
 
-      cleanupState( state );
-    }
-    catch( std::exception& e )
-    {
-        std::cerr << "Caught exception: " << e.what() << "\n";
-        return 1;
+      // Actual traversal with sorted queries
+      searchTraversal(state, device_id);
     }
 
-    return 0;
+    cleanupState( state );
+  }
+  catch( std::exception& e )
+  {
+      std::cerr << "Caught exception: " << e.what() << "\n";
+      return 1;
+  }
+
+  return 0;
 }
