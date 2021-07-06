@@ -172,7 +172,7 @@ thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 
-void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, float, int3*, int3*);
+void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
 void computeMinMax(WhittedState&, ParticleType);
@@ -1162,7 +1162,7 @@ void computeMinMax(WhittedState& state, ParticleType type)
     particles = state.params.queries;
   }
 
-  // TODO: change these to unit3 since gridInfo.GridDimension is unit3
+  // TODO: maybe use long since we are going to convert a float to its floor value?
   thrust::host_vector<int3> h_MinMax(2);
   h_MinMax[0] = make_int3(std::numeric_limits<int>().max(), std::numeric_limits<int>().max(), std::numeric_limits<int>().max());
   h_MinMax[1] = make_int3(std::numeric_limits<int>().min(), std::numeric_limits<int>().min(), std::numeric_limits<int>().min());
@@ -1176,7 +1176,6 @@ void computeMinMax(WhittedState& state, ParticleType type)
                  threadsPerBlock,
                  particles,
                  N,
-                 state.params.radius, // TODO: we don't really need radius here.
                  thrust::raw_pointer_cast(&d_MinMax[0]),
                  thrust::raw_pointer_cast(&d_MinMax[1])
                  );
@@ -1188,13 +1187,13 @@ void computeMinMax(WhittedState& state, ParticleType type)
   int3 minCell = h_MinMax[0];
   int3 maxCell = h_MinMax[1] + make_int3(1, 1, 1);
  
-  state.Min.x = minCell.x * state.params.radius;
-  state.Min.y = minCell.y * state.params.radius;
-  state.Min.z = minCell.z * state.params.radius;
+  state.Min.x = minCell.x;
+  state.Min.y = minCell.y;
+  state.Min.z = minCell.z;
  
-  state.Max.x = maxCell.x * state.params.radius;
-  state.Max.y = maxCell.y * state.params.radius;
-  state.Max.z = maxCell.z * state.params.radius;
+  state.Max.x = maxCell.x;
+  state.Max.y = maxCell.y;
+  state.Max.z = maxCell.z;
 
   //fprintf(stdout, "\tcell boundary: (%d, %d, %d), (%d, %d, %d)\n", minCell.x, minCell.y, minCell.z, maxCell.x, maxCell.y, maxCell.z);
   //fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
@@ -1452,7 +1451,6 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 }
 
 sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int32_t device_id) {
-
   Timing::startTiming("initial traversal");
     state.params.limit = 1;
     sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
@@ -1476,12 +1474,20 @@ sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int
 }
 
 void readData(WhittedState& state) {
+  // p and q files being the same dones't mean samepq have to be true. we can
+  // still set it to be false to evaluate different reordering policies on
+  // points and queries separately.
   state.h_points = read_pc_data(state.pfile.c_str(), &state.numPoints);
   state.numQueries = state.numPoints;
-  state.h_queries = state.h_points;
+  if (state.samepq) state.h_queries = state.h_points;
+  else {
+    state.h_queries = (float3*)malloc(state.numQueries * sizeof(float3));
+    thrust::copy(state.h_points, state.h_points+state.numQueries, state.h_queries);
+  }
 
   if (!state.qfile.empty()) {
     state.h_queries = read_pc_data(state.qfile.c_str(), &state.numQueries);
+    assert(state.h_points != state.h_queries);
     // overwrite the samepq option from commandline
     state.samepq = false;
   }

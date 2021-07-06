@@ -25,7 +25,6 @@ inline __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridInfo, int3
 __global__ void kComputeMinMax(
   const float3 *particles,
   unsigned int particleCount,
-  float searchRadius,
   int3 *minCell,
   int3 *maxCell
 )
@@ -35,9 +34,11 @@ __global__ void kComputeMinMax(
   const float3 particle = particles[particleIndex];
 
   int3 cell;
-  cell.x = (int)floorf(particle.x / searchRadius);
-  cell.y = (int)floorf(particle.y / searchRadius);
-  cell.z = (int)floorf(particle.z / searchRadius);
+  // convert float to int since atomicMin/Max has no native float version
+  // TODO: mind the float to int conversion issue
+  cell.x = (int)floorf(particle.x); // floorf returns a float
+  cell.y = (int)floorf(particle.y);
+  cell.z = (int)floorf(particle.z);
 
   atomicMin(&(minCell->x), cell.x);
   atomicMin(&(minCell->y), cell.y);
@@ -117,11 +118,10 @@ __global__ void kCountingSortIndices(
 
 
 /* CPU code */
-void kComputeMinMax (unsigned int numOfBlocks, unsigned int threadsPerBlock, float3* points, unsigned int numPrims, float radius, int3* d_MinMax_0, int3* d_MinMax_1) {
+void kComputeMinMax (unsigned int numOfBlocks, unsigned int threadsPerBlock, float3* points, unsigned int numPrims, int3* d_MinMax_0, int3* d_MinMax_1) {
   kComputeMinMax <<<numOfBlocks, threadsPerBlock>>> (
       points,
       numPrims,
-      radius,
       d_MinMax_0,
       d_MinMax_1
       );
