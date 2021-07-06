@@ -132,7 +132,6 @@ struct WhittedState
     float                       sortingGAS                = 1;
     bool                        toGather                  = false;
     bool                        reorderPoints             = false;
-    bool                        isShuffle                 = false;
     bool                        samepq                    = false;
 
     unsigned int                numPoints                 = 0;
@@ -179,7 +178,7 @@ void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, u
 void computeMinMax(WhittedState&, ParticleType);
 void gridSort(WhittedState&, ParticleType, bool);
 
-void read_pc_data(const char* data_file, unsigned int* N, float3** points, bool isShuffle ) {
+void read_pc_data(const char* data_file, unsigned int* N, float3** points) {
   std::ifstream file;
 
   file.open(data_file);
@@ -200,35 +199,14 @@ void read_pc_data(const char* data_file, unsigned int* N, float3** points, bool 
 
   float3* t_points = new float3[lines];
 
-  if (isShuffle) {
-    std::vector<float3> vpoints;
+  lines = 0;
+  while (file.getline(line, 1024)) {
+    double x, y, z;
 
-    while (file.getline(line, 1024)) {
-      double x, y, z;
-
-      sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
-      vpoints.push_back(make_float3(x, y, z));
-    }
-    unsigned seed = std::chrono::system_clock::now()
-                        .time_since_epoch()
-                        .count();
-    std::shuffle(std::begin(vpoints), std::end(vpoints), std::default_random_engine(seed));
-
-    unsigned int i = 0;
-    for (std::vector<float3>::iterator it = vpoints.begin(); it != vpoints.end(); it++) {
-      t_points[i++] = *it;
-    }
-  } else {
-    std::vector<float3> vpoints;
-    lines = 0;
-    while (file.getline(line, 1024)) {
-      double x, y, z;
-
-      sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
-      t_points[lines] = make_float3(x, y, z);
-      //std::cerr << t_points[lines].x << ", " << t_points[lines].y << ", " << t_points[lines].z << std::endl;
-      lines++;
-    }
+    sscanf(line, "%lf,%lf,%lf\n", &x, &y, &z);
+    t_points[lines] = make_float3(x, y, z);
+    //std::cerr << t_points[lines].x << ", " << t_points[lines].y << ", " << t_points[lines].z << std::endl;
+    lines++;
   }
 
   *points = t_points;
@@ -1157,12 +1135,6 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if (state.sortingGAS <= 0)
               printUsageAndExit( argv[0] );
       }
-      else if( arg == "--shuffle" || arg == "-sf" )
-      {
-          if( i >= argc - 1 )
-              printUsageAndExit( argv[0] );
-          state.isShuffle = (bool)(atoi(argv[++i]));
-      }
       else
       {
           std::cerr << "Unknown option '" << argv[i] << "'\n";
@@ -1510,12 +1482,12 @@ sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int
 }
 
 void readData(WhittedState& state) {
-  read_pc_data(state.pfile.c_str(), &state.numPoints, &state.h_points, state.isShuffle);
+  read_pc_data(state.pfile.c_str(), &state.numPoints, &state.h_points);
   state.numQueries = state.numPoints;
   state.h_queries = state.h_points;
 
   if (!state.qfile.empty()) {
-    read_pc_data(state.qfile.c_str(), &state.numQueries, &state.h_queries, state.isShuffle);
+    read_pc_data(state.qfile.c_str(), &state.numQueries, &state.h_queries);
     // overwrite the samepq option from commandline
     state.samepq = false;
   }
@@ -1543,7 +1515,6 @@ int main( int argc, char* argv[] )
   std::cout << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when qGasSortMode != 0
   std::cout << "Gather? " << std::boolalpha << state.toGather << std::endl;
   std::cout << "reorderPoints? " << std::boolalpha << state.reorderPoints << std::endl; // only useful under samepq and toGather
-  //std::cout << "Shuffle? " << std::boolalpha << state.isShuffle << std::endl;
   std::cout << "========================================" << std::endl << std::endl;
 
   try
