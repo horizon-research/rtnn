@@ -76,13 +76,6 @@
 
 const int         max_trace = 12;
 
-//------------------------------------------------------------------------------
-//
-// Local types
-// TODO: some of these should move to sutil or optix util header
-//
-//------------------------------------------------------------------------------
-
 template <typename T>
 struct Record
 {
@@ -95,8 +88,6 @@ struct Record
 typedef Record<GeomData>        RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
-
-const uint32_t OBJ_COUNT = 4;
 
 struct WhittedState
 {
@@ -912,9 +903,9 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     }
     thrust::device_vector<float> d_orig_points_1d = h_orig_points_1d;
 
-    // initialize a sequence to be sorted, which will become the r2q map
+    // initialize a sequence to be sorted, which will become the r2q map.
+    // TODO: need to free this.
     thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.numQueries);
-    // TODO: need to free this
   Timing::stopTiming(true);
   
   Timing::startTiming("gas-sort queries");
@@ -1235,7 +1226,9 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
   gridInfo.GridDelta.y = gridInfo.GridDimension.y / gridSize.y;
   gridInfo.GridDelta.z = gridInfo.GridDimension.z / gridSize.z;
 
-  // TODO: revisit this later. morton code can only be correctly calcuated for a cubic, where each dimension is of the same size.
+  // morton code can only be correctly calcuated for a cubic, where each
+  // dimension is of the same size. currently we generate the largely meta_grid
+  // possible, which would divice the entire grid into multiple meta grids.
   gridInfo.meta_grid_dim = std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z});
   gridInfo.meta_grid_size = gridInfo.meta_grid_dim * gridInfo.meta_grid_dim * gridInfo.meta_grid_dim;
 
@@ -1421,6 +1414,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
               device_id
               );
 
+      // TODO: this is just awkward. maybe we should just get rid of the gather mode and directl assign to params.d_r2q_map.
       assert(state.params.d_r2q_map == nullptr);
       // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
@@ -1541,6 +1535,7 @@ int main( int argc, char* argv[] )
       nonsortedSearch(state, device_id);
     } else {
       // Initial traversal (to sort the queries)
+      // TODO: maybe just use thrust::device_vector for this buffer?
       sutil::CUDAOutputBuffer<unsigned int>* init_res_buffer = initialTraversal(state, device_id);
       thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(init_res_buffer->getDevicePointer());
       assert(init_res_buffer != nullptr);
