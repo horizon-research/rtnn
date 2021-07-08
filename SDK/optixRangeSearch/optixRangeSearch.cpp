@@ -26,10 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <glad/glad.h> // Needs to be included before gl_interop
-
 #include <cuda_runtime.h>
-#include <cuda_gl_interop.h>
 
 #include <optix.h>
 #include <optix_function_table_definition.h>
@@ -39,10 +36,7 @@
 #include <sampleConfig.h>
 
 #include <sutil/Camera.h>
-#include <sutil/Trackball.h>
-#include <sutil/CUDAOutputBuffer.h>
 #include <sutil/Exception.h>
-#include <sutil/GLDisplay.h>
 #include <sutil/Matrix.h>
 #include <sutil/sutil.h>
 #include <sutil/vec_math.h>
@@ -786,15 +780,12 @@ void createContext( WhittedState& state )
     state.context = context;
 }
 
-void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, WhittedState& state )
+void launchSubframe( unsigned int* output_buffer, WhittedState& state )
 {
-    unsigned int* result_buffer_data = output_buffer.getDevicePointer();
-    state.params.frame_buffer = result_buffer_data;
+    state.params.frame_buffer = output_buffer;
 
-    // need to manually set the cuda-malloced device memory. note the semantics
-    // of cudamemset: it sets #count number of BYTES to value; literally think
-    // about what each byte has to be.
-    CUDA_CHECK( cudaMemsetAsync ( result_buffer_data, 0xFF,
+    // note cudamemset sets #count number of BYTES to value.
+    CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,
                                   state.numQueries * state.params.limit * sizeof(unsigned int),
                                   state.stream ) );
 
@@ -815,12 +806,10 @@ void launchSubframe( sutil::CUDAOutputBuffer<unsigned int>& output_buffer, Whitt
         sizeof( Params ),
         &state.sbt,
         state.numQueries, // launch width
-        1,                     // launch height
-        1                      // launch depth
+        1,                // launch height
+        1                 // launch depth
     ) );
-    //output_buffer.unmap();
-    // TODO: quick hack; if the first traversal, will sync stream before sort
-    //if (state.params.limit != 1) CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
+    // leave sync to the caller.
     //CUDA_SYNC_CHECK();
 }
 
@@ -1361,17 +1350,12 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
   Timing::startTiming("total search time");
     Timing::startTiming("search compute");
       state.params.limit = state.params.knn;
-      sutil::CUDAOutputBuffer<unsigned int> output_buffer(
-              sutil::CUDAOutputBufferType::CUDA_DEVICE,
-              state.numQueries * state.params.limit,
-              1,
-              device_id
-              );
+      thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
       assert((state.h_queries == state.h_points) ^ !state.samepq);
       assert((state.params.points == state.params.queries) ^ !state.samepq);
       assert(state.params.d_r2q_map == nullptr);
-      launchSubframe( output_buffer, state );
+      launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
     Timing::stopTiming(true);
 
@@ -1380,9 +1364,10 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
       void* data;
       cudaMallocHost(reinterpret_cast<void**>(&data), state.numQueries * state.params.limit * sizeof(unsigned int));
 
+      // TODO: can a thrust copy
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
-                      output_buffer.getDevicePointer(),
+                      thrust::raw_pointer_cast(output_buffer),
                       state.numQueries * state.params.limit * sizeof(unsigned int),
                       cudaMemcpyDeviceToHost,
                       state.stream
@@ -1393,6 +1378,7 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
 
   sanityCheck( state, data );
   CUDA_CHECK( cudaFreeHost(data) );
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
 void searchTraversal(WhittedState& state, int32_t device_id) {
@@ -1406,20 +1392,14 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 
     Timing::startTiming("search compute");
       state.params.limit = state.params.knn;
-      sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
-          new sutil::CUDAOutputBuffer<unsigned int>(
-              sutil::CUDAOutputBufferType::CUDA_DEVICE,
-              state.numQueries * state.params.limit,
-              1,
-              device_id
-              );
+      thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
       // TODO: this is just awkward. maybe we should just get rid of the gather mode and directl assign to params.d_r2q_map.
       assert(state.params.d_r2q_map == nullptr);
       // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
 
-      launchSubframe( *output_buffer, state );
+      launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
     Timing::stopTiming(true);
 
@@ -1429,7 +1409,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
-                      output_buffer->getDevicePointer(),
+                      thrust::raw_pointer_cast(output_buffer),
                       state.numQueries * state.params.limit * sizeof(unsigned int),
                       cudaMemcpyDeviceToHost,
                       state.stream
@@ -1440,26 +1420,19 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 
   sanityCheck( state, data );
   CUDA_CHECK( cudaFreeHost(data) );
-
-  delete output_buffer; // calls the CUDAOutputBuffer destructor.
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
-sutil::CUDAOutputBuffer<unsigned int>* initialTraversal(WhittedState& state, int32_t device_id) {
+thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t device_id) {
   Timing::startTiming("initial traversal");
     state.params.limit = 1;
-    sutil::CUDAOutputBuffer<unsigned int>* output_buffer = 
-        new sutil::CUDAOutputBuffer<unsigned int>(
-            sutil::CUDAOutputBufferType::CUDA_DEVICE,
-            state.numQueries * state.params.limit,
-            1,
-            device_id
-            );
+    thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
     assert((state.h_queries == state.h_points) ^ !state.samepq);
     assert((state.params.points == state.params.queries) ^ !state.samepq);
     assert(state.params.d_r2q_map == nullptr);
 
-    launchSubframe( *output_buffer, state );
+    launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
     // TODO: could delay this until sort, but initial traversal is lightweight anyways
     CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
   Timing::stopTiming(true);
@@ -1535,10 +1508,7 @@ int main( int argc, char* argv[] )
       nonsortedSearch(state, device_id);
     } else {
       // Initial traversal (to sort the queries)
-      // TODO: maybe just use thrust::device_vector for this buffer?
-      sutil::CUDAOutputBuffer<unsigned int>* init_res_buffer = initialTraversal(state, device_id);
-      thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = thrust::device_pointer_cast(init_res_buffer->getDevicePointer());
-      assert(init_res_buffer != nullptr);
+      thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = initialTraversal(state, device_id);
 
       // Sort the queries
       thrust::device_ptr<unsigned int> d_indices_ptr;
@@ -1547,7 +1517,7 @@ int main( int argc, char* argv[] )
       else if (state.qGasSortMode == 2)
         d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr);
       else assert(0);
-      delete init_res_buffer; // calls the CUDAOutputBuffer destructor.
+      CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_firsthit_idx_ptr) ) );
 
       if (state.toGather) {
         gatherQueries( state, d_indices_ptr );
