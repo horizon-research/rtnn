@@ -386,75 +386,7 @@ static void buildGas(
     }
 }
 
-void createSortingGeometry( WhittedState &state, float sortingGAS )
-{
-    // TODO: we might want to create a simple GAS for sorting queries, but need
-    // to weight the trade-off between the overhead of creating the GAS and the
-    // time saved from traversing a simpler GAS. Right now seems like creating
-    // geometry is quite heavy, whereas the inital traversal (for sorting) is
-    // quite lightweight.
-
-    // Build Custom Primitives
-
-    unsigned int numPrims = state.numPoints;
-    // Load AABB into device memory
-    OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
-    CUdeviceptr d_aabb;
-
-    float newRadius = state.params.radius/sortingGAS;
-    for(unsigned int i = 0; i < numPrims; i++) {
-      sphere_bound(
-          state.h_points[i], newRadius,
-          reinterpret_cast<float*>(&aabb[i]));
-    }
-
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-        ), numPrims* sizeof( OptixAabb ) ) );
-    CUDA_CHECK( cudaMemcpyAsync(
-                reinterpret_cast<void*>( d_aabb ),
-                aabb,
-                numPrims * sizeof( OptixAabb ),
-                cudaMemcpyHostToDevice,
-                state.stream
-    ) );
-
-    // Setup AABB build input
-    uint32_t* aabb_input_flags = (uint32_t*)malloc(numPrims * sizeof(uint32_t));
-
-    for (unsigned int i = 0; i < numPrims; i++) {
-      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
-    }
-
-    OptixBuildInput aabb_input = {};
-    aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-    aabb_input.customPrimitiveArray.aabbBuffers   = &d_aabb;
-    aabb_input.customPrimitiveArray.flags         = aabb_input_flags;
-    aabb_input.customPrimitiveArray.numSbtRecords = 1;
-    aabb_input.customPrimitiveArray.numPrimitives = numPrims;
-    // it's important to pass 0 to sbtIndexOffsetBuffer
-    aabb_input.customPrimitiveArray.sbtIndexOffsetBuffer         = 0;
-    aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
-    aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
-
-
-    OptixAccelBuildOptions accel_options = {
-        OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
-        OPTIX_BUILD_OPERATION_BUILD         // operation
-    };
-
-
-    buildGas(
-        state,
-        accel_options,
-        aabb_input,
-        state.gas_handle,
-        state.d_gas_output_buffer);
-
-    CUDA_CHECK( cudaFree( (void*)d_aabb) );
-}
-
-void createGeometry( WhittedState &state )
+void createGeometry( WhittedState &state, float sortingGAS )
 {
     //
     // Build Custom Primitives
@@ -465,9 +397,17 @@ void createGeometry( WhittedState &state )
     OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
     CUdeviceptr d_aabb;
 
+    // Create an AABB whose volume is the same as the sphere
+    //double sphere_volume = 4 / 3 * M_PI * state.params.radius * state.params.radius * state.params.radius;
+    //double halfLength = std::cbrt(sphere_volume / 8);
+    //std::cout << "\tAABB half length: " << halfLength << std::endl;
+    //float radius = halfLength;
+
+    float radius = state.params.radius/sortingGAS;
+
     for(unsigned int i = 0; i < numPrims; i++) {
       sphere_bound(
-          state.h_points[i], state.params.radius,
+          state.h_points[i], radius,
           reinterpret_cast<float*>(&aabb[i]));
     }
 
@@ -1331,10 +1271,7 @@ void setupOptiX( WhittedState& state ) {
 
   // creating GAS can be done async with the rest two.
   Timing::startTiming("create and upload geometry");
-    if (!state.qGasSortMode)
-      createGeometry ( state );
-    else
-      createSortingGeometry ( state, state.sortingGAS );
+    createGeometry ( state, state.sortingGAS );
   Timing::stopTiming(true);
  
   Timing::startTiming("create pipeline");
@@ -1383,9 +1320,10 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
 
 void searchTraversal(WhittedState& state, int32_t device_id) {
   Timing::startTiming("total search time");
+    // create a new GAS if the sorting GAS is different, but we reordered points using the query order
     if ( (state.sortingGAS != 1) || (state.samepq && state.toGather && state.reorderPoints) ) {
       Timing::startTiming("create search GAS");
-        createGeometry ( state );
+        createGeometry ( state, 1.0 );
         CUDA_CHECK( cudaStreamSynchronize( state.stream ) );
       Timing::stopTiming(true);
     }
