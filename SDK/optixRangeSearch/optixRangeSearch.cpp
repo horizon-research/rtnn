@@ -107,6 +107,9 @@ struct WhittedState
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
     unsigned int*               d_r2q_map                 = nullptr;
+    float3**                    h_ndpoints                = nullptr;
+    float3**                    h_ndqueries               = nullptr;
+    int                         dim;
 
     std::string                 pfile;
     std::string                 qfile;
@@ -162,6 +165,89 @@ void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned in
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
 void computeMinMax(WhittedState&, ParticleType);
 void gridSort(WhittedState&, ParticleType, bool);
+
+int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lineId)
+{
+  int start = 0;
+  int end = s.find(del);
+  int dim = 0;
+
+  std::vector<float> vcoords;
+  while (end != -1) {
+    float coord = std::stof(s.substr(start, end - start));
+    //std::cout << coord << std::endl;
+    if (ndpoints != nullptr) {
+      vcoords.push_back(coord);
+    }
+    start = end + del.size();
+    end = s.find(del, start);
+    dim++;
+  }
+  float coord  = std::stof(s.substr(start, end - start));
+  //std::cout << coord << std::endl;
+  if (ndpoints != nullptr) {
+    vcoords.push_back(coord);
+  }
+  dim++;
+
+  assert(dim > 0);
+  if ((dim % 3) != 0) dim = (dim/3+1)*3;
+
+  if (ndpoints != nullptr) {
+    for (int batch = 0; batch < dim/3; batch++) {
+      float3 point = make_float3(vcoords[batch*3], vcoords[batch*3+1], vcoords[batch*3+2]);
+      ndpoints[batch][lineId] = point;
+    }
+  }
+
+  return dim;
+}
+
+float3** read_pc_data(const char* data_file, unsigned int* N, int* d) {
+  std::ifstream file;
+
+  file.open(data_file);
+  if( !file.good() ) {
+    std::cerr << "Could not read the frame data...\n";
+    assert(0);
+  }
+
+  char line[1024];
+  unsigned int lines = 0;
+  int dim = 0;
+
+  while (file.getline(line, 1024)) {
+    if (lines == 0) {
+      std::string str(line);
+      dim = tokenize(str, ",", nullptr, 0);
+    }
+    lines++;
+  }
+  file.clear();
+  file.seekg(0, std::ios::beg);
+
+  *N = lines;
+  *d = dim;
+
+  float3** ndpoints = new float3*[dim/3];
+  for (int i = 0; i < dim/3; i++) {
+    ndpoints[i] = new float3[lines];
+  }
+
+  lines = 0;
+  while (file.getline(line, 1024)) {
+    std::string str(line);
+    tokenize(str, ",", ndpoints, lines);
+
+    //std::cerr << ndpoints[0][lines].x << "," << ndpoints[0][lines].y << "," << ndpoints[0][lines].z << std::endl;
+    //std::cerr << ndpoints[1][lines].x << "," << ndpoints[1][lines].y << "," << ndpoints[1][lines].z << std::endl;
+    lines++;
+  }
+
+  file.close();
+
+  return ndpoints;
+}
 
 float3* read_pc_data(const char* data_file, unsigned int* N) {
   std::ifstream file;
@@ -1382,7 +1468,9 @@ void readData(WhittedState& state) {
   // p and q files being the same dones't mean samepq have to be true. we can
   // still set it to be false to evaluate different reordering policies on
   // points and queries separately.
+
   state.h_points = read_pc_data(state.pfile.c_str(), &state.numPoints);
+  //state.h_ndpoints = read_pc_data(state.pfile.c_str(), &state.numPoints, &state.dim);
   state.numQueries = state.numPoints;
   if (state.samepq) state.h_queries = state.h_points;
   else {
@@ -1395,6 +1483,10 @@ void readData(WhittedState& state) {
     assert(state.h_points != state.h_queries);
     // overwrite the samepq option from commandline
     state.samepq = false;
+
+    //int query_dim;
+    //state.h_ndqueries = read_pc_data(state.qfile.c_str(), &state.numQueries, &query_dim);
+    //assert(query_dim == state.dim);
   }
 }
 
