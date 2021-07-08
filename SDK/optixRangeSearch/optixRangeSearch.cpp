@@ -47,7 +47,6 @@
 #include <thrust/sequence.h>
 #include <thrust/gather.h>
 
-#include <GLFW/glfw3.h>
 #include <iomanip>
 #include <cstring>
 #include <fstream>
@@ -587,7 +586,8 @@ static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGr
     OptixProgramGroupDesc       cam_prog_group_desc = {};
     cam_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     cam_prog_group_desc.raygen.module = state.camera_module;
-    cam_prog_group_desc.raygen.entryFunctionName = "__raygen__pinhole_camera";
+    //cam_prog_group_desc.raygen.entryFunctionName = "__raygen__pinhole_camera";
+    cam_prog_group_desc.raygen.entryFunctionName = "__raygen__knn";
 
     char    log[2048];
     size_t  sizeof_log = sizeof( log );
@@ -614,7 +614,8 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     OptixProgramGroupDesc       radiance_sphere_prog_group_desc = {};
     radiance_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
     radiance_sphere_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
-    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
+    //radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
+    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_knn";
     radiance_sphere_prog_group_desc.hitgroup.moduleCH               = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.moduleAH               = state.geometry_module;
@@ -662,7 +663,7 @@ void createPipeline( WhittedState &state )
     state.pipeline_compile_options = {
         false,                                                  // usesMotionBlur
         OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS,          // traversableGraphFlags
-        2,                                                      // numPayloadValues
+        8,                                                      // numPayloadValues; need 8 for 7nn search
         0,                                                      // numAttributeValues
         OPTIX_EXCEPTION_FLAG_NONE,                              // exceptionFlags
         "params"                                                // pipelineLaunchParamsVariableName
@@ -865,6 +866,19 @@ void cleanupState( WhittedState& state )
 
     if (state.h_queries != state.h_points) delete state.h_queries;
     delete state.h_points;
+}
+
+void sanityCheck_knn( WhittedState& state, void* data ) {
+  unsigned int knn = 3;
+  for (unsigned int q = 0; q < state.numQueries; q++) {
+    for (unsigned int n = 0; n < knn; n++) {
+      unsigned int p = static_cast<unsigned int*>( data )[ q * knn + n ];
+      if (p == UINT_MAX) break;
+      std::cout << p << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cerr << "Sanity check done." << std::endl;
 }
 
 void sanityCheck( WhittedState& state, void* data ) {
@@ -1399,7 +1413,8 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
     Timing::stopTiming(true);
   Timing::stopTiming(true);
 
-  sanityCheck( state, data );
+  //sanityCheck( state, data );
+  sanityCheck_knn( state, data );
   CUDA_CHECK( cudaFreeHost(data) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
@@ -1442,7 +1457,8 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
     Timing::stopTiming(true);
   Timing::stopTiming(true);
 
-  sanityCheck( state, data );
+  //sanityCheck( state, data );
+  sanityCheck_knn( state, data );
   CUDA_CHECK( cudaFreeHost(data) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }

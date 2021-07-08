@@ -70,6 +70,64 @@ extern "C" __device__ void intersect_sphere()
     }
 }
 
+extern "C" __global__ void __intersection__sphere_knn()
+{
+  // The IS program will be called if the ray origin is within a primitive's
+  // bbox (even if the actual intersections are beyond the tmin and tmax).
+
+  bool isApprox = false;
+
+  // if d_r2q_map is null and limit is 1, this is the initial run for sorting
+  if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
+
+  unsigned int queryIdx = optixGetPayload_0();
+  unsigned int primIdx = optixGetPrimitiveIndex();
+  if (isApprox) {
+    params.frame_buffer[queryIdx * params.limit] = primIdx;
+    optixReportIntersection( 0, 0 );
+  } else {
+    const float3 center = params.points[primIdx];
+
+    const float3  ray_orig = optixGetWorldRayOrigin();
+    float3 O = ray_orig - center;
+    float distSquared = dot(O, O);
+
+    if ((distSquared > 0) && (distSquared < params.radius * params.radius)) {
+      unsigned int t = optixGetPayload_1();
+      float a0_key = reinterpret_cast<float&>(t); // a0 always stores the max in the heap
+      if (distSquared < a0_key) {
+        a0_key = distSquared;
+        float a0_id = primIdx;
+
+        t = optixGetPayload_3();
+        float a1_key = reinterpret_cast<float&>(t);
+        unsigned int a1_id = optixGetPayload_4();
+        t = optixGetPayload_5();
+        float a2_key = reinterpret_cast<float&>(t);
+        unsigned int a2_id = optixGetPayload_6();
+
+        float t_key;
+        unsigned int t_id;
+        if (a1_key > a0_key) {
+          t_key = a0_key; a0_key = a1_key; a1_key = t_key;
+          t_id = a0_id; a0_id = a1_id; a1_id = t_id;
+        }
+        if (a2_key > a0_key) {
+          t_key = a0_key; a0_key = a2_key; a2_key = t_key;
+          t_id = a0_id; a0_id = a2_id; a2_id = t_id;
+        }
+
+        optixSetPayload_1(reinterpret_cast<unsigned int&>(a0_key));
+        optixSetPayload_2(a0_id);
+        optixSetPayload_3(reinterpret_cast<unsigned int&>(a1_key));
+        optixSetPayload_4(a1_id);
+        optixSetPayload_5(reinterpret_cast<unsigned int&>(a2_key));
+        optixSetPayload_6(a2_id);
+      }
+    }
+  }
+}
+
 extern "C" __global__ void __intersection__sphere()
 {
   // The IS program will be called if the ray origin is within a primitive's
