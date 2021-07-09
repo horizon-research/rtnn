@@ -103,6 +103,7 @@ extern "C" __global__ void __intersection__sphere_knn()
   bool isApprox = false;
 
   // if d_r2q_map is null and limit is 1, this is the initial run for sorting
+  // TODO: need a separate param to indicate initial search since limit can be 1 in KNN
   if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
 
   unsigned int queryIdx = optixGetPayload_0();

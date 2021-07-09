@@ -92,6 +92,7 @@ extern "C" __global__ void __raygen__knn()
     );
 
     // write this if not in the initial traversal
+    // TODO: need a separate param to indicate initial search since limit can be 1 in KNN
     if (params.d_r2q_map != nullptr || params.limit != 1) {
       for (unsigned int i = 0; i < K; i++) {
         params.frame_buffer[queryIdx * K + i] = min_idxs[i];

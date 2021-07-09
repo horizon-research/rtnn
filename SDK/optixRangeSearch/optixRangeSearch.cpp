@@ -1178,10 +1178,10 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           std::cerr << "Unknown option '" << argv[i] << "'\n";
           printUsageAndExit( argv[0] );
       }
+  }
 
-      if (state.searchMode.compare("knn") == 0) {
-        state.params.knn = K; // a macro
-      }
+  if (state.searchMode.compare("knn") == 0) {
+    state.params.knn = K; // a macro
   }
 }
 
