@@ -894,11 +894,11 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
       else {
         float3 diff = state.h_points[p] - state.h_queries[q];
         float dists = dot(diff, diff);
-        std::cout << sqrt(dists) << " ";
+        //std::cout << sqrt(dists) << " ";
       }
       //std::cout << p << " ";
     }
-    std::cout << "\n";
+    //std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
 }
@@ -924,11 +924,11 @@ void sanityCheck( WhittedState& state, void* data ) {
           totalWrongDist += sqrt(dists);
           //exit(1);
         }
-        std::cout << sqrt(dists) << " ";
+        //std::cout << sqrt(dists) << " ";
       }
       //std::cout << p << " ";
     }
-    std::cout << "\n";
+    //std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
   std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.numQueries << std::endl;
@@ -1313,6 +1313,11 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
   //fprintf(stdout, "\tLength of a meta grid: %u\n", gridInfo.meta_grid_dim);
   fprintf(stdout, "\tNumber of cells: %u\n", numberOfCells);
   fprintf(stdout, "\tCell size: %f\n", cellSize);
+
+  // update GridDimension so that it can be used in the kernels (otherwise raster order is incorrect)
+  gridInfo.GridDimension.x = gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim;
+  gridInfo.GridDimension.y = gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim;
+  gridInfo.GridDimension.z = gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim;
  
   thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(N);
   thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells); // this takes a lot of memory
@@ -1333,12 +1338,26 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
 
   bool debug = false;
   if (debug) {
-    thrust::host_vector<unsigned int> temp(numberOfCells);
-    thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, temp.begin());
+    thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
+    thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, h_CellParticleCounts.begin());
     for (unsigned int i = 0; i < numberOfCells; i++) {
-      fprintf(stdout, "%u\n", temp[i]);
+      if (h_CellParticleCounts[i] != 0) fprintf(stdout, "%u, %u\n", i, h_CellParticleCounts[i]);
     }
   }
+
+
+    //for (unsigned int x = 0; x < gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim; x++) {
+    //  for (unsigned int y = 0; y < gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim; y++) {
+    //    for (unsigned int z = 0; z < gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim; z++) {
+    //     // now let's check;
+    //     unsigned int count = 0;
+    //     while(1) {
+    //       unsigned int cellIndex = (x * GridInfo.GridDimension.y + y) * GridInfo.GridDimension.z + z;
+    //       if ()
+    //     }
+    //    }
+    //  }
+    //}
 
   thrust::device_ptr<unsigned int> d_CellOffsets_ptr = getThrustDevicePtr(numberOfCells);
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
