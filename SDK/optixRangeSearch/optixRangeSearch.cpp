@@ -110,7 +110,7 @@ struct WhittedState
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
 
-    std::string                 searchMode                = "knn";
+    std::string                 searchMode                = "radius";
     std::string                 pfile;
     std::string                 qfile;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
@@ -885,14 +885,20 @@ void cleanupState( WhittedState& state )
 //
 //typedef std::priority_queue<knn_point_t*, std::vector<knn_point_t*>, Compare> knn_queue;
 
+// TODO: finish it.
 void sanityCheck_knn( WhittedState& state, void* data ) {
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < K; n++) {
-      unsigned int p = static_cast<unsigned int*>( data )[ q * K + n ];
+    for (unsigned int n = 0; n < state.params.limit; n++) {
+      unsigned int p = static_cast<unsigned int*>( data )[ q * state.params.limit + n ];
       if (p == UINT_MAX) break;
+      else {
+        float3 diff = state.h_points[p] - state.h_queries[q];
+        float dists = dot(diff, diff);
+        std::cout << sqrt(dists) << " ";
+      }
       //std::cout << p << " ";
     }
-    //std::cout << "\n";
+    std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
 }
@@ -918,10 +924,11 @@ void sanityCheck( WhittedState& state, void* data ) {
           totalWrongDist += sqrt(dists);
           //exit(1);
         }
+        std::cout << sqrt(dists) << " ";
       }
       //std::cout << p << " ";
     }
-    //std::cout << "\n";
+    std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
   std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.numQueries << std::endl;
@@ -1441,8 +1448,8 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
     Timing::stopTiming(true);
   Timing::stopTiming(true);
 
-  //sanityCheck( state, data );
-  sanityCheck_knn( state, data );
+  if (state.searchMode == "radius") sanityCheck( state, data );
+  else sanityCheck_knn( state, data );
   CUDA_CHECK( cudaFreeHost(data) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
@@ -1485,8 +1492,8 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
     Timing::stopTiming(true);
   Timing::stopTiming(true);
 
-  //sanityCheck( state, data );
-  sanityCheck_knn( state, data );
+  if (state.searchMode == "radius") sanityCheck( state, data );
+  else sanityCheck_knn( state, data );
   CUDA_CHECK( cudaFreeHost(data) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
