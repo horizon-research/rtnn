@@ -868,15 +868,25 @@ void cleanupState( WhittedState& state )
     delete state.h_points;
 }
 
+//class Compare
+//{
+//  public:
+//    bool operator() (knn_point_t* a, knn_point_t* b)
+//    {
+//      return a->dist < b->dist;
+//    }
+//};
+//
+//typedef std::priority_queue<knn_point_t*, std::vector<knn_point_t*>, Compare> knn_queue;
+
 void sanityCheck_knn( WhittedState& state, void* data ) {
-  unsigned int knn = 3;
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < knn; n++) {
-      unsigned int p = static_cast<unsigned int*>( data )[ q * knn + n ];
+    for (unsigned int n = 0; n < K; n++) {
+      unsigned int p = static_cast<unsigned int*>( data )[ q * K + n ];
       if (p == UINT_MAX) break;
-      std::cout << p << " ";
+      //std::cout << p << " ";
     }
-    std::cout << "\n";
+    //std::cout << "\n";
   }
   std::cerr << "Sanity check done." << std::endl;
 }
@@ -1466,6 +1476,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t device_id) {
   Timing::startTiming("initial traversal");
     state.params.limit = 1;
+    std::cout << state.numQueries * state.params.limit << std::endl;
     thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
     assert((state.h_queries == state.h_points) ^ !state.samepq);

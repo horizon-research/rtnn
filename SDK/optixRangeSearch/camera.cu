@@ -55,17 +55,21 @@ extern "C" __global__ void __raygen__knn()
     float3 ray_origin = params.queries[queryIdx];
     float3 ray_direction = normalize(make_float3(1, 0, 0));
 
-    unsigned int id = 0;
     const float tmin = 0.f;
     const float tmax = 1.e-16f;
 
-    // TODO: change this to max float. when this get re-casted to float, it will be a big float.
-    float a0_key = 10e6;
-    unsigned int a0_id = 0xFFFFFFFF;
-    float a1_key = 0.f;
-    unsigned int a1_id = 0xFFFFFFFF;
-    float a2_key = 0.f;
-    unsigned int a2_id = 0xFFFFFFFF;
+    // pointers are 64 bits, so need two 32-bit integers. optixPathTracing has an example for this.
+    float min_dists[K];
+    unsigned int u0, u1;
+    packPointer( min_dists, u0, u1 );
+
+    unsigned int min_idxs[K];
+    unsigned int u2, u3;
+    packPointer( min_idxs, u2, u3 );
+
+    float max_key;
+    unsigned int max_idx;
+    unsigned int size = 0;
 
     optixTrace(
         params.handle,
@@ -75,23 +79,24 @@ extern "C" __global__ void __raygen__knn()
         tmax,
         0.0f,
         OptixVisibilityMask( 1 ),
-        OPTIX_RAY_FLAG_DISABLE_ANYHIT |
-        OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+        OPTIX_RAY_FLAG_NONE,
         RAY_TYPE_RADIANCE,
         1,
         RAY_TYPE_RADIANCE,
         reinterpret_cast<unsigned int&>(queryIdx),
-        reinterpret_cast<unsigned int&>(a0_key),
-        reinterpret_cast<unsigned int&>(a0_id),
-        reinterpret_cast<unsigned int&>(a1_key),
-        reinterpret_cast<unsigned int&>(a1_id),
-        reinterpret_cast<unsigned int&>(a2_key),
-        reinterpret_cast<unsigned int&>(a2_id)
+        u0, u1, // min_dists
+        u2, u3, // min_idxs
+        reinterpret_cast<unsigned int&>(max_key),
+        reinterpret_cast<unsigned int&>(max_idx),
+        reinterpret_cast<unsigned int&>(size)
     );
 
-    params.frame_buffer[queryIdx * params.knn] = a0_id;
-    params.frame_buffer[queryIdx * params.knn + 1] = a1_id;
-    params.frame_buffer[queryIdx * params.knn + 2] = a2_id;
+    // write this if not in the initial traversal
+    if (params.d_r2q_map != nullptr || params.limit != 1) {
+      for (unsigned int i = 0; i < K; i++) {
+        params.frame_buffer[queryIdx * K + i] = min_idxs[i];
+      }
+    }
 }
 
 extern "C" __global__ void __raygen__pinhole_camera()

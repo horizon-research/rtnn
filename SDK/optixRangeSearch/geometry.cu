@@ -90,39 +90,55 @@ extern "C" __global__ void __intersection__sphere_knn()
 
     const float3  ray_orig = optixGetWorldRayOrigin();
     float3 O = ray_orig - center;
-    float distSquared = dot(O, O);
+    float sqdist = dot(O, O);
 
-    if ((distSquared > 0) && (distSquared < params.radius * params.radius)) {
-      unsigned int t = optixGetPayload_1();
-      float a0_key = reinterpret_cast<float&>(t); // a0 always stores the max in the heap
-      if (distSquared < a0_key) {
-        a0_key = distSquared;
-        float a0_id = primIdx;
+    if ((sqdist > 0) && (sqdist < params.radius * params.radius)) {
 
-        t = optixGetPayload_3();
-        float a1_key = reinterpret_cast<float&>(t);
-        unsigned int a1_id = optixGetPayload_4();
-        t = optixGetPayload_5();
-        float a2_key = reinterpret_cast<float&>(t);
-        unsigned int a2_id = optixGetPayload_6();
+      const unsigned int u0 = optixGetPayload_1();
+      const unsigned int u1 = optixGetPayload_2();
+      float* keys = reinterpret_cast<float*>( unpackPointer( u0, u1 ) );
 
-        float t_key;
-        unsigned int t_id;
-        if (a1_key > a0_key) {
-          t_key = a0_key; a0_key = a1_key; a1_key = t_key;
-          t_id = a0_id; a0_id = a1_id; a1_id = t_id;
+      const unsigned int u2 = optixGetPayload_3();
+      const unsigned int u3 = optixGetPayload_4();
+      unsigned int* vals = reinterpret_cast<unsigned int*>( unpackPointer( u2, u3 ) );
+
+      float max_key = uint_as_float(optixGetPayload_5());
+      unsigned int max_idx = optixGetPayload_6();
+      unsigned int _size = optixGetPayload_7();
+
+      float key = sqdist;
+      unsigned int val = primIdx;
+
+      if (_size < K) {
+        keys[_size] = key;
+        //RegisterIndexUtils<float, K>::set(keys, _size, key);
+
+        vals[_size] = val;
+        //RegisterIndexUtils<unsigned int, K>::set(vals, _size, val);
+
+        if (_size == 0 || key > max_key) {
+          optixSetPayload_5( float_as_uint(key) ); //max_key = key;
+          optixSetPayload_6( _size ); //max_idx = _size;
         }
-        if (a2_key > a0_key) {
-          t_key = a0_key; a0_key = a2_key; a2_key = t_key;
-          t_id = a0_id; a0_id = a2_id; a2_id = t_id;
-        }
+        optixSetPayload_7( _size + 1 ); // _size++;
+      }
+      else if (key < max_key) {
+        keys[max_idx] = key;
+        //RegisterIndexUtils<float, K>::set(keys, max_idx, key);
 
-        optixSetPayload_1(reinterpret_cast<unsigned int&>(a0_key));
-        optixSetPayload_2(a0_id);
-        optixSetPayload_3(reinterpret_cast<unsigned int&>(a1_key));
-        optixSetPayload_4(a1_id);
-        optixSetPayload_5(reinterpret_cast<unsigned int&>(a2_key));
-        optixSetPayload_6(a2_id);
+        vals[max_idx] = val;
+        //RegisterIndexUtils<unsigned int, K>::set(vals, max_idx, val);
+
+        optixSetPayload_5( float_as_uint(key) ); //max_key = key;
+        for (unsigned int k = 0; k < K; ++k) {
+          float cur_key = keys[k];
+          //float cur_key = RegisterIndexUtils<float, K>::get(keys, k);
+
+          if (cur_key > max_key) {
+            optixSetPayload_5( float_as_uint(cur_key) ); //max_key = cur_key;
+            optixSetPayload_6( k ); //max_idx = k;
+          }
+        }
       }
     }
   }
