@@ -30,8 +30,6 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-#define K 32
-
 struct GridInfo
 {
   float3 GridMin;

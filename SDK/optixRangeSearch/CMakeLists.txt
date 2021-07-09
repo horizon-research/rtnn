@@ -47,10 +47,15 @@ target_link_libraries( ${target_name}
   ${CUDA_LIBRARIES}
   )
 
-#message(STATUS ${KNN})
-#if(KNN)
-#  #https://stackoverflow.com/questions/9017573/define-preprocessor-macro-through-cmake
-#  add_compile_definitions(K=${KNN})
-#  #https://stackoverflow.com/questions/53256405/howto-pass-flag-to-nvcc-compiler-in-cmake
-#  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DK=${KNN}")
-#endif()
+message(STATUS ${KNN})
+if(KNN)
+  #https://stackoverflow.com/questions/9017573/define-preprocessor-macro-through-cmake
+  add_compile_definitions(K=${KNN})
+
+  # TODO: copy sutil.cpp so that we don't need to recompile it all the time
+  # https://forums.developer.nvidia.com/t/optix-compile-error-in-ptxstring/70636/2
+  set(CUDA_NVRTC_OPTIONS "${CUDA_NVRTC_OPTIONS} \\\n  \"-DK=${KNN}\",")
+  #message(STATUS ${CUDA_NVRTC_OPTIONS})
+  # regenerate the header. pay attention to the paths. https://cmake.org/cmake/help/latest/command/configure_file.html.
+  configure_file(../sampleConfig.h.in ../sampleConfig.h @ONLY)
+endif()
