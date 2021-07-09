@@ -30,7 +30,7 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-#define K 16
+#define K 32
 
 struct GridInfo
 {

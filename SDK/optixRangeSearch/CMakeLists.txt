@@ -46,3 +46,11 @@ OPTIX_add_sample_executable( optixRangeSearch target_name
 target_link_libraries( ${target_name}
   ${CUDA_LIBRARIES}
   )
+
+#message(STATUS ${KNN})
+#if(KNN)
+#  #https://stackoverflow.com/questions/9017573/define-preprocessor-macro-through-cmake
+#  add_compile_definitions(K=${KNN})
+#  #https://stackoverflow.com/questions/53256405/howto-pass-flag-to-nvcc-compiler-in-cmake
+#  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DK=${KNN}")
+#endif()

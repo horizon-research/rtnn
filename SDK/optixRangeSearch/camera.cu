@@ -99,7 +99,7 @@ extern "C" __global__ void __raygen__knn()
     }
 }
 
-extern "C" __global__ void __raygen__pinhole_camera()
+extern "C" __global__ void __raygen__radius()
 {
     const uint3 idx = optixGetLaunchIndex();
     unsigned int rayIdx = idx.x;

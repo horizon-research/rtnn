@@ -70,6 +70,31 @@ extern "C" __device__ void intersect_sphere()
     }
 }
 
+extern "C" __global__ void __intersection__sphere_radius()
+{
+  // The IS program will be called if the ray origin is within a primitive's
+  // bbox (even if the actual intersections are beyond the tmin and tmax).
+
+  bool isApprox = false;
+
+  // if d_r2q_map is null and limit is 1, this is the initial run for sorting
+  if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
+
+  if (isApprox) {
+    unsigned int id = optixGetPayload_1();
+    if (id < params.limit) {
+      unsigned int queryIdx = optixGetPayload_0();
+      unsigned int primIdx = optixGetPrimitiveIndex();
+      params.frame_buffer[queryIdx * params.limit + id] = primIdx;
+      if (id + 1 == params.limit)
+        optixReportIntersection( 0, 0 );
+      else optixSetPayload_1( id+1 );
+    }
+  } else {
+    intersect_sphere();
+  }
+}
+
 extern "C" __global__ void __intersection__sphere_knn()
 {
   // The IS program will be called if the ray origin is within a primitive's
@@ -111,10 +136,7 @@ extern "C" __global__ void __intersection__sphere_knn()
 
       if (_size < K) {
         keys[_size] = key;
-        //RegisterIndexUtils<float, K>::set(keys, _size, key);
-
         vals[_size] = val;
-        //RegisterIndexUtils<unsigned int, K>::set(vals, _size, val);
 
         if (_size == 0 || key > max_key) {
           optixSetPayload_5( float_as_uint(key) ); //max_key = key;
@@ -124,15 +146,11 @@ extern "C" __global__ void __intersection__sphere_knn()
       }
       else if (key < max_key) {
         keys[max_idx] = key;
-        //RegisterIndexUtils<float, K>::set(keys, max_idx, key);
-
         vals[max_idx] = val;
-        //RegisterIndexUtils<unsigned int, K>::set(vals, max_idx, val);
 
         optixSetPayload_5( float_as_uint(key) ); //max_key = key;
         for (unsigned int k = 0; k < K; ++k) {
           float cur_key = keys[k];
-          //float cur_key = RegisterIndexUtils<float, K>::get(keys, k);
 
           if (cur_key > max_key) {
             optixSetPayload_5( float_as_uint(cur_key) ); //max_key = cur_key;
@@ -141,31 +159,6 @@ extern "C" __global__ void __intersection__sphere_knn()
         }
       }
     }
-  }
-}
-
-extern "C" __global__ void __intersection__sphere()
-{
-  // The IS program will be called if the ray origin is within a primitive's
-  // bbox (even if the actual intersections are beyond the tmin and tmax).
-
-  bool isApprox = false;
-
-  // if d_r2q_map is null and limit is 1, this is the initial run for sorting
-  if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
-
-  if (isApprox) {
-    unsigned int id = optixGetPayload_1();
-    if (id < params.limit) {
-      unsigned int queryIdx = optixGetPayload_0();
-      unsigned int primIdx = optixGetPrimitiveIndex();
-      params.frame_buffer[queryIdx * params.limit + id] = primIdx;
-      if (id + 1 == params.limit)
-        optixReportIntersection( 0, 0 );
-      else optixSetPayload_1( id+1 );
-    }
-  } else {
-    intersect_sphere();
   }
 }
 

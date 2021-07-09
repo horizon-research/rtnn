@@ -110,6 +110,7 @@ struct WhittedState
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
 
+    std::string                 searchMode                = "knn";
     std::string                 pfile;
     std::string                 qfile;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
@@ -289,6 +290,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "Usage  : " << argv0 << " [options]\n";
     std::cerr << "Usage  : " << argv0 << " [options]\n";
     std::cerr << "Options: --file          | -f <filename>   File for point cloud input\n";
+    std::cerr << "         --searchmode    | -sm             Search mode; can only be \"knn\" or \"radius\" \n";
     std::cerr << "         --radius        | -r              Search radius\n";
     std::cerr << "         --knn           | -k              Max K returned\n";
     std::cerr << "         --gassort       | -s              GAS-based query sort mode\n";
@@ -586,8 +588,10 @@ static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGr
     OptixProgramGroupDesc       cam_prog_group_desc = {};
     cam_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     cam_prog_group_desc.raygen.module = state.camera_module;
-    //cam_prog_group_desc.raygen.entryFunctionName = "__raygen__pinhole_camera";
-    cam_prog_group_desc.raygen.entryFunctionName = "__raygen__knn";
+    if (state.searchMode == "knn")
+      cam_prog_group_desc.raygen.entryFunctionName = "__raygen__knn";
+    else
+      cam_prog_group_desc.raygen.entryFunctionName = "__raygen__radius";
 
     char    log[2048];
     size_t  sizeof_log = sizeof( log );
@@ -614,8 +618,10 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     OptixProgramGroupDesc       radiance_sphere_prog_group_desc = {};
     radiance_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
     radiance_sphere_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
-    //radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere";
-    radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_knn";
+    if (state.searchMode == "knn")
+      radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_knn";
+    else
+      radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_radius";
     radiance_sphere_prog_group_desc.hitgroup.moduleCH               = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.moduleAH               = state.geometry_module;
@@ -1103,6 +1109,14 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.params.knn = atoi(argv[++i]);
       }
+      else if( arg == "--searchmode" || arg == "-sm" ) // need to be after --knn so that we can overwrite params.knn if needed
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.searchMode = argv[++i];
+          if ((state.searchMode.compare("knn") != 0) && (state.searchMode.compare("radius") != 0))
+              printUsageAndExit( argv[0] );
+      }
       else if( arg == "--radius" || arg == "-r" )
       {
           if( i >= argc - 1 )
@@ -1163,6 +1177,10 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       {
           std::cerr << "Unknown option '" << argv[i] << "'\n";
           printUsageAndExit( argv[0] );
+      }
+
+      if (state.searchMode.compare("knn") == 0) {
+        state.params.knn = K; // a macro
       }
   }
 }
@@ -1476,7 +1494,6 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t device_id) {
   Timing::startTiming("initial traversal");
     state.params.limit = 1;
-    std::cout << state.numQueries * state.params.limit << std::endl;
     thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
     assert((state.h_queries == state.h_points) ^ !state.samepq);
@@ -1530,6 +1547,7 @@ int main( int argc, char* argv[] )
   std::cout << "========================================" << std::endl;
   std::cout << "numPoints: " << state.numPoints << std::endl;
   std::cout << "numQueries: " << state.numQueries << std::endl;
+  std::cout << "searchMode: " << state.searchMode << std::endl;
   std::cout << "radius: " << state.params.radius << std::endl;
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
