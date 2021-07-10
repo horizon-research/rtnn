@@ -53,12 +53,16 @@
 #include <string>
 #include <random>
 #include <cstdlib>
+#include <queue>
+#include <unordered_set>
 
 // the SDK cmake defines NDEBUG in the Release build, but we still want to use assert
 #undef NDEBUG
 #include <assert.h>
 
 #include "optixRangeSearch.h"
+#include "state.h"
+#include "grid.h"
 
 
 //------------------------------------------------------------------------------
@@ -82,54 +86,57 @@ typedef Record<GeomData>        RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
-struct WhittedState
-{
-    OptixDeviceContext          context                   = 0;
-    OptixTraversableHandle      gas_handle                = {};
-    CUdeviceptr                 d_gas_output_buffer       = {};
-
-    OptixModule                 geometry_module           = 0;
-    OptixModule                 camera_module             = 0;
-
-    OptixProgramGroup           raygen_prog_group         = 0;
-    OptixProgramGroup           radiance_miss_prog_group  = 0;
-    OptixProgramGroup           radiance_metal_sphere_prog_group  = 0;
-
-    OptixPipeline               pipeline                  = 0;
-    OptixPipelineCompileOptions pipeline_compile_options  = {};
-
-    CUstream                    stream                    = 0;
-    Params                      params;
-    Params*                     d_params                  = nullptr;
-
-    float*                      d_key                     = nullptr;
-    float3*                     h_points                  = nullptr;
-    float3*                     h_queries                 = nullptr;
-    unsigned int*               d_r2q_map                 = nullptr;
-    float3**                    h_ndpoints                = nullptr;
-    float3**                    h_ndqueries               = nullptr;
-    int                         dim;
-
-    std::string                 searchMode                = "radius";
-    std::string                 pfile;
-    std::string                 qfile;
-    int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
-    int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
-    int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
-    float                       crRatio                   = 8; // celSize = radius / crRatio
-    float                       sortingGAS                = 1;
-    bool                        toGather                  = false;
-    bool                        reorderPoints             = false;
-    bool                        samepq                    = false;
-
-    unsigned int                numPoints                 = 0;
-    unsigned int                numQueries                = 0;
-
-    float3                      Min;
-    float3                      Max;
-
-    OptixShaderBindingTable     sbt                       = {};
-};
+//struct WhittedState
+//{
+//    OptixDeviceContext          context                   = 0;
+//    OptixTraversableHandle      gas_handle                = {};
+//    CUdeviceptr                 d_gas_output_buffer       = {};
+//
+//    OptixModule                 geometry_module           = 0;
+//    OptixModule                 camera_module             = 0;
+//
+//    OptixProgramGroup           raygen_prog_group         = 0;
+//    OptixProgramGroup           radiance_miss_prog_group  = 0;
+//    OptixProgramGroup           radiance_metal_sphere_prog_group  = 0;
+//
+//    OptixPipeline               pipeline                  = 0;
+//    OptixPipelineCompileOptions pipeline_compile_options  = {};
+//
+//    CUstream                    stream                    = 0;
+//    Params                      params;
+//    Params*                     d_params                  = nullptr;
+//
+//    float*                      d_key                     = nullptr;
+//    float3*                     h_points                  = nullptr;
+//    float3*                     h_queries                 = nullptr;
+//    unsigned int*               d_r2q_map                 = nullptr;
+//    float3**                    h_ndpoints                = nullptr;
+//    float3**                    h_ndqueries               = nullptr;
+//    int                         dim;
+//
+//    std::string                 searchMode                = "radius";
+//    std::string                 pfile;
+//    std::string                 qfile;
+//    int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
+//    int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
+//    int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
+//    float                       crRatio                   = 8; // celSize = radius / crRatio
+//    float                       sortingGAS                = 1;
+//    bool                        toGather                  = false;
+//    bool                        reorderPoints             = false;
+//    bool                        samepq                    = false;
+//
+//    unsigned int                numPoints                 = 0;
+//    unsigned int                numQueries                = 0;
+//
+//    bool*                       cellMask                  = nullptr;
+//    bool*                       rayMask                   = nullptr;
+//
+//    float3                      Min;
+//    float3                      Max;
+//
+//    OptixShaderBindingTable     sbt                       = {};
+//};
 
 enum ParticleType
 {
@@ -156,6 +163,7 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>,
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float>*, thrust::device_ptr<float>, unsigned int );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
+thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int);
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
@@ -163,8 +171,12 @@ void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
+void kCountingSortIndices_genMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, bool*, bool*);
 void computeMinMax(WhittedState&, ParticleType);
 void gridSort(WhittedState&, ParticleType, bool);
+
+void sanityCheck_knn(WhittedState&, void*);
+void sanityCheck(WhittedState&, void*);
 
 int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lineId)
 {
@@ -491,6 +503,8 @@ void createGeometry( WhittedState &state, float sortingGAS )
     //float radius = halfLength;
 
     float radius = state.params.radius/sortingGAS;
+    //loat radius = (7*state.params.radius/state.crRatio)/2*sqrt(2);
+    //td::cout << "radius: " << radius << std::endl;
 
     for(unsigned int i = 0; i < numPrims; i++) {
       sphere_bound(
@@ -815,6 +829,7 @@ void createContext( WhittedState& state )
 
 void launchSubframe( unsigned int* output_buffer, WhittedState& state )
 {
+    //state.params.rayMask = state.rayMask;
     state.params.frame_buffer = output_buffer;
 
     // note cudamemset sets #count number of BYTES to value.
@@ -872,68 +887,6 @@ void cleanupState( WhittedState& state )
 
     if (state.h_queries != state.h_points) delete state.h_queries;
     delete state.h_points;
-}
-
-//class Compare
-//{
-//  public:
-//    bool operator() (knn_point_t* a, knn_point_t* b)
-//    {
-//      return a->dist < b->dist;
-//    }
-//};
-//
-//typedef std::priority_queue<knn_point_t*, std::vector<knn_point_t*>, Compare> knn_queue;
-
-// TODO: finish it.
-void sanityCheck_knn( WhittedState& state, void* data ) {
-  for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < state.params.limit; n++) {
-      unsigned int p = static_cast<unsigned int*>( data )[ q * state.params.limit + n ];
-      if (p == UINT_MAX) break;
-      else {
-        float3 diff = state.h_points[p] - state.h_queries[q];
-        float dists = dot(diff, diff);
-        //std::cout << sqrt(dists) << " ";
-      }
-      //std::cout << p << " ";
-    }
-    //std::cout << "\n";
-  }
-  std::cerr << "Sanity check done." << std::endl;
-}
-
-void sanityCheck( WhittedState& state, void* data ) {
-  // this is stateful in that it relies on state.params.limit
-
-  unsigned int totalNeighbors = 0;
-  unsigned int totalWrongNeighbors = 0;
-  double totalWrongDist = 0;
-  for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < state.params.limit; n++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.limit + n ];
-      //std::cout << p << std::endl; break;
-      if (p == UINT_MAX) break;
-      else {
-        totalNeighbors++;
-        float3 diff = state.h_points[p] - state.h_queries[q];
-        float dists = dot(diff, diff);
-        if (dists > state.params.radius*state.params.radius) {
-          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
-          totalWrongNeighbors++;
-          totalWrongDist += sqrt(dists);
-          //exit(1);
-        }
-        //std::cout << sqrt(dists) << " ";
-      }
-      //std::cout << p << " ";
-    }
-    //std::cout << "\n";
-  }
-  std::cerr << "Sanity check done." << std::endl;
-  std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.numQueries << std::endl;
-  std::cerr << "Total wrong neighbors: " << totalWrongNeighbors << std::endl;
-  if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
 }
 
 thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thrust::device_ptr<unsigned int> d_firsthit_idx_ptr ) {
@@ -1254,6 +1207,60 @@ void computeMinMax(WhittedState& state, ParticleType type)
   //fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
 }
 
+bool isSmall (int i) { return (i <= 4); }
+
+void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, WhittedState& state, GridInfo& gridInfo, unsigned int N) {
+  std::vector<unsigned int> cellSearchSize(numberOfCells, 0);
+
+  for (int x = 0; x < gridInfo.GridDimension.x; x++) {
+    for (int y = 0; y < gridInfo.GridDimension.y; y++) {
+      for (int z = 0; z < gridInfo.GridDimension.z; z++) {
+        // now let's check;
+        int cellIndex = (x * gridInfo.GridDimension.y + y) * gridInfo.GridDimension.z + z;
+        if (h_CellParticleCounts[cellIndex] == 0) continue;
+        //fprintf(stdout, "%d, %u\n", cellIndex, h_CellParticleCounts[cellIndex]);
+
+        int iter = 0;
+        int count = 0;
+        while(1) {
+          for (int ix = x-iter; ix <= x+iter; ix++) {
+            for (int iy = y-iter; iy <= y+iter; iy++) {
+              for (int iz = z-iter; iz <= z+iter; iz++) {
+                if (ix < 0 || ix >= gridInfo.GridDimension.x || iy < 0 || iy >= gridInfo.GridDimension.y || iz < 0 || iz >= gridInfo.GridDimension.z) continue;
+                else {
+                  unsigned int iCellIdx = (ix * gridInfo.GridDimension.y + iy) * gridInfo.GridDimension.z + iz;
+                  count += h_CellParticleCounts[iCellIdx];
+                }
+              }
+            }
+          }
+          if (count >= state.params.knn || count == N) {
+            cellSearchSize[cellIndex] = iter + 1;
+            break;
+          }
+          else {
+            iter++;
+            count = 0;
+          }
+        }
+        //fprintf(stdout, "%u, %u\n", cellIndex, cellSearchSize[cellIndex]);
+      }
+    }
+  }
+
+  //state.cellMask = new bool[numberOfCells];
+  state.cellMask = (bool*)malloc(numberOfCells * sizeof(bool));
+  for (unsigned int i = 0; i < numberOfCells; i++) {
+    //if (cellSearchSize[i] != 0) fprintf(stdout, "%u, %u, %u, %f\n", i, cellSearchSize[i], h_CellParticleCounts[i], (cellSearchSize[i] * 2 - 1) * state.params.radius/state.crRatio);
+    if (cellSearchSize[i] > 0 && cellSearchSize[i] <= 4) state.cellMask[i] = true;
+    else state.cellMask[i] = false;
+  }
+
+  //int res = std::count(state.cellMask, state.cellMask + numberOfCells, true);
+  //int res = std::count_if(state.cellMask, state.cellMask + numberOfCells, isSmall);
+  //std::cout << "<=4: " << res << std::endl;
+}
+
 void gridSort(WhittedState& state, ParticleType type, bool morton) {
   unsigned int N;
   float3* particles;
@@ -1337,27 +1344,16 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                    );
 
   bool debug = false;
+  thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
+  thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, h_CellParticleCounts.begin());
   if (debug) {
-    thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
-    thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, h_CellParticleCounts.begin());
     for (unsigned int i = 0; i < numberOfCells; i++) {
       if (h_CellParticleCounts[i] != 0) fprintf(stdout, "%u, %u\n", i, h_CellParticleCounts[i]);
     }
   }
 
-
-    //for (unsigned int x = 0; x < gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim; x++) {
-    //  for (unsigned int y = 0; y < gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim; y++) {
-    //    for (unsigned int z = 0; z < gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim; z++) {
-    //     // now let's check;
-    //     unsigned int count = 0;
-    //     while(1) {
-    //       unsigned int cellIndex = (x * GridInfo.GridDimension.y + y) * GridInfo.GridDimension.z + z;
-    //       if ()
-    //     }
-    //    }
-    //  }
-    //}
+  bool partition = false;
+  if (partition) genMask(h_CellParticleCounts.data(), numberOfCells, state, gridInfo, N);
 
   thrust::device_ptr<unsigned int> d_CellOffsets_ptr = getThrustDevicePtr(numberOfCells);
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
@@ -1372,6 +1368,23 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                        thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
                        thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                        );
+
+  // TODO: free them
+  //thrust::device_ptr<bool> d_rayMask = getThrustDeviceBoolPtr(state.numQueries);
+  //thrust::device_ptr<bool> d_cellMask = getThrustDeviceBoolPtr(numberOfCells);
+  //thrust::copy(state.cellMask, state.cellMask + numberOfCells, d_cellMask);
+
+  //kCountingSortIndices_genMask(numOfBlocks,
+  //                     threadsPerBlock,
+  //                     gridInfo,
+  //                     thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
+  //                     thrust::raw_pointer_cast(d_CellOffsets_ptr),
+  //                     thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
+  //                     thrust::raw_pointer_cast(d_posInSortedPoints_ptr),
+  //                     thrust::raw_pointer_cast(d_cellMask),
+  //                     thrust::raw_pointer_cast(d_rayMask)
+  //                     );
+  //state.rayMask = thrust::raw_pointer_cast(d_rayMask);
 
   // in-place sort; no new device memory is allocated
   sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);

@@ -55,6 +55,15 @@ void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_pt
   thrust::gather(d_key_ptr, d_key_ptr + N, d_orig_val_ptr, d_new_val_ptr);
 }
 
+thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int N) {
+  bool* d_memory;
+  cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(bool) );
+  thrust::device_ptr<bool> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
   unsigned int* d_memory;
   cudaMalloc(reinterpret_cast<void**>(&d_memory),
@@ -65,11 +74,6 @@ thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
 }
 
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
-  //unsigned int* d_init_val;
-  //cudaMalloc(reinterpret_cast<void**>(&d_init_val),
-  //           numPrims * sizeof(unsigned int) );
-  //thrust::device_ptr<unsigned int> d_init_val_ptr = thrust::device_pointer_cast(d_init_val);
-
   thrust::device_ptr<unsigned int> d_init_val_ptr = getThrustDevicePtr(numPrims);
   thrust::sequence(d_init_val_ptr, d_init_val_ptr + numPrims);
 

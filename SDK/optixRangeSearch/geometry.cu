@@ -29,7 +29,6 @@
 #include <optix.h>
 
 #include "optixRangeSearch.h"
-#include "random.h"
 #include "helpers.h"
 
 extern "C" {
@@ -149,15 +148,22 @@ extern "C" __global__ void __intersection__sphere_knn()
         keys[max_idx] = key;
         vals[max_idx] = val;
 
+        // can't directy update payload just yet; we will read max_key in the loop! if we do, then later when we read max_key, we need to use the get payload API. both seem to be using registers -- very similar speed.
+        //max_key = key;
         optixSetPayload_5( float_as_uint(key) ); //max_key = key;
         for (unsigned int k = 0; k < K; ++k) {
           float cur_key = keys[k];
 
-          if (cur_key > max_key) {
+          if (cur_key > uint_as_float(optixGetPayload_5())) {
+          //if (cur_key > max_key) {
+            //max_key = cur_key;
+            //max_idx = k;
             optixSetPayload_5( float_as_uint(cur_key) ); //max_key = cur_key;
             optixSetPayload_6( k ); //max_idx = k;
           }
         }
+        //optixSetPayload_5( float_as_uint(max_key) );
+        //optixSetPayload_6( max_idx );
       }
     }
   }

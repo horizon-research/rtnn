@@ -1,6 +1,8 @@
+#include <sutil/vec_math.h>
+
 #include "helper_mortonCode.h"
 #include "helper_linearIndex.h"
-#include "optixRangeSearch.h"
+#include "grid.h"
 
 #include <stdio.h>
 
@@ -98,10 +100,10 @@ __global__ void kInsertParticles_Morton(
 
 __global__ void kCountingSortIndices(
   const GridInfo GridInfo,
-  const uint *particleCellIndices,
-  const uint *cellOffsets,
-  const uint *localSortedIndices,
-  uint *posInSortedPoints
+  const uint* particleCellIndices,
+  const uint* cellOffsets,
+  const uint* localSortedIndices,
+  uint* posInSortedPoints
 )
 {
   uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -114,6 +116,30 @@ __global__ void kCountingSortIndices(
 
   //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
 }
+
+__global__ void kCountingSortIndices_genMask(
+  const GridInfo GridInfo,
+  const uint* particleCellIndices,
+  const uint* cellOffsets,
+  const uint* localSortedIndices,
+  uint* posInSortedPoints,
+  bool* cellMask,
+  bool* rayMask
+)
+{
+  uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+  if (particleIndex >= GridInfo.ParticleCount) return;
+
+  uint gridCellIndex = particleCellIndices[particleIndex];
+
+  uint sortIndex = localSortedIndices[particleIndex] + cellOffsets[gridCellIndex];
+  posInSortedPoints[particleIndex] = sortIndex;
+
+  rayMask[particleIndex] = cellMask[gridCellIndex];
+
+  //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
+}
+
 
 
 
@@ -160,6 +186,26 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       d_CellOffsets,
       d_LocalSortedIndices,
       d_posInSortedPoints
+      );
+}
+
+void kCountingSortIndices_genMask(unsigned int numOfBlocks, unsigned int threadsPerBlock,
+      GridInfo gridInfo,
+      unsigned int* d_ParticleCellIndices,
+      unsigned int* d_CellOffsets,
+      unsigned int* d_LocalSortedIndices,
+      unsigned int* d_posInSortedPoints,
+      bool* cellMask,
+      bool* rayMask
+      ) {
+  kCountingSortIndices_genMask <<<numOfBlocks, threadsPerBlock>>> (
+      gridInfo,
+      d_ParticleCellIndices,
+      d_CellOffsets,
+      d_LocalSortedIndices,
+      d_posInSortedPoints,
+      cellMask,
+      rayMask
       );
 }
 

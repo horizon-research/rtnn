@@ -30,16 +30,7 @@
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-struct GridInfo
-{
-  float3 GridMin;
-  unsigned int ParticleCount;
-  float3 GridDelta;
-  uint3 GridDimension;
-  uint3 MetaGridDimension;
-  unsigned int meta_grid_dim;
-  unsigned int meta_grid_size;
-};
+#pragma once
 
 enum RayType
 {
@@ -65,6 +56,7 @@ struct Params
     unsigned int     knn;
     unsigned int*    d_r2q_map;
     unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
+    bool*            rayMask;
 
     int          max_depth;
     float        scene_epsilon;
@@ -204,4 +196,3 @@ struct OcclusionPRD
 {
     float3 attenuation;
 };
-
