@@ -25,12 +25,17 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+#pragma once
 
 #include <vector_types.h>
 #include <optix_types.h>
 #include <sutil/vec_math.h>
 
-#pragma once
+enum ParticleType
+{
+    POINT = 0,
+    QUERY = 1
+};
 
 enum RayType
 {

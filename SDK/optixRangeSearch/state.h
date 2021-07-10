@@ -26,11 +26,11 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
+#pragma once
+
 #include <vector_types.h>
 #include <optix_types.h>
 #include "optixRangeSearch.h"
-
-#pragma once
 
 // TODO remove this but use cudaStream_t for stream
 //#include <sutil/CUDAOutputBuffer.h>
