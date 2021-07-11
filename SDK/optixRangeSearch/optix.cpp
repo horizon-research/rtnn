@@ -192,10 +192,6 @@ static void buildGas(
 
 void createGeometry( WhittedState& state, float sortingGAS )
 {
-    //
-    // Build Custom Primitives
-    //
-
     // Load AABB into device memory
     unsigned int numPrims = state.numPoints;
     OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
@@ -207,9 +203,14 @@ void createGeometry( WhittedState& state, float sortingGAS )
     //std::cout << "\tAABB half length: " << halfLength << std::endl;
     //float radius = halfLength;
 
-    float radius = state.params.radius/sortingGAS;
-    //loat radius = (7*state.params.radius/state.crRatio)/2*sqrt(2);
-    //td::cout << "radius: " << radius << std::endl;
+    float radius;
+    if (state.partition) {
+      radius = (3*state.params.radius/state.crRatio)/2;
+    } else {
+      radius = state.params.radius/sortingGAS;
+    }
+    std::cout << "radius: " << radius << std::endl;
+    std::cout << "num of points in GAS: " << numPrims << std::endl;
 
     for(unsigned int i = 0; i < numPrims; i++) {
       sphere_bound(
@@ -534,8 +535,8 @@ void createContext( WhittedState& state )
 
 void launchSubframe( unsigned int* output_buffer, WhittedState& state )
 {
-    //state.params.rayMask = state.rayMask;
     state.params.frame_buffer = output_buffer;
+    std::cout << "Launch " << state.numQueries << " rays" << std::endl;
 
     // note cudamemset sets #count number of BYTES to value.
     CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,

@@ -44,30 +44,30 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
       }
     }
 
-    //std::cout << "GT: ";
+    std::cout << "GT: ";
     std::unordered_set<unsigned int> gt_idxs;
     for (unsigned int i = 0; i < size; i++) {
-    //  std::cout << "[" << sqrt(topKQ.top().first) << ", " << topKQ.top().second << "] ";
+      std::cout << "[" << sqrt(topKQ.top().first) << ", " << topKQ.top().second << "] ";
       gt_idxs.insert(topKQ.top().second);
       topKQ.pop();
     }
-    //std::cout << std::endl;
+    std::cout << std::endl;
 
     // get the GPU data and check
-    //std::cout << "RTX: ";
+    std::cout << "RTX: ";
     std::unordered_set<unsigned int> gpu_idxs;
     for (unsigned int n = 0; n < state.params.limit; n++) {
       unsigned int p = static_cast<unsigned int*>( data )[ q * state.params.limit + n ];
       if (p == UINT_MAX) break;
       else {
         gpu_idxs.insert(p);
-        //float3 diff = state.h_points[p] - query;
-        //float dists = dot(diff, diff);
-        //std::cout << "[" << sqrt(dists) << ", " << p << "] ";
+        float3 diff = state.h_points[p] - query;
+        float dists = dot(diff, diff);
+        std::cout << "[" << sqrt(dists) << ", " << p << "] ";
         //std::cout << p << " ";
       }
     }
-    //std::cout << std::endl;
+    std::cout << std::endl;
 
     if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
   }

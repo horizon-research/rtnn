@@ -52,8 +52,6 @@ extern "C" __global__ void __raygen__knn()
     else
       queryIdx = params.d_r2q_map[rayIdx];
 
-    //if (params.rayMask[queryIdx] == 0) return;
-
     float3 ray_origin = params.queries[queryIdx];
     float3 ray_direction = normalize(make_float3(1, 0, 0));
 
@@ -141,8 +139,4 @@ extern "C" __global__ void __raygen__radius()
         reinterpret_cast<unsigned int&>(queryIdx),
         reinterpret_cast<unsigned int&>(id)
     );
-    //params.frame_buffer[queryIdx * params.knn] = queryIdx;
-    //params.frame_buffer[queryIdx * params.knn+1] = ray_origin.x;
-    //params.frame_buffer[queryIdx * params.knn+2] = ray_origin.y;
-    //params.frame_buffer[queryIdx * params.knn+3] = ray_origin.z;
 }

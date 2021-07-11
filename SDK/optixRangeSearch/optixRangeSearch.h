@@ -62,6 +62,7 @@ struct Params
     unsigned int*    d_r2q_map;
     unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
     bool*            rayMask;
+    bool             isApprox;
 
     int          max_depth;
     float        scene_epsilon;

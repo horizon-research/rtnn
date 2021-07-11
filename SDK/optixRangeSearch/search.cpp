@@ -15,6 +15,7 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
       assert((state.h_queries == state.h_points) ^ !state.samepq);
       assert((state.params.points == state.params.queries) ^ !state.samepq);
       assert(state.params.d_r2q_map == nullptr);
+      state.params.isApprox = false;
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
     Timing::stopTiming(true);
@@ -61,6 +62,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
       // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
 
+      state.params.isApprox = false; // TODO: true for the first batch.
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
     Timing::stopTiming(true);
@@ -95,6 +97,7 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t d
     assert((state.params.points == state.params.queries) ^ !state.samepq);
     assert(state.params.d_r2q_map == nullptr);
 
+    state.params.isApprox = true;
     launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
     // TODO: could delay this until sort, but initial traversal is lightweight anyways
     CUDA_CHECK( cudaStreamSynchronize( state.stream ) );

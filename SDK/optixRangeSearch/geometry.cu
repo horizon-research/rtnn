@@ -94,6 +94,53 @@ extern "C" __global__ void __intersection__sphere_radius()
   }
 }
 
+extern "C" __device__ void insertTopKQ(float key, unsigned int val)
+{
+  const unsigned int u0 = optixGetPayload_1();
+  const unsigned int u1 = optixGetPayload_2();
+  float* keys = reinterpret_cast<float*>( unpackPointer( u0, u1 ) );
+  
+  const unsigned int u2 = optixGetPayload_3();
+  const unsigned int u3 = optixGetPayload_4();
+  unsigned int* vals = reinterpret_cast<unsigned int*>( unpackPointer( u2, u3 ) );
+  
+  float max_key = uint_as_float(optixGetPayload_5());
+  unsigned int max_idx = optixGetPayload_6();
+  unsigned int _size = optixGetPayload_7();
+  
+  if (_size < K) {
+    keys[_size] = key;
+    vals[_size] = val;
+  
+    if (_size == 0 || key > max_key) {
+      optixSetPayload_5( float_as_uint(key) ); //max_key = key;
+      optixSetPayload_6( _size ); //max_idx = _size;
+    }
+    optixSetPayload_7( _size + 1 ); // _size++;
+  }
+  else if (key < max_key) {
+    keys[max_idx] = key;
+    vals[max_idx] = val;
+  
+    // can't directy update payload just yet; we will read max_key in the loop! if we do, then later when we read max_key, we need to use the get payload API. both seem to be using registers -- very similar speed.
+    max_key = key;
+    //optixSetPayload_5( float_as_uint(key) ); //max_key = key;
+    for (unsigned int k = 0; k < K; ++k) {
+      float cur_key = keys[k];
+  
+      //if (cur_key > uint_as_float(optixGetPayload_5())) {
+      if (cur_key > max_key) {
+        max_key = cur_key;
+        max_idx = k;
+        //optixSetPayload_5( float_as_uint(cur_key) ); //max_key = cur_key;
+        //optixSetPayload_6( k ); //max_idx = k;
+      }
+    }
+    optixSetPayload_5( float_as_uint(max_key) );
+    optixSetPayload_6( max_idx );
+  }
+}
+
 extern "C" __global__ void __intersection__sphere_knn()
 {
   // The IS program will be called if the ray origin is within a primitive's
@@ -102,8 +149,8 @@ extern "C" __global__ void __intersection__sphere_knn()
   bool isApprox = false;
 
   // if d_r2q_map is null and limit is 1, this is the initial run for sorting
-  // TODO: need a separate param to indicate initial search since limit can be 1 in KNN
   if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
+  //bool isApprox = params.isApprox; // TODO: should use this in the long run
 
   unsigned int queryIdx = optixGetPayload_0();
   unsigned int primIdx = optixGetPrimitiveIndex();
@@ -118,53 +165,7 @@ extern "C" __global__ void __intersection__sphere_knn()
     float sqdist = dot(O, O);
 
     if ((sqdist > 0) && (sqdist < params.radius * params.radius)) {
-
-      const unsigned int u0 = optixGetPayload_1();
-      const unsigned int u1 = optixGetPayload_2();
-      float* keys = reinterpret_cast<float*>( unpackPointer( u0, u1 ) );
-
-      const unsigned int u2 = optixGetPayload_3();
-      const unsigned int u3 = optixGetPayload_4();
-      unsigned int* vals = reinterpret_cast<unsigned int*>( unpackPointer( u2, u3 ) );
-
-      float max_key = uint_as_float(optixGetPayload_5());
-      unsigned int max_idx = optixGetPayload_6();
-      unsigned int _size = optixGetPayload_7();
-
-      float key = sqdist;
-      unsigned int val = primIdx;
-
-      if (_size < K) {
-        keys[_size] = key;
-        vals[_size] = val;
-
-        if (_size == 0 || key > max_key) {
-          optixSetPayload_5( float_as_uint(key) ); //max_key = key;
-          optixSetPayload_6( _size ); //max_idx = _size;
-        }
-        optixSetPayload_7( _size + 1 ); // _size++;
-      }
-      else if (key < max_key) {
-        keys[max_idx] = key;
-        vals[max_idx] = val;
-
-        // can't directy update payload just yet; we will read max_key in the loop! if we do, then later when we read max_key, we need to use the get payload API. both seem to be using registers -- very similar speed.
-        max_key = key;
-        //optixSetPayload_5( float_as_uint(key) ); //max_key = key;
-        for (unsigned int k = 0; k < K; ++k) {
-          float cur_key = keys[k];
-
-          //if (cur_key > uint_as_float(optixGetPayload_5())) {
-          if (cur_key > max_key) {
-            max_key = cur_key;
-            max_idx = k;
-            //optixSetPayload_5( float_as_uint(cur_key) ); //max_key = cur_key;
-            //optixSetPayload_6( k ); //max_idx = k;
-          }
-        }
-        optixSetPayload_5( float_as_uint(max_key) );
-        optixSetPayload_6( max_idx );
-      }
+      insertTopKQ(sqdist, primIdx);
     }
   }
 }

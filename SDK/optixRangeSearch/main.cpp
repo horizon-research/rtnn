@@ -75,6 +75,7 @@ int main( int argc, char* argv[] )
   std::cout << "radius: " << state.params.radius << std::endl;
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
+  std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
   std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
@@ -87,13 +88,13 @@ int main( int argc, char* argv[] )
   try
   {
     // Set up CUDA device and stream
-    int32_t device_id = 1;
+    int32_t device_id = 0;
     setupCUDA(state, device_id);
 
     Timing::reset();
 
     uploadData(state);
-    sortParticles(state, POINT, state.pointSortMode);
+    sortParticles(state, POINT, state.pointSortMode); // if partition is enabled, we do it here.
 
     // Set up OptiX state, which includes creating the GAS (using the current order of points).
     setupOptiX(state);

@@ -141,6 +141,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --searchmode    | -sm             Search mode; can only be \"knn\" or \"radius\" \n";
     std::cerr << "         --radius        | -r              Search radius\n";
     std::cerr << "         --knn           | -k              Max K returned\n";
+    std::cerr << "         --samepq        | -spq            Same points and queries?\n";
     std::cerr << "         --gassort       | -s              GAS-based query sort mode\n";
     std::cerr << "         --pointsort     | -ps             Point sort mode\n";
     std::cerr << "         --querysort     | -qs             Query sort mode\n";
@@ -191,6 +192,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.params.radius = std::stof(argv[++i]);
+      }
+      else if( arg == "--partition" || arg == "-p" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.partition = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--samepq" || arg == "-spq" )
       {
@@ -252,6 +259,8 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   if (state.searchMode.compare("knn") == 0) {
     state.params.knn = K; // a macro
   }
+
+  if (state.partition) assert(state.samepq);
 }
 
 void setupCUDA( WhittedState& state, int32_t device_id ) {

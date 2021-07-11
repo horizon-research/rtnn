@@ -78,9 +78,11 @@ struct WhittedState
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
+    unsigned int                numActQueries             = 0;
 
+    bool                        partition                 = false;
     bool*                       cellMask                  = nullptr;
-    bool*                       rayMask                   = nullptr;
+    //float3*                     curQs                     = nullptr;
 
     float3                      Min;
     float3                      Max;

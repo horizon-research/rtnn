@@ -1,5 +1,6 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
+#include <thrust/copy.h>
 #include <thrust/sequence.h>
 #include <thrust/gather.h>
 
@@ -39,6 +40,10 @@ void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<f
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
+void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<bool> d_val_ptr, unsigned int N ) {
+  thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
+}
+
 void gatherByKey ( thrust::device_vector<unsigned int>* d_vec_val, thrust::device_ptr<float3> d_orig_val_ptr, thrust::device_ptr<float3> d_new_val_ptr ) {
   thrust::gather(d_vec_val->begin(), d_vec_val->end(), d_orig_val_ptr, d_new_val_ptr);
 }
@@ -73,6 +78,15 @@ thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
   return d_memory_ptr;
 }
 
+thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int N) {
+  float3* d_memory;
+  cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(float3) );
+  thrust::device_ptr<float3> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
   thrust::device_ptr<unsigned int> d_init_val_ptr = getThrustDevicePtr(numPrims);
   thrust::sequence(d_init_val_ptr, d_init_val_ptr + numPrims);
@@ -91,3 +105,22 @@ void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int
   thrust::fill(d_src_ptr, d_src_ptr + N, value);
 }
 
+struct is_true : thrust::unary_function<bool, bool>
+{
+    __host__ __device__
+    bool operator()(const bool &x)
+    {
+        return x;
+    }
+};
+
+void copyIfStencilTrue(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest) {
+  thrust::copy_if(thrust::device_pointer_cast(source),
+                  thrust::device_pointer_cast(source) + N,
+                  mask, dest, is_true());
+}
+
+unsigned int countByPred(thrust::device_ptr<bool> val, unsigned int N, bool pred) {
+  unsigned int numOfActiveQueries = thrust::count(val, val + N, pred);
+  return numOfActiveQueries;
+}

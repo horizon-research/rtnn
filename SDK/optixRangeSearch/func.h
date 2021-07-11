@@ -20,15 +20,19 @@ void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned in
 void sortByKey( thrust::device_vector<float>*, thrust::device_ptr<float3> );
 void sortByKey( thrust::device_ptr<float>, thrust::device_ptr<float3>, unsigned int );
 void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, unsigned int );
+void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<bool>, unsigned int );
 void gatherByKey ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3> );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, thrust::device_ptr<float3>, unsigned int );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float>*, thrust::device_ptr<float>, unsigned int );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
+thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
 thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int);
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
+void copyIfStencilTrue(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
+unsigned int countByPred(thrust::device_ptr<bool>, unsigned int, bool);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
