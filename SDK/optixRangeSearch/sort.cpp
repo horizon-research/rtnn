@@ -285,7 +285,6 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
     // TODO: do this in a stream
     state.h_queries = new float3[numOfActiveQueries];
     thrust::copy(d_curQs, d_curQs + numOfActiveQueries, state.h_queries);
-    printf("%f, %f, %f\n", state.h_queries[1192803].x, state.h_queries[1192803].y, state.h_queries[1192803].z);
   } else {
     kCountingSortIndices(numOfBlocks,
                          threadsPerBlock,
