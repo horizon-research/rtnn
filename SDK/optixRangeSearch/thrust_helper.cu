@@ -105,13 +105,22 @@ void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int
   thrust::fill(d_src_ptr, d_src_ptr + N, value);
 }
 
-struct is_true : thrust::unary_function<bool, bool>
+//struct is_true : thrust::unary_function<bool, bool>
+//{
+//    __host__ __device__
+//    bool operator()(const bool &x)
+//    {
+//        return x;
+//    }
+//};
+
+struct is_true
 {
     __host__ __device__
-    bool operator()(const bool &x)
-    {
-        return x;
-    }
+        bool operator()(const bool x)
+        {
+            return x;
+        }
 };
 
 void copyIfStencilTrue(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest) {

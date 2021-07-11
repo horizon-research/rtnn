@@ -6,14 +6,18 @@
 #include "state.h"
 #include "func.h"
 
+#undef NDEBUG
+#include <assert.h>
+
 void nonsortedSearch( WhittedState& state, int32_t device_id ) {
   Timing::startTiming("total search time");
     Timing::startTiming("search compute");
       state.params.limit = state.params.knn;
       thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
-      assert((state.h_queries == state.h_points) ^ !state.samepq);
-      assert((state.params.points == state.params.queries) ^ !state.samepq);
+      // TODO: not true if partition is enabled
+      //assert((state.h_queries == state.h_points) ^ !state.samepq);
+      //assert((state.params.points == state.params.queries) ^ !state.samepq);
       assert(state.params.d_r2q_map == nullptr);
       state.params.isApprox = false;
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
@@ -93,8 +97,9 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t d
     state.params.limit = 1;
     thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
-    assert((state.h_queries == state.h_points) ^ !state.samepq);
-    assert((state.params.points == state.params.queries) ^ !state.samepq);
+    // TODO: not true if partition is enabled
+    //assert((state.h_queries == state.h_points) ^ !state.samepq);
+    //assert((state.params.points == state.params.queries) ^ !state.samepq);
     assert(state.params.d_r2q_map == nullptr);
 
     state.params.isApprox = true;

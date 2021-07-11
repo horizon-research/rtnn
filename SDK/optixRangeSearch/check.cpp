@@ -18,7 +18,7 @@ typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queu
 
 void sanityCheck_knn( WhittedState& state, void* data ) {
   srand(time(NULL));
-  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, 97808, 1192803};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
@@ -69,6 +69,7 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
     }
     std::cout << std::endl;
 
+    // TODO: there could some numerical precision issue.
     if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
   }
   std::cerr << "Sanity check done." << std::endl;

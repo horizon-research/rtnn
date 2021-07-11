@@ -87,6 +87,7 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
 
         int iter = 0;
         int count = 0;
+        int maxWidth = state.params.radius / sqrt(2) * 2;
         while(1) {
           for (int ix = x-iter; ix <= x+iter; ix++) {
             for (int iy = y-iter; iy <= y+iter; iy++) {
@@ -99,10 +100,14 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
               }
             }
           }
-          int width = (iter * 2 + 1) * state.params.radius/state.crRatio;
-          // TODO: check corner case here
-          if (count >= state.params.knn || width/2 * sqrt(2) >= state.params.radius) {
-            cellSearchSize[cellIndex] = iter + 1;
+          // TODO: there could be corner cases here, e.g., maxWidth is very small, cellSize will be 0 (same as uninitialized).
+          int width = (iter * 2 + 1) * state.params.radius / state.crRatio;
+          if (width > maxWidth) {
+            cellSearchSize[cellIndex] = 0; // if width > maxWidth, we need to do a full search.
+            break;
+          }
+          else if (count >= state.params.knn) {
+            cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
             break;
           }
           else {
@@ -263,8 +268,6 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                 N * sizeof( unsigned int ),
                 cudaMemcpyDeviceToDevice
     ) );
-    // in-place sort; no new device memory is allocated
-    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
     // sort the ray masks as well, but do that after the query sorting so that we get the nice query order.
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
 
@@ -272,15 +275,17 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
     state.numQueries = numOfActiveQueries;
     std::cout << state.numQueries << std::endl;
 
-    thrust::device_ptr<float3> d_curQs = getThrustDeviceF3Ptr(numOfActiveQueries);
-    copyIfStencilTrue(particles, state.numQueries, d_rayMask, d_curQs);
-    state.params.queries = thrust::raw_pointer_cast(d_curQs);
     // TODO: this is basically discarding the rest of the queries; OK for now...
+    thrust::device_ptr<float3> d_curQs = getThrustDeviceF3Ptr(numOfActiveQueries);
+    copyIfStencilTrue(state.params.queries, N, d_rayMask, d_curQs); // use N since state.numQueries is updated now
+    state.params.queries = thrust::raw_pointer_cast(d_curQs);
+    CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
 
     // Copy the active queries to host.
     // TODO: do this in a stream
     state.h_queries = new float3[numOfActiveQueries];
     thrust::copy(d_curQs, d_curQs + numOfActiveQueries, state.h_queries);
+    printf("%f, %f, %f\n", state.h_queries[1192803].x, state.h_queries[1192803].y, state.h_queries[1192803].z);
   } else {
     kCountingSortIndices(numOfBlocks,
                          threadsPerBlock,
@@ -290,14 +295,14 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                          thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
                          thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                          );
-
-    // in-place sort; no new device memory is allocated
-    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
-
-    // TODO: do this in a stream
-    thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
-    thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
   }
+  // in-place sort; no new device memory is allocated
+  sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
+
+  // copy particles to host, regardless of partition. for POINT, this is to make sure the points in device are consistent with the host points used to build the GAS. for QUERY and POINT, this also makes sure the sanity check passes.
+  // TODO: do this in a stream
+  thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
+  thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );

@@ -164,7 +164,14 @@ extern "C" __global__ void __intersection__sphere_knn()
     float3 O = ray_orig - center;
     float sqdist = dot(O, O);
 
-    if ((sqdist > 0) && (sqdist < params.radius * params.radius)) {
+    //if (queryIdx == 1192803) {
+    //  printf("ray: %f, %f, %f\n", ray_orig.x, ray_orig.y, ray_orig.z);
+    //  printf("point: %f, %f, %f\n", center.x, center.y, center.z);
+    //  printf("primIdx: %u, sqdist: %f\n\n", primIdx, sqrt(sqdist));
+    //}
+
+    //if ((sqdist > 0) && (sqdist < params.radius * params.radius)) {
+    if (sqdist > 0) { // if partition, don't check radius for the optimized batch. TODO: add the check for full searches.
       insertTopKQ(sqdist, primIdx);
     }
   }
