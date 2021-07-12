@@ -87,7 +87,7 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
 
         int iter = 0;
         int count = 0;
-        int maxWidth = state.params.radius / sqrt(2) * 2;
+        int maxWidth = state.params.radius;
         while(1) {
           for (int ix = x-iter; ix <= x+iter; ix++) {
             for (int iy = y-iter; iy <= y+iter; iy++) {
@@ -101,12 +101,16 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
             }
           }
           // TODO: there could be corner cases here, e.g., maxWidth is very small, cellSize will be 0 (same as uninitialized).
-          int width = (iter * 2 + 1) * state.params.radius / state.crRatio;
+          // need to add 2 (not 1) to accommodate points at the edges/corners of the central cell.
+          int width = (iter * 2 + 2) * state.params.radius / state.crRatio;
           if (width > maxWidth) {
             cellSearchSize[cellIndex] = 0; // if width > maxWidth, we need to do a full search.
             break;
           }
           else if (count >= state.params.knn) {
+            // we know the width^3 cube has K points, but we can't tell if the
+            // K nearest points are in the cube. we must blow up a sphere with
+            // a radius of width/2 and search there to be sure.
             cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
             break;
           }
@@ -268,8 +272,9 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                 N * sizeof( unsigned int ),
                 cudaMemcpyDeviceToDevice
     ) );
-    // sort the ray masks as well, but do that after the query sorting so that we get the nice query order.
+    // sort the ray masks as well the same way as query sorting.
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
+    CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
 
     unsigned int numOfActiveQueries = countByPred(d_rayMask, N, true);
     state.numQueries = numOfActiveQueries;
@@ -279,7 +284,21 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
     thrust::device_ptr<float3> d_curQs = getThrustDeviceF3Ptr(numOfActiveQueries);
     copyIfStencilTrue(state.params.queries, N, d_rayMask, d_curQs); // use N since state.numQueries is updated now
     state.params.queries = thrust::raw_pointer_cast(d_curQs);
-    CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
+
+
+    //thrust::host_vector<bool> h_rayMask(N);
+    //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
+    //thrust::host_vector<float3> h_curQs(numOfActiveQueries);
+    //unsigned int x = 0;
+    //for (unsigned int i = 0; i < N; i++) {
+    //  if (h_rayMask[i] == true) {
+    //    h_curQs[x++] = state.h_queries[i];
+    //  }
+    //}
+    //thrust::copy(h_curQs.begin(), h_curQs.end(), d_curQs);
+    //state.params.queries = thrust::raw_pointer_cast(d_curQs);
+
+
 
     // Copy the active queries to host.
     // TODO: do this in a stream

@@ -17,9 +17,9 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheck_knn( WhittedState& state, void* data ) {
-  bool printRes = false;
+  bool printRes = true;
   srand(time(NULL));
-  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, 97808, 1192803};
+  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, 435713};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
@@ -52,7 +52,7 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
       gt_idxs.insert(topKQ.top().second);
       topKQ.pop();
     }
-    //std::cout << std::endl;
+    if (printRes) std::cout << std::endl;
 
     // get the GPU data and check
     if (printRes) std::cout << "RTX: ";
