@@ -57,7 +57,8 @@
 int main( int argc, char* argv[] )
 {
   WhittedState state;
-  state.params.radius = 2;
+  state.radius = 2; // this is the given radius
+  state.params.radius = 2; // this indicates the search radius of a launch
   state.params.knn = 50;
 
   parseArgs( state, argc, argv );
@@ -68,7 +69,7 @@ int main( int argc, char* argv[] )
   std::cout << "numPoints: " << state.numPoints << std::endl;
   std::cout << "numQueries: " << state.numTotalQueries << std::endl;
   std::cout << "searchMode: " << state.searchMode << std::endl;
-  std::cout << "radius: " << state.params.radius << std::endl;
+  std::cout << "radius: " << state.radius << std::endl;
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
@@ -115,30 +116,11 @@ int main( int argc, char* argv[] )
       if (state.numQueries == 0) continue;
 
       // create the GAS using the current order of points and the launchRadius of the current batch.
-      createGeometry ( state, i ); // batch_id ignored if not partition.
+      createGeometry (state, i); // batch_id ignored if not partition.
 
-      // TODO: maybe check GASsort or not, then launch the search?
-      if (!state.qGasSortMode) {
-        nonsortedSearch(state);
-      } else {
-        // Initial traversal (to sort the queries)
-        thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = initialTraversal(state);
+      if (state.qGasSortMode) gasSortSearch(state);
 
-        // Sort the queries
-        thrust::device_ptr<unsigned int> d_indices_ptr;
-        if (state.qGasSortMode == 1)
-          d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr);
-        else if (state.qGasSortMode == 2)
-          d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr);
-        CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_firsthit_idx_ptr) ) );
-
-        if (state.toGather) {
-          gatherQueries( state, d_indices_ptr );
-        }
-
-        // Actual traversal with sorted queries
-        searchTraversal(state);
-      }
+      search(state, i);
     }
 
     cleanupState( state );

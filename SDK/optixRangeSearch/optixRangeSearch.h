@@ -53,7 +53,6 @@ struct BasicLight
 
 struct Params
 {
-    unsigned int     subframe_index;
     unsigned int*    frame_buffer;
     float3*          points;
     float3*          queries;
@@ -63,9 +62,6 @@ struct Params
     unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
     bool*            rayMask;
     bool             isApprox;
-
-    int          max_depth;
-    float        scene_epsilon;
 
     OptixTraversableHandle handle;
 };

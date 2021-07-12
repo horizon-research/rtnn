@@ -184,13 +184,14 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.searchMode = argv[++i];
-          if ((state.searchMode.compare("knn") != 0) && (state.searchMode.compare("radius") != 0))
+          if ((state.searchMode != "knn") && (state.searchMode != "radius"))
               printUsageAndExit( argv[0] );
       }
       else if( arg == "--radius" || arg == "-r" )
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
+          state.radius = std::stof(argv[++i]);
           state.params.radius = std::stof(argv[++i]);
       }
       else if( arg == "--partition" || arg == "-p" )
@@ -265,7 +266,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   }
 
   // do a round of sanity check here
-  if (state.searchMode.compare("knn") == 0) {
+  if (state.searchMode == "knn") {
     state.params.knn = K; // a macro
   }
 

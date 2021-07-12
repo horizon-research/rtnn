@@ -82,7 +82,7 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   gridInfo.GridMin = sceneMin;
 
   // TODO: maybe crRatio should be automatically determined based on memory?
-  float cellSize = state.params.radius/state.crRatio;
+  float cellSize = state.radius/state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));
   gridInfo.GridDimension.y = static_cast<unsigned int>(ceilf(gridSize.y / cellSize));
@@ -140,11 +140,19 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
         // now let's check;
         int cellIndex = (x * gridInfo.GridDimension.y + y) * gridInfo.GridDimension.z + z;
         if (h_CellParticleCounts[cellIndex] == 0) continue;
-        //fprintf(stdout, "%d, %u\n", cellIndex, h_CellParticleCounts[cellIndex]);
 
         int iter = 0;
         int count = 0;
-        int maxWidth = state.params.radius * 2;
+	// in radius search we want to completely skip dist calc and sphere
+	// check in GPU (bottleneck) so we constrain the maxWidth such that the
+	// AABB is completely enclosed by the sphere. in knn search dist calc
+	// can't be skipped and is not the bottleneck anyway (invoking IS
+	// programs is) so we relax the maxWidth to give points more
+	// opportunity to find a smaller search radius.
+        int maxWidth;
+        if (state.searchMode == "knn") maxWidth = state.radius * 2;
+        else maxWidth = state.radius / sqrt(2) * 2;
+
         while(1) {
           for (int ix = x-iter; ix <= x+iter; ix++) {
             for (int iy = y-iter; iy <= y+iter; iy++) {
@@ -158,18 +166,23 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
             }
           }
 
-	  // if we want to be absolutely certain, we need to add 2 (not 1) to
-	  // accommodate points at the edges/corners of the central cell. width
-	  // means there are count # of points within the width^3 AABB, whose
-	  // center is the center point of the current cell. for corner points
-	  // in the cell, its width^3 AABB might have less than count # of
-	  // points if the point distrition becomes dramatically sparse outside
-	  // of the current AABB. if we +2, then the launchRadius calculation
-	  // needs to be changed too.
+	  // in the knn mode, if we want to be absolutely certain, we need to
+	  //  add 2 (not 1) to accommodate points at the edges/corners of the
+	  //  central cell. width means there are count # of points within the
+	  //  width^3 AABB, whose center is the center point of the current
+	  //  cell. for corner points in the cell, its width^3 AABB might have
+	  //  less than count # of points if the point distrition becomes
+	  //  dramatically sparse outside of the current AABB. if we +2, then
+	  //  the launchRadius calculation needs to be changed too.
+	  // in the radius mode, + 1 is sufficient as we are not interseted in
+	  //  the K nearest neighbors.
 
-          // TODO: there could be corner cases here, e.g., maxWidth is very small, cellSize will be 0 (same as uninitialized).
-          int width = (iter * 2 + 1) * state.params.radius / state.crRatio;
-          //int width = (iter * 2 + 2) * state.params.radius / state.crRatio;
+	  // TODO: there could be corner cases here, e.g., maxWidth is very
+	  // small, cellSize will be 0 (same as uninitialized), or when
+	  // maxWidth is huge (to support unbounded KNN), we can stop checking
+	  // sooner when, e.g., count == N.
+          int width = (iter * 2 + 1) * state.radius / state.crRatio;
+          //int width = (iter * 2 + 2) * state.radius / state.crRatio;
 
           if (width > maxWidth) {
             cellSearchSize[cellIndex] = 0; // if width > maxWidth, we need to do a full search.
@@ -198,7 +211,7 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
     //                                    i,
     //                                    cellSearchSize[i],
     //                                    h_CellParticleCounts[i],
-    //                                    (cellSearchSize[i] * 2 - 1) * state.params.radius/state.crRatio
+    //                                    (cellSearchSize[i] * 2 - 1) * state.radius/state.crRatio
     //                                   );
 
     // TODO: need a better decision logic, e.g., through a histogram and some sort of cost model.
@@ -243,7 +256,7 @@ void sortGenPartInfo(WhittedState& state,
                                 );
 
     // make a copy of the keys since they are useless after the first sort. no need to use stable sort since the keys are unique, so masks and the queries are gauranteed to be sorted in exactly the same way.
-    // TODO: Can we do away with th extra copy by replacing sort by key with scatter? that'll need new space too...
+    // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
     thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy = getThrustDevicePtr(N);
     //thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + N, d_posInSortedPoints_ptr_copy); // not sure why this doesn't link.
     CUDA_CHECK( cudaMemcpy(
@@ -263,9 +276,11 @@ void sortGenPartInfo(WhittedState& state,
     state.numActQueries[1] = N - state.numActQueries[0];
 
     // See notes in sortGenPartInfo about whether to -1 or not.
-    //state.launchRadius[0] = (state.partThd * 2 * state.params.radius / state.crRatio) / 2 * sqrt(2);
-    state.launchRadius[0] = ((state.partThd * 2 - 1) * state.params.radius / state.crRatio) / 2 * sqrt(2);
-    state.launchRadius[1] = state.params.radius;
+    //unsigned int aabbWidth = state.partThd * 2 * state.radius / state.crRatio;
+    float aabbWidth = (state.partThd * 2 - 1) * state.radius / state.crRatio;
+    if (state.searchMode == "knn") state.launchRadius[0] = aabbWidth / 2 * sqrt(2);
+    else state.launchRadius[0] = aabbWidth / 2;
+    state.launchRadius[1] = state.radius;
 
     thrust::device_ptr<float3> d_actQs_0 = getThrustDeviceF3Ptr(state.numActQueries[0]);
     copyIfStencil(state.params.queries, N, d_rayMask, d_actQs_0, true); // use N since state.numQueries is updated now

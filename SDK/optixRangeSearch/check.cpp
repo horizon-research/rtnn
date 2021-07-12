@@ -34,7 +34,7 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
       float3 point = state.h_points[p];
       float3 diff = query - point;
       float dists = dot(diff, diff);
-      if ((dists > 0) && (dists < state.params.radius*state.params.radius)) {
+      if ((dists > 0) && (dists < state.radius * state.radius)) {
         knn_res_t res = std::make_pair(dists, p);
         if (size < state.params.limit) {
           topKQ.push(res);
@@ -112,7 +112,7 @@ void sanityCheck( WhittedState& state, void* data ) {
         totalNeighbors++;
         float3 diff = state.h_points[p] - state.h_queries[q];
         float dists = dot(diff, diff);
-        if (dists > state.params.radius*state.params.radius) {
+        if (dists > state.radius * state.radius) {
           //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
           totalWrongNeighbors++;
           totalWrongDist += sqrt(dists);

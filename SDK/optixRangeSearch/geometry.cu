@@ -158,15 +158,16 @@ extern "C" __global__ void __intersection__sphere_knn()
     float3 O = ray_orig - center;
     float sqdist = dot(O, O);
 
-    //if (queryIdx == 2394) {
+    //if (queryIdx == 533) {
     //  printf("ray: %f, %f, %f\n", ray_orig.x, ray_orig.y, ray_orig.z);
     //  printf("point: %f, %f, %f\n", center.x, center.y, center.z);
     //  printf("primIdx: %u, sqdist: %f\n\n", primIdx, sqrt(sqdist));
     //}
 
-    // even for optimized search the second check is necessary since being in
-    // the optimized AABB doesn't mean it's in the optimized sphere and
-    // certainly doesn't mean it's in the target sphere.
+    // even for optimized search the second check is necessary since a point
+    // being in the optimized AABB doesn't mean it's in target sphere. this
+    // checking against the optimized sphere is to make sure a point is also in
+    // the target sphere.
     if ((sqdist > 0) && (sqdist < params.radius * params.radius)) {
       insertTopKQ(sqdist, primIdx);
     }

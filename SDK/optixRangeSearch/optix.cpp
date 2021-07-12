@@ -179,7 +179,6 @@ static void buildGas(
         CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
 
         // use handle as input and output
-        //OPTIX_CHECK( optixAccelCompact( state.context, 0, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
         OPTIX_CHECK( optixAccelCompact( state.context, state.stream, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
         CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
@@ -201,10 +200,11 @@ CUdeviceptr createAABB( WhittedState& state, int batch )
   if (state.partition) {
     radius = state.launchRadius[batch];
   } else {
-    radius = state.params.radius/state.sortingGAS;
+    radius = state.radius / state.sortingGAS;
   }
-  std::cout << "\tAABB radius: " << radius << std::endl;
-  //std::cout << "num of points in GAS: " << numPrims << std::endl;
+  state.params.radius = radius;
+  //std::cout << "\tAABB radius: " << radius << std::endl;
+  //std::cout << "\tnum of points in GAS: " << numPrims << std::endl;
 
   for(unsigned int i = 0; i < numPrims; i++) {
     sphere_bound(
@@ -540,7 +540,11 @@ void createContext( WhittedState& state )
 void launchSubframe( unsigned int* output_buffer, WhittedState& state )
 {
     state.params.frame_buffer = output_buffer;
+
     fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
+    fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
+    fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
+    fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
 
     // note cudamemset sets #count number of BYTES to value.
     CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,
@@ -568,15 +572,6 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state )
         1                 // launch depth
     ) );
     //CUDA_SYNC_CHECK();
-}
-
-void initLaunchParams( WhittedState& state )
-{
-    state.params.frame_buffer = nullptr; // the result buffer
-    state.params.d_r2q_map = nullptr; // contains the index to reorder rays
-
-    //state.params.max_depth = max_trace;
-    //state.params.scene_epsilon = 1.e-4f;
 }
 
 void cleanupState( WhittedState& state )
@@ -618,12 +613,5 @@ void setupOptiX( WhittedState& state ) {
   Timing::startTiming("create SBT");
     createSBT      ( state );
   Timing::stopTiming(true);
-
-  //initLaunchParams( state );
-
-  // creating GAS can be done async with the above two.
-  //Timing::startTiming("create and upload geometry");
-  //  createGeometry ( state, state.sortingGAS );
-  //Timing::stopTiming(true);
 }
 

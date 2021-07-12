@@ -51,7 +51,6 @@ struct WhittedState
     OptixPipeline               pipeline                  = 0;
     OptixPipelineCompileOptions pipeline_compile_options  = {};
 
-    //CUstream                    stream                    = 0;
     cudaStream_t                stream                    = 0;
     Params                      params;
     Params*                     d_params                  = nullptr;
@@ -68,6 +67,7 @@ struct WhittedState
     std::string                 searchMode                = "radius";
     std::string                 pfile;
     std::string                 qfile;
+    float                       radius                    = 0.0;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order

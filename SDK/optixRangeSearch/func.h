@@ -67,6 +67,8 @@ int tokenize(std::string, std::string, float3**, unsigned int);
 void parseArgs(WhittedState&, int, char**);
 void readData(WhittedState&);
 
-void nonsortedSearch(WhittedState&);
-void searchTraversal(WhittedState&);
+void search(WhittedState&, unsigned int);
+void gasSortSearch(WhittedState&);
+//void nonsortedSearch(WhittedState&);
+//void searchTraversal(WhittedState&);
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState&);
