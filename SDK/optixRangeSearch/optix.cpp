@@ -216,6 +216,8 @@ void createGeometry( WhittedState& state, float sortingGAS )
       sphere_bound(
           state.h_points[i], radius,
           reinterpret_cast<float*>(&aabb[i]));
+
+      if (i == 125820) printf("%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
     }
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb

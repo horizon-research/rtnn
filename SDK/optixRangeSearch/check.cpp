@@ -2,6 +2,7 @@
 #include <queue>
 #include <algorithm>
 #include <unordered_set>
+#include <iterator>
 
 #include "state.h"
 
@@ -17,9 +18,10 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheck_knn( WhittedState& state, void* data ) {
-  bool printRes = false;
+  bool printRes = true;
   srand(time(NULL));
-  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, 1083812};
+  //std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  std::vector<unsigned int> randQ {2394};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
@@ -47,9 +49,11 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
 
     if (printRes) std::cout << "GT: ";
     std::unordered_set<unsigned int> gt_idxs;
+    std::unordered_set<float> gt_dists;
     for (unsigned int i = 0; i < size; i++) {
       if (printRes) std::cout << "[" << sqrt(topKQ.top().first) << ", " << topKQ.top().second << "] ";
       gt_idxs.insert(topKQ.top().second);
+      gt_dists.insert(sqrt(topKQ.top().first));
       topKQ.pop();
     }
     if (printRes) std::cout << std::endl;
@@ -57,14 +61,16 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
     // get the GPU data and check
     if (printRes) std::cout << "RTX: ";
     std::unordered_set<unsigned int> gpu_idxs;
+    std::unordered_set<float> gpu_dists;
     for (unsigned int n = 0; n < state.params.limit; n++) {
       unsigned int p = static_cast<unsigned int*>( data )[ q * state.params.limit + n ];
       if (p == UINT_MAX) break;
       else {
+        float3 diff = state.h_points[p] - query;
+        float dists = dot(diff, diff);
         gpu_idxs.insert(p);
+        gpu_dists.insert(sqrt(dists));
         if (printRes) {
-          float3 diff = state.h_points[p] - query;
-          float dists = dot(diff, diff);
           std::cout << "[" << sqrt(dists) << ", " << p << "] ";
         }
       }
@@ -73,7 +79,21 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
 
     // TODO: there are cases where there are multiple points that overlap and
     // depending on the order different ones will enter the topKQ.
-    if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
+    //if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
+    // https://www.techiedelight.com/print-set-unordered_set-cpp/
+    if (gt_dists != gpu_dists) {
+      std::cout << "Incorrect!" << std::endl;
+      //std::cout << "GT:\n";
+      //std::copy(gt_dists.begin(),
+      //      gt_dists.end(),
+      //      std::ostream_iterator<float>(std::cout, " "));
+      //      std::cout << "\n\n";
+      //std::cout << "RTX:\n";
+      //std::copy(gpu_dists.begin(),
+      //      gpu_dists.end(),
+      //      std::ostream_iterator<float>(std::cout, " "));
+      //      std::cout << "\n\n";
+    }
   }
   std::cerr << "Sanity check done." << std::endl;
 }

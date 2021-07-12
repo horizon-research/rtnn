@@ -1,4 +1,7 @@
+#include <cuda_runtime.h>
+
 #include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
 #include <thrust/sort.h>
 #include <thrust/copy.h>
 #include <thrust/sequence.h>
@@ -94,6 +97,7 @@ thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
   return d_init_val_ptr;
 }
 
+//void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr, cudaStream_t stream) {
 void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr) {
   thrust::exclusive_scan(
     d_src_ptr,

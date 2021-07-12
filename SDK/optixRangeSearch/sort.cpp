@@ -25,6 +25,9 @@
 #include "state.h"
 #include "grid.h"
 
+#undef NDEBUG
+#include <assert.h>
+
 void computeMinMax(WhittedState& state, ParticleType type)
 {
   unsigned int N;
@@ -186,7 +189,7 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   // metagrids will slightly increase the total cells
   unsigned int numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * gridInfo.meta_grid_size;
   //fprintf(stdout, "\tGrid dimension (without meta grids): %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
-  //fprintf(stdout, "\tGrid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
+  fprintf(stdout, "\tGrid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
   //fprintf(stdout, "\tMeta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
   //fprintf(stdout, "\tLength of a meta grid: %u\n", gridInfo.meta_grid_dim);
   fprintf(stdout, "\tNumber of cells: %u\n", numberOfCells);
@@ -243,6 +246,7 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
 
   thrust::device_ptr<unsigned int> d_CellOffsets_ptr = getThrustDevicePtr(numberOfCells);
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
+  //exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr, state.stream);
   exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
 
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr = getThrustDevicePtr(N);
@@ -280,8 +284,20 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                 cudaMemcpyDeviceToDevice
     ) );
     // sort the ray masks as well the same way as query sorting.
+    //thrust::host_vector<bool> h_rayMask(N);
+    //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
+    //for (unsigned int i = 0; i < N; i++) {
+    //  printf("old %u %u: %f, %f, %f\n", i, h_rayMask[i], state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
+    //}
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
+    //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
+    //for (unsigned int i = 0; i < N; i++) {
+    //  printf("new %u %u: %f, %f, %f\n", i, h_rayMask[i], state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
+    //}
+
+    // this MUST happen right after sorting the masks and before copy so that the queries and the masks are consistent!!!
+    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
 
     unsigned int numOfActiveQueries = countByPred(d_rayMask, N, true);
     state.numQueries = numOfActiveQueries;
@@ -294,12 +310,12 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
 
 
     //thrust::host_vector<bool> h_rayMask(N);
-    //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
     //thrust::host_vector<float3> h_curQs(numOfActiveQueries);
     //unsigned int x = 0;
     //for (unsigned int i = 0; i < N; i++) {
     //  if (h_rayMask[i] == true) {
     //    h_curQs[x++] = state.h_queries[i];
+    //    //printf("%u: %f, %f, %f\n", i, state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
     //  }
     //}
     //thrust::copy(h_curQs.begin(), h_curQs.end(), d_curQs);
@@ -320,9 +336,9 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                          thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
                          thrust::raw_pointer_cast(d_posInSortedPoints_ptr)
                          );
+    // in-place sort; no new device memory is allocated
+    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
   }
-  // in-place sort; no new device memory is allocated
-  sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
 
   // copy particles to host, regardless of partition. for POINT, this is to make sure the points in device are consistent with the host points used to build the GAS. for QUERY and POINT, this also makes sure the sanity check passes.
   // TODO: do this in a stream

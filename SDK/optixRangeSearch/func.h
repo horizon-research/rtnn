@@ -29,6 +29,7 @@ thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
 thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
 thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int);
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
+void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>, cudaStream_t);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void copyIfStencilTrue(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
