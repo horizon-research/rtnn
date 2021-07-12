@@ -6,10 +6,7 @@
 #include "state.h"
 #include "func.h"
 
-#undef NDEBUG
-#include <assert.h>
-
-void nonsortedSearch( WhittedState& state, int32_t device_id ) {
+void nonsortedSearch( WhittedState& state) {
   Timing::startTiming("total search time");
     Timing::startTiming("search compute");
       state.params.limit = state.params.knn;
@@ -18,7 +15,11 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
       // TODO: not true if partition is enabled
       //assert((state.h_queries == state.h_points) ^ !state.samepq);
       //assert((state.params.points == state.params.queries) ^ !state.samepq);
-      assert(state.params.d_r2q_map == nullptr);
+      //assert(state.params.d_r2q_map == nullptr);
+
+      state.params.d_r2q_map = nullptr; // contains the index to reorder rays
+
+      // TODO: for radius search if the AABB is enclosed by the sphere we can safely approx it the search.
       state.params.isApprox = false;
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
@@ -47,7 +48,7 @@ void nonsortedSearch( WhittedState& state, int32_t device_id ) {
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
-void searchTraversal(WhittedState& state, int32_t device_id) {
+void searchTraversal(WhittedState& state) {
   Timing::startTiming("total search time");
     // create a new GAS if the sorting GAS is different, but we reordered points using the query order
     if ( (state.sortingGAS != 1) || (state.samepq && state.toGather && state.reorderPoints) ) {
@@ -61,12 +62,14 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
       state.params.limit = state.params.knn;
       thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
-      // TODO: this is just awkward. maybe we should just get rid of the gather mode and directl assign to params.d_r2q_map.
-      assert(state.params.d_r2q_map == nullptr);
+      // TODO: this is just awkward. maybe we should just get rid of the gather mode and directly assign to params.d_r2q_map.
+      //assert(state.params.d_r2q_map == nullptr);
       // TODO: not sure why, but directly assigning state.params.d_r2q_map in sort routines has a huge perf hit.
       if (!state.toGather) state.params.d_r2q_map = state.d_r2q_map;
+      else state.params.d_r2q_map = nullptr;
 
-      state.params.isApprox = false; // TODO: true for the first batch.
+      // TODO: for radius search if the AABB is enclosed by the sphere we can safely approx it the search.
+      state.params.isApprox = false;
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state );
       CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // comment this out for e2e measurement.
     Timing::stopTiming(true);
@@ -92,7 +95,7 @@ void searchTraversal(WhittedState& state, int32_t device_id) {
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
-thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t device_id) {
+thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state) {
   Timing::startTiming("initial traversal");
     state.params.limit = 1;
     thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
@@ -100,7 +103,9 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int32_t d
     // TODO: not true if partition is enabled
     //assert((state.h_queries == state.h_points) ^ !state.samepq);
     //assert((state.params.points == state.params.queries) ^ !state.samepq);
-    assert(state.params.d_r2q_map == nullptr);
+    //assert(state.params.d_r2q_map == nullptr);
+
+    state.params.d_r2q_map = nullptr; // contains the index to reorder rays
 
     state.params.isApprox = true;
     launchSubframe( thrust::raw_pointer_cast(output_buffer), state );

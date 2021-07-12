@@ -41,10 +41,7 @@ extern "C" __device__ void intersect_sphere()
     // be sure that the point is within the sphere. It's possible that the
     // point is within the bbox but no within the sphere, and it's also
     // possible that the point is just outside of the bbox and just intersects
-    // with the bbox. Note that it's wasteful to do a ray-sphere intersection
-    // test and use the intersected Ts to decide whethere a point is inside the
-    // sphere or not
-    // (https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection).
+    // with the bbox.
 
     unsigned int primIdx = optixGetPrimitiveIndex();
     const float3 center = params.points[primIdx];
@@ -54,9 +51,6 @@ extern "C" __device__ void intersect_sphere()
     float3 O = ray_orig - center;
 
     if (dot(O, O) < params.radius * params.radius) {
-      //unsigned int id = optixGetPayload_1();
-      //optixSetPayload_1( id+1 );
-
       unsigned int id = optixGetPayload_1();
       if (id < params.limit) {
         unsigned int queryIdx = optixGetPayload_0();
@@ -74,10 +68,7 @@ extern "C" __global__ void __intersection__sphere_radius()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = false;
-
-  // if d_r2q_map is null and limit is 1, this is the initial run for sorting
-  if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
+  bool isApprox = params.isApprox;
 
   if (isApprox) {
     unsigned int id = optixGetPayload_1();
@@ -122,7 +113,9 @@ extern "C" __device__ void insertTopKQ(float key, unsigned int val)
     keys[max_idx] = key;
     vals[max_idx] = val;
   
-    // can't directy update payload just yet; we will read max_key in the loop! if we do, then later when we read max_key, we need to use the get payload API. both seem to be using registers -- very similar speed.
+    // can't directy update payload just yet; we will read max_key in the loop!
+    // if we do, then later when we read max_key, we need to use the get
+    // payload API. both seem to be using registers -- very similar speed.
     max_key = key;
     //optixSetPayload_5( float_as_uint(key) ); //max_key = key;
     for (unsigned int k = 0; k < K; ++k) {
@@ -146,11 +139,12 @@ extern "C" __global__ void __intersection__sphere_knn()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = false;
+  //bool isApprox = false;
 
   // if d_r2q_map is null and limit is 1, this is the initial run for sorting
-  if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
-  //bool isApprox = params.isApprox; // TODO: should use this in the long run
+  //if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
+
+  bool isApprox = params.isApprox;
 
   unsigned int queryIdx = optixGetPayload_0();
   unsigned int primIdx = optixGetPrimitiveIndex();
@@ -170,6 +164,9 @@ extern "C" __global__ void __intersection__sphere_knn()
     //  printf("primIdx: %u, sqdist: %f\n\n", primIdx, sqrt(sqdist));
     //}
 
+    // even for optimized search the second check is necessary since being in
+    // the optimized AABB doesn't mean it's in the optimized sphere and
+    // certainly doesn't mean it's in the target sphere.
     if ((sqdist > 0) && (sqdist < params.radius * params.radius)) {
       insertTopKQ(sqdist, primIdx);
     }

@@ -1,7 +1,4 @@
-#include <cuda_runtime.h>
-
 #include <thrust/device_vector.h>
-#include <thrust/execution_policy.h>
 #include <thrust/sort.h>
 #include <thrust/copy.h>
 #include <thrust/sequence.h>
@@ -97,7 +94,14 @@ thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
   return d_init_val_ptr;
 }
 
-//void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr, cudaStream_t stream) {
+// https://forums.developer.nvidia.com/t/thrust-and-streams/53199
+void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr, cudaStream_t stream) {
+  thrust::exclusive_scan(thrust::cuda::par.on(stream),
+    d_src_ptr,
+    d_src_ptr + N,
+    d_dest_ptr);
+}
+
 void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr) {
   thrust::exclusive_scan(
     d_src_ptr,
@@ -109,28 +113,33 @@ void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int
   thrust::fill(d_src_ptr, d_src_ptr + N, value);
 }
 
-//struct is_true : thrust::unary_function<bool, bool>
-//{
-//    __host__ __device__
-//    bool operator()(const bool &x)
-//    {
-//        return x;
-//    }
-//};
-
 struct is_true
 {
-    __host__ __device__
-        bool operator()(const bool x)
-        {
-            return x;
-        }
+  __host__ __device__
+    bool operator()(const bool x)
+    {
+      return x;
+    }
 };
 
-void copyIfStencilTrue(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest) {
-  thrust::copy_if(thrust::device_pointer_cast(source),
-                  thrust::device_pointer_cast(source) + N,
-                  mask, dest, is_true());
+struct is_false
+{
+  __host__ __device__
+    bool operator()(const bool x)
+    {
+      return !x;
+    }
+};
+
+void copyIfStencil(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest, bool cond) {
+  if (cond)
+    thrust::copy_if(thrust::device_pointer_cast(source),
+                    thrust::device_pointer_cast(source) + N,
+                    mask, dest, is_true());
+  else
+    thrust::copy_if(thrust::device_pointer_cast(source),
+                    thrust::device_pointer_cast(source) + N,
+                    mask, dest, is_false());
 }
 
 unsigned int countByPred(thrust::device_ptr<bool> val, unsigned int N, bool pred) {

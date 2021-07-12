@@ -64,6 +64,7 @@ struct WhittedState
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
 
+    int32_t                     device_id                 = 1;
     std::string                 searchMode                = "radius";
     std::string                 pfile;
     std::string                 qfile;
@@ -78,11 +79,16 @@ struct WhittedState
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
-    unsigned int                numActQueries             = 0;
+    unsigned int                numTotalQueries           = 0;
+    unsigned int                numActQueries[2]          = {0};
+    float                       launchRadius[2]           = {0.0};
+
+    float3*                     d_actQs[2]                = {nullptr};
+    float3*                     h_actQs[2]                = {nullptr};
 
     bool                        partition                 = false;
     bool*                       cellMask                  = nullptr;
-    int                         partThd                   = 2;
+    int                         partThd                   = 1;
 
     float3                      Min;
     float3                      Max;

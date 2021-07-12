@@ -18,14 +18,13 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheck_knn( WhittedState& state, void* data ) {
-  bool printRes = true;
+  bool printRes = false;
   srand(time(NULL));
-  //std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  std::vector<unsigned int> randQ {2394};
+  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
-    std::cout << "Sanity check for query " << q << std::endl;
+    std::cout << "\tSanity check for query " << q << std::endl;
 
     // generate ground truth res
     float3 query = state.h_queries[q];
@@ -95,7 +94,7 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
       //      std::cout << "\n\n";
     }
   }
-  std::cerr << "Sanity check done." << std::endl;
+  std::cerr << "\tSanity check done." << std::endl;
 }
 
 void sanityCheck( WhittedState& state, void* data ) {

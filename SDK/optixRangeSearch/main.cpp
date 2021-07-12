@@ -49,10 +49,6 @@
 #include <queue>
 #include <unordered_set>
 
-// the SDK cmake defines NDEBUG in the Release build, but we still want to use assert
-#undef NDEBUG
-#include <assert.h>
-
 #include "optixRangeSearch.h"
 #include "state.h"
 #include "func.h"
@@ -70,7 +66,7 @@ int main( int argc, char* argv[] )
 
   std::cout << "========================================" << std::endl;
   std::cout << "numPoints: " << state.numPoints << std::endl;
-  std::cout << "numQueries: " << state.numQueries << std::endl;
+  std::cout << "numQueries: " << state.numTotalQueries << std::endl;
   std::cout << "searchMode: " << state.searchMode << std::endl;
   std::cout << "radius: " << state.params.radius << std::endl;
   std::cout << "K: " << state.params.knn << std::endl;
@@ -88,43 +84,61 @@ int main( int argc, char* argv[] )
   try
   {
     // Set up CUDA device and stream
-    int32_t device_id = 1;
-    setupCUDA(state, device_id);
+    setupCUDA(state);
 
     Timing::reset();
 
     uploadData(state);
-    sortParticles(state, POINT, state.pointSortMode); // if partition is enabled, we do it here.
 
-    // Set up OptiX state, which includes creating the GAS (using the current order of points).
+    sortParticles(state, POINT, state.pointSortMode); // if partition is enabled, we do it here.
+    if (!state.samepq) sortParticles(state, QUERY, state.querySortMode); // when samepq, queries are sorted using the point sort mode.
+
     setupOptiX(state);
 
-    initLaunchParams( state );
+    unsigned int batch;
+    if (state.partition) batch = 2;
+    else {
+      batch = 1;
+      state.numActQueries[0] = state.numQueries;
+      state.d_actQs[0] = state.params.queries;
+      state.h_actQs[0] = state.h_queries;
+    }
 
-    // when samepq, queries are sorted using the point sort mode.
-    if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
+    // TODO: should launch the last batch since that's got the least rays and so the GPU utilization is low --- good for overlapping.
+    for (unsigned int i = 0; i < batch; i++) {
+      std::cout << "\tBatch: " << i << std::endl;
+      state.numQueries = state.numActQueries[i];
+      state.params.queries = state.d_actQs[i];
+      state.h_queries = state.h_actQs[i];
 
-    if (!state.qGasSortMode) {
-      nonsortedSearch(state, device_id);
-    } else {
-      // Initial traversal (to sort the queries)
-      thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = initialTraversal(state, device_id);
+      // it's possible that certain batches have 0 query (e.g., state.partThd too low).
+      if (state.numQueries == 0) continue;
 
-      // Sort the queries
-      thrust::device_ptr<unsigned int> d_indices_ptr;
-      if (state.qGasSortMode == 1)
-        d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr);
-      else if (state.qGasSortMode == 2)
-        d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr);
-      else assert(0);
-      CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_firsthit_idx_ptr) ) );
+      // create the GAS using the current order of points and the launchRadius of the current batch.
+      createGeometry ( state, i ); // batch_id ignored if not partition.
 
-      if (state.toGather) {
-        gatherQueries( state, d_indices_ptr );
+      // TODO: maybe check GASsort or not, then launch the search?
+      if (!state.qGasSortMode) {
+        nonsortedSearch(state);
+      } else {
+        // Initial traversal (to sort the queries)
+        thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = initialTraversal(state);
+
+        // Sort the queries
+        thrust::device_ptr<unsigned int> d_indices_ptr;
+        if (state.qGasSortMode == 1)
+          d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr);
+        else if (state.qGasSortMode == 2)
+          d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr);
+        CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_firsthit_idx_ptr) ) );
+
+        if (state.toGather) {
+          gatherQueries( state, d_indices_ptr );
+        }
+
+        // Actual traversal with sorted queries
+        searchTraversal(state);
       }
-
-      // Actual traversal with sorted queries
-      searchTraversal(state, device_id);
     }
 
     cleanupState( state );

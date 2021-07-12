@@ -8,7 +8,6 @@
 
 #include <sutil/Exception.h>
 #include <sutil/vec_math.h>
-#include <assert.h>
 
 #include <thrust/copy.h>
 
@@ -142,6 +141,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --radius        | -r              Search radius\n";
     std::cerr << "         --knn           | -k              Max K returned\n";
     std::cerr << "         --samepq        | -spq            Same points and queries?\n";
+    std::cerr << "         --device        | -d              Which GPU to use?\n";
     std::cerr << "         --gassort       | -s              GAS-based query sort mode\n";
     std::cerr << "         --pointsort     | -ps             Point sort mode\n";
     std::cerr << "         --querysort     | -qs             Query sort mode\n";
@@ -205,11 +205,19 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.samepq = (bool)(atoi(argv[++i]));
       }
+      else if( arg == "--device" || arg == "-d" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.device_id = atoi(argv[++i]);
+      }
       else if( arg == "--qgassort" || arg == "-s" )
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.qGasSortMode = atoi(argv[++i]);
+          if (state.qGasSortMode > 2 || state.qGasSortMode < 0)
+              printUsageAndExit( argv[0] );
       }
       else if( arg == "--pointsort" || arg == "-ps" )
       {
@@ -256,6 +264,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       }
   }
 
+  // do a round of sanity check here
   if (state.searchMode.compare("knn") == 0) {
     state.params.knn = K; // a macro
   }
@@ -263,15 +272,15 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   if (state.partition) assert(state.samepq);
 }
 
-void setupCUDA( WhittedState& state, int32_t device_id ) {
+void setupCUDA( WhittedState& state) {
   int32_t device_count = 0;
   CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
   std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
   
   cudaDeviceProp prop;
-  CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
-  CUDA_CHECK( cudaSetDevice( device_id ) );
-  std::cerr << "\tUsing [" << device_id << "]: " << prop.name << std::endl;
+  CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
+  CUDA_CHECK( cudaSetDevice( state.device_id ) );
+  std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
 
   CUDA_CHECK( cudaStreamCreate( &state.stream ) );
 }
@@ -300,5 +309,7 @@ void readData(WhittedState& state) {
     //state.h_ndqueries = read_pc_data(state.qfile.c_str(), &state.numQueries, &query_dim);
     //assert(query_dim == state.dim);
   }
+
+  state.numTotalQueries = state.numQueries;
 }
 

@@ -12,6 +12,11 @@
 #include "state.h"
 #include "grid.h"
 
+// the SDK cmake defines NDEBUG in the Release build, but we still want to use assert
+// TODO: fix it in cmake files?
+#undef NDEBUG
+#include <assert.h>
+
 void sortByKey( thrust::device_vector<float>*, thrust::device_vector<unsigned int>* );
 void sortByKey( thrust::device_vector<float>*, thrust::device_ptr<unsigned int>);
 void sortByKey( thrust::device_ptr<float>, thrust::device_ptr<unsigned int>, unsigned int );
@@ -32,7 +37,7 @@ thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>, cudaStream_t);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
-void copyIfStencilTrue(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
+void copyIfStencil(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>, bool);
 unsigned int countByPred(thrust::device_ptr<bool>, unsigned int, bool);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
@@ -50,9 +55,9 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord(WhittedState&, thrust::dev
 thrust::device_ptr<unsigned int> sortQueriesByFHIdx(WhittedState&, thrust::device_ptr<unsigned int>);
 void gatherQueries(WhittedState&, thrust::device_ptr<unsigned int>);
 
-void setupCUDA(WhittedState&, int32_t);
+void setupCUDA(WhittedState&);
 void uploadData(WhittedState&);
-void createGeometry(WhittedState&, float);
+void createGeometry(WhittedState&, int);
 void launchSubframe(unsigned int*, WhittedState&);
 void initLaunchParams(WhittedState&);
 void setupOptiX(WhittedState&);
@@ -62,6 +67,6 @@ int tokenize(std::string, std::string, float3**, unsigned int);
 void parseArgs(WhittedState&, int, char**);
 void readData(WhittedState&);
 
-void nonsortedSearch(WhittedState&, int32_t);
-void searchTraversal(WhittedState&, int32_t);
-thrust::device_ptr<unsigned int> initialTraversal(WhittedState&, int32_t);
+void nonsortedSearch(WhittedState&);
+void searchTraversal(WhittedState&);
+thrust::device_ptr<unsigned int> initialTraversal(WhittedState&);

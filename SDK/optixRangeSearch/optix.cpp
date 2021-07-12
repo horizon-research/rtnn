@@ -190,45 +190,48 @@ static void buildGas(
     }
 }
 
-void createGeometry( WhittedState& state, float sortingGAS )
+CUdeviceptr createAABB( WhittedState& state, int batch )
 {
-    // Load AABB into device memory
+  // Load AABB into device memory
+  unsigned int numPrims = state.numPoints;
+  OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
+  CUdeviceptr d_aabb;
+
+  float radius;
+  if (state.partition) {
+    radius = state.launchRadius[batch];
+  } else {
+    radius = state.params.radius/state.sortingGAS;
+  }
+  std::cout << "\tAABB radius: " << radius << std::endl;
+  //std::cout << "num of points in GAS: " << numPrims << std::endl;
+
+  for(unsigned int i = 0; i < numPrims; i++) {
+    sphere_bound(
+        state.h_points[i], radius,
+        reinterpret_cast<float*>(&aabb[i]));
+
+  }
+
+  CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
+      ), numPrims * sizeof( OptixAabb ) ) );
+  CUDA_CHECK( cudaMemcpyAsync(
+              reinterpret_cast<void*>( d_aabb ),
+              aabb,
+              numPrims * sizeof( OptixAabb ),
+              cudaMemcpyHostToDevice,
+              state.stream
+  ) );
+
+  return d_aabb;
+}
+
+void createGeometry( WhittedState& state, int batch )
+{
+  Timing::startTiming("create and upload geometry");
+    CUdeviceptr d_aabb = createAABB(state, batch);
+
     unsigned int numPrims = state.numPoints;
-    OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
-    CUdeviceptr d_aabb;
-
-    // Create an AABB whose volume is the same as the sphere
-    //double sphere_volume = 4 / 3 * M_PI * state.params.radius * state.params.radius * state.params.radius;
-    //double halfLength = std::cbrt(sphere_volume / 8);
-    //std::cout << "\tAABB half length: " << halfLength << std::endl;
-    //float radius = halfLength;
-
-    float radius;
-    if (state.partition) {
-      radius = (state.partThd * 2 * state.params.radius / state.crRatio) / 2 * sqrt(2);
-    } else {
-      radius = state.params.radius/sortingGAS;
-    }
-    std::cout << "radius: " << radius << std::endl;
-    std::cout << "num of points in GAS: " << numPrims << std::endl;
-
-    for(unsigned int i = 0; i < numPrims; i++) {
-      sphere_bound(
-          state.h_points[i], radius,
-          reinterpret_cast<float*>(&aabb[i]));
-
-      if (i == 125820) printf("%f, %f, %f\n", state.h_points[i].x, state.h_points[i].y, state.h_points[i].z);
-    }
-
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-        ), numPrims * sizeof( OptixAabb ) ) );
-    CUDA_CHECK( cudaMemcpyAsync(
-                reinterpret_cast<void*>( d_aabb ),
-                aabb,
-                numPrims * sizeof( OptixAabb ),
-                cudaMemcpyHostToDevice,
-                state.stream
-    ) );
 
     // Setup AABB build input
     uint32_t* aabb_input_flags = (uint32_t*)malloc(numPrims * sizeof(uint32_t));
@@ -249,12 +252,10 @@ void createGeometry( WhittedState& state, float sortingGAS )
     aabb_input.customPrimitiveArray.sbtIndexOffsetSizeInBytes    = sizeof( uint32_t );
     aabb_input.customPrimitiveArray.primitiveIndexOffset         = 0;
 
-
     OptixAccelBuildOptions accel_options = {
         OPTIX_BUILD_FLAG_ALLOW_COMPACTION,  // buildFlags
         OPTIX_BUILD_OPERATION_BUILD         // operation
     };
-
 
     buildGas(
         state,
@@ -264,6 +265,7 @@ void createGeometry( WhittedState& state, float sortingGAS )
         state.d_gas_output_buffer);
 
     CUDA_CHECK( cudaFree( (void*)d_aabb) );
+  Timing::stopTiming(true);
 }
 
 void createModules( WhittedState &state )
@@ -538,7 +540,7 @@ void createContext( WhittedState& state )
 void launchSubframe( unsigned int* output_buffer, WhittedState& state )
 {
     state.params.frame_buffer = output_buffer;
-    std::cout << "Launch " << state.numQueries << " rays" << std::endl;
+    fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
 
     // note cudamemset sets #count number of BYTES to value.
     CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,
@@ -565,7 +567,6 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state )
         1,                // launch height
         1                 // launch depth
     ) );
-    // leave sync to the caller.
     //CUDA_SYNC_CHECK();
 }
 
@@ -574,27 +575,8 @@ void initLaunchParams( WhittedState& state )
     state.params.frame_buffer = nullptr; // the result buffer
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
 
-    state.params.max_depth = max_trace;
-    state.params.scene_epsilon = 1.e-4f;
-}
-
-void setupOptiX( WhittedState& state ) {
-  Timing::startTiming("create context");
-    createContext  ( state );
-  Timing::stopTiming(true);
-
-  // creating GAS can be done async with the rest two.
-  Timing::startTiming("create and upload geometry");
-    createGeometry ( state, state.sortingGAS );
-  Timing::stopTiming(true);
- 
-  Timing::startTiming("create pipeline");
-    createPipeline ( state );
-  Timing::stopTiming(true);
-
-  Timing::startTiming("create SBT");
-    createSBT      ( state );
-  Timing::stopTiming(true);
+    //state.params.max_depth = max_trace;
+    //state.params.scene_epsilon = 1.e-4f;
 }
 
 void cleanupState( WhittedState& state )
@@ -622,5 +604,26 @@ void cleanupState( WhittedState& state )
 
     if (state.h_queries != state.h_points) delete state.h_queries;
     delete state.h_points;
+}
+
+void setupOptiX( WhittedState& state ) {
+  Timing::startTiming("create context");
+    createContext  ( state );
+  Timing::stopTiming(true);
+ 
+  Timing::startTiming("create pipeline");
+    createPipeline ( state );
+  Timing::stopTiming(true);
+
+  Timing::startTiming("create SBT");
+    createSBT      ( state );
+  Timing::stopTiming(true);
+
+  //initLaunchParams( state );
+
+  // creating GAS can be done async with the above two.
+  //Timing::startTiming("create and upload geometry");
+  //  createGeometry ( state, state.sortingGAS );
+  //Timing::stopTiming(true);
 }
 
