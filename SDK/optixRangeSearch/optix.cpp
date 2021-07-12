@@ -205,8 +205,7 @@ void createGeometry( WhittedState& state, float sortingGAS )
 
     float radius;
     if (state.partition) {
-      radius = (4*state.params.radius/state.crRatio)/2*sqrt(2);
-      //radius = (4*state.params.radius/state.crRatio)/2;
+      radius = (state.partThd * 2 * state.params.radius / state.crRatio) / 2 * sqrt(2);
     } else {
       radius = state.params.radius/sortingGAS;
     }

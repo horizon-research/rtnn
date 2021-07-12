@@ -88,7 +88,7 @@ int main( int argc, char* argv[] )
   try
   {
     // Set up CUDA device and stream
-    int32_t device_id = 0;
+    int32_t device_id = 1;
     setupCUDA(state, device_id);
 
     Timing::reset();

@@ -101,7 +101,9 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
             }
           }
           // TODO: there could be corner cases here, e.g., maxWidth is very small, cellSize will be 0 (same as uninitialized).
-          // need to add 2 (not 1) to accommodate points at the edges/corners of the central cell.
+	  // need to add 2 (not 1) to accommodate points at the edges/corners
+	  // of the central cell. after all, width means for any query within
+	  // this cell, there will be KNN points within the width^3 cube.
           int width = (iter * 2 + 2) * state.params.radius / state.crRatio;
           if (width > maxWidth) {
             cellSearchSize[cellIndex] = 0; // if width > maxWidth, we need to do a full search.
@@ -127,8 +129,13 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
   state.cellMask = new bool[numberOfCells];
   unsigned int numOfActiveQueries = 0;
   for (unsigned int i = 0; i < numberOfCells; i++) {
-    //if (cellSearchSize[i] != 0) fprintf(stdout, "%u, %u, %u, %f\n", i, cellSearchSize[i], h_CellParticleCounts[i], (cellSearchSize[i] * 2 - 1) * state.params.radius/state.crRatio);
-    if (cellSearchSize[i] > 0 && cellSearchSize[i] <= 2) {
+    //if (cellSearchSize[i] != 0) fprintf(stdout, "%u, %u, %u, %f\n",
+    //                                    i,
+    //                                    cellSearchSize[i],
+    //                                    h_CellParticleCounts[i],
+    //                                    (cellSearchSize[i] * 2 - 1) * state.params.radius/state.crRatio
+    //                                   );
+    if (cellSearchSize[i] > 0 && cellSearchSize[i] <= state.partThd) {
        state.cellMask[i] = true;
        numOfActiveQueries += h_CellParticleCounts[i];
     }

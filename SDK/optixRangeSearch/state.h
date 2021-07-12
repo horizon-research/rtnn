@@ -82,7 +82,7 @@ struct WhittedState
 
     bool                        partition                 = false;
     bool*                       cellMask                  = nullptr;
-    //float3*                     curQs                     = nullptr;
+    int                         partThd                   = 3;
 
     float3                      Min;
     float3                      Max;
