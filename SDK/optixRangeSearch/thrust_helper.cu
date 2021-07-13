@@ -8,20 +8,29 @@
 // be compiled by nvcc needs to have .cu extensions. See here:
 // https://github.com/NVIDIA/thrust/issues/614
 
-void sortByKey( thrust::device_vector<float>* d_vec_key, thrust::device_vector<unsigned int>* d_vec_val ) {
-  thrust::sort_by_key(d_vec_key->begin(), d_vec_key->end(), d_vec_val->begin());
-}
+//void sortByKey( thrust::device_vector<float>* d_vec_key, thrust::device_vector<unsigned int>* d_vec_val ) {
+//  thrust::sort_by_key(d_vec_key->begin(), d_vec_key->end(), d_vec_val->begin());
+//}
+//
+//void sortByKey( thrust::device_vector<float>* d_vec_key, thrust::device_ptr<unsigned int> d_init_val_ptr ) {
+//  thrust::sort_by_key(d_vec_key->begin(), d_vec_key->end(), d_init_val_ptr);
+//}
+//
 
-void sortByKey( thrust::device_vector<float>* d_vec_key, thrust::device_ptr<unsigned int> d_init_val_ptr ) {
-  thrust::sort_by_key(d_vec_key->begin(), d_vec_key->end(), d_init_val_ptr);
+void sortByKey( thrust::device_ptr<float> d_key_ptr, thrust::device_ptr<unsigned int> d_val_ptr, unsigned int N, cudaStream_t stream ) {
+  thrust::sort_by_key(thrust::cuda::par.on(stream), d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
 void sortByKey( thrust::device_ptr<float> d_key_ptr, thrust::device_ptr<unsigned int> d_val_ptr, unsigned int N ) {
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
-void sortByKey( thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_vector<unsigned int>* d_vec_val, unsigned int N ) {
-  thrust::sort_by_key(d_vec_key_ptr, d_vec_key_ptr + N, d_vec_val->begin());
+//void sortByKey( thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_vector<unsigned int>* d_vec_val, unsigned int N ) {
+//  thrust::sort_by_key(d_vec_key_ptr, d_vec_key_ptr + N, d_vec_val->begin());
+//}
+
+void sortByKey( thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_ptr<unsigned int> d_vec_val_ptr, unsigned int N, cudaStream_t stream ) {
+  thrust::sort_by_key(thrust::cuda::par.on(stream), d_vec_key_ptr, d_vec_key_ptr + N, d_vec_val_ptr);
 }
 
 void sortByKey( thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_ptr<unsigned int> d_vec_val_ptr, unsigned int N ) {
@@ -48,8 +57,16 @@ void gatherByKey ( thrust::device_vector<unsigned int>* d_vec_val, thrust::devic
   thrust::gather(d_vec_val->begin(), d_vec_val->end(), d_orig_val_ptr, d_new_val_ptr);
 }
 
+void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<float3> d_orig_val_ptr, thrust::device_ptr<float3> d_new_val_ptr, unsigned int N, cudaStream_t stream ) {
+  thrust::gather(thrust::cuda::par.on(stream), d_key_ptr, d_key_ptr + N, d_orig_val_ptr, d_new_val_ptr);
+}
+
 void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<float3> d_orig_val_ptr, thrust::device_ptr<float3> d_new_val_ptr, unsigned int N ) {
   thrust::gather(d_key_ptr, d_key_ptr + N, d_orig_val_ptr, d_new_val_ptr);
+}
+
+void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_vector<float>* d_orig_queries, thrust::device_ptr<float> d_new_val_ptr, unsigned int N, cudaStream_t stream ) {
+  thrust::gather(thrust::cuda::par.on(stream), d_key_ptr, d_key_ptr + N, d_orig_queries->begin(), d_new_val_ptr);
 }
 
 void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_vector<float>* d_orig_queries, thrust::device_ptr<float> d_new_val_ptr, unsigned int N ) {
@@ -94,6 +111,14 @@ thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
   return d_init_val_ptr;
 }
 
+thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims, cudaStream_t stream) {
+  thrust::device_ptr<unsigned int> d_init_val_ptr = getThrustDevicePtr(numPrims);
+  thrust::sequence(thrust::cuda::par.on(stream),
+       d_init_val_ptr, d_init_val_ptr + numPrims);
+
+  return d_init_val_ptr;
+}
+
 // https://forums.developer.nvidia.com/t/thrust-and-streams/53199
 void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, thrust::device_ptr<unsigned int> d_dest_ptr, cudaStream_t stream) {
   thrust::exclusive_scan(thrust::cuda::par.on(stream),
@@ -107,6 +132,10 @@ void exclusiveScan(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, t
     d_src_ptr,
     d_src_ptr + N,
     d_dest_ptr);
+}
+
+void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int value, cudaStream_t stream) {
+  thrust::fill(thrust::cuda::par.on(stream), d_src_ptr, d_src_ptr + N, value);
 }
 
 void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int value) {

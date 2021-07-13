@@ -107,18 +107,18 @@ void uploadData ( WhittedState& state ) {
   Timing::stopTiming(true);
 }
 
-static void sphere_bound(float3 center, float radius, float result[6])
-{
-    OptixAabb *aabb = reinterpret_cast<OptixAabb*>(result);
-
-    float3 m_min = center - radius;
-    float3 m_max = center + radius;
-
-    *aabb = {
-        m_min.x, m_min.y, m_min.z,
-        m_max.x, m_max.y, m_max.z
-    };
-}
+//static void sphere_bound(float3 center, float radius, float result[6])
+//{
+//    OptixAabb *aabb = reinterpret_cast<OptixAabb*>(result);
+//
+//    float3 m_min = center - radius;
+//    float3 m_max = center + radius;
+//
+//    *aabb = {
+//        m_min.x, m_min.y, m_min.z,
+//        m_max.x, m_max.y, m_max.z
+//    };
+//}
 
 static void buildGas(
     const WhittedState &state,
@@ -126,7 +126,7 @@ static void buildGas(
     const OptixBuildInput &build_input,
     OptixTraversableHandle &gas_handle,
     CUdeviceptr &d_gas_output_buffer,
-    unsigned int batch_id
+    int batch_id
     )
 {
     OptixAccelBufferSizes gas_buffer_sizes;
@@ -172,7 +172,7 @@ static void buildGas(
     CUDA_CHECK( cudaFree( (void*)d_temp_buffer_gas ) );
 
     size_t compacted_gas_size;
-    CUDA_CHECK( cudaMemcpy( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost ) );
+    CUDA_CHECK( cudaMemcpyAsync( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost, state.stream[batch_id] ) );
 
     if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
     {
@@ -193,7 +193,6 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
 {
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
-  //OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
   CUdeviceptr d_aabb;
 
   float radius;
@@ -206,27 +205,14 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
   //std::cout << "\tAABB radius: " << radius << std::endl;
   //std::cout << "\tnum of points in GAS: " << numPrims << std::endl;
 
-  //for(unsigned int i = 0; i < numPrims; i++) {
-  //  sphere_bound(
-  //      state.h_points[i], radius,
-  //      reinterpret_cast<float*>(&aabb[i]));
-
-  //}
-
   CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
       ), numPrims * sizeof( OptixAabb ) ) );
-  //CUDA_CHECK( cudaMemcpyAsync(
-  //            reinterpret_cast<void*>( d_aabb ),
-  //            aabb,
-  //            numPrims * sizeof( OptixAabb ),
-  //            cudaMemcpyHostToDevice,
-  //            state.stream[batch_id]
-  //) );
 
   kGenAABB(state.params.points,
            radius,
            numPrims,
-           d_aabb
+           d_aabb,
+           state.stream[batch_id]
           );
 
   return d_aabb;
@@ -267,6 +253,7 @@ void createGeometry( WhittedState& state, int batch_id )
         batch_id);
 
     CUDA_CHECK( cudaFree( (void*)d_aabb) );
+    OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
 }
 
@@ -539,11 +526,11 @@ void createContext( WhittedState& state )
     state.context = context;
 }
 
-void launchSubframe( unsigned int* output_buffer, WhittedState& state, unsigned int batch_id )
+void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch_id )
 {
     state.params.frame_buffer = output_buffer;
 
-    //fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
+    fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
     //fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
     //fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
     //fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
@@ -573,7 +560,6 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, unsigned 
         1,                // launch height
         1                 // launch depth
     ) );
-    //CUDA_SYNC_CHECK();
 }
 
 void cleanupState( WhittedState& state )

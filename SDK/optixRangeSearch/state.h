@@ -32,6 +32,14 @@
 #include <optix_types.h>
 #include "optixRangeSearch.h"
 
+//#define E2EMSR
+
+#ifdef E2EMSR
+  #define OMIT_ON_E2EMSR(x)
+#else
+  #define OMIT_ON_E2EMSR(x) x
+#endif
+
 struct WhittedState
 {
     OptixDeviceContext          context                   = 0;

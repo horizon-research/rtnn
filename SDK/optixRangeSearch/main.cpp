@@ -96,7 +96,7 @@ int main( int argc, char* argv[] )
 
     setupOptiX(state);
 
-    unsigned int batch;
+    int batch;
     if (state.partition) batch = 2;
     else {
       batch = 1;
@@ -105,9 +105,10 @@ int main( int argc, char* argv[] )
       state.h_actQs[0] = state.h_queries;
     }
 
-    // TODO: should launch the last batch since that's got the least rays and so the GPU utilization is low --- good for overlapping.
     Timing::startTiming("total search time");
-    for (unsigned int i = 0; i < batch; i++) {
+    //TODO: try a better scheduling here.
+    //for (int i = 0; i < batch; i++) {
+    for (int i = batch - 1; i >= 0; i--) {
       fprintf(stdout, "\n************** Batch %u **************\n", i);
       state.numQueries = state.numActQueries[i];
       state.params.queries = state.d_actQs[i];
@@ -123,6 +124,7 @@ int main( int argc, char* argv[] )
 
       search(state, i);
     }
+    CUDA_SYNC_CHECK();
     Timing::stopTiming(true);
 
     cleanupState( state );
