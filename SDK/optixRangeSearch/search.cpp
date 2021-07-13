@@ -52,7 +52,7 @@ void search(WhittedState& state, int batch_id) {
   Timing::stopTiming(true);
 
   // TODO: this is free device memory but will block until the previous optix launch finish.
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
+  //CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch_id) {

@@ -158,7 +158,7 @@ extern "C" __global__ void __intersection__sphere_knn()
     float3 O = ray_orig - center;
     float sqdist = dot(O, O);
 
-    //if (queryIdx == 533) {
+    //if (queryIdx == 76354) {
     //  printf("ray: %f, %f, %f\n", ray_orig.x, ray_orig.y, ray_orig.z);
     //  printf("point: %f, %f, %f\n", center.x, center.y, center.z);
     //  printf("primIdx: %u, sqdist: %f\n\n", primIdx, sqrt(sqdist));

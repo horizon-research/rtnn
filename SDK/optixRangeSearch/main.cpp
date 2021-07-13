@@ -106,8 +106,9 @@ int main( int argc, char* argv[] )
     }
 
     Timing::startTiming("total search time");
-    //TODO: try a better scheduling here.
-    for (int i = 0; i < state.numOfBatches; i++) {
+    //TODO: try a better scheduling here?
+    for (int i = 0; i < 1; i++) {
+    //for (int i = 0; i < state.numOfBatches; i++) {
     //for (int i = state.numOfBatches - 1; i >= 0; i--) {
       fprintf(stdout, "\n************** Batch %u **************\n", i);
       state.numQueries = state.numActQueries[i];
@@ -124,6 +125,18 @@ int main( int argc, char* argv[] )
 
       search(state, i);
     }
+
+    //for (int i = state.numOfBatches - 1; i >= 0; i--) {
+    //  // has to do a gather here so that we don't have to make copies of the r2q map
+    //  state.numQueries = state.numActQueries[i];
+    //  state.params.queries = state.d_actQs[i];
+    //  state.h_queries = state.h_actQs[i];
+    //  state.params.radius = state.launchRadius[i]; // hack
+
+    //  search(state, i);
+    //}
+
+
     CUDA_SYNC_CHECK();
     Timing::stopTiming(true);
 

@@ -163,6 +163,7 @@ static void buildGas(
 
     if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
     {
+        // compacted size is smaller, so store the compacted GAS in new device memory and free the original GAS memory (delayed to to the end).
         CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
 
         // use handle as input and output
@@ -172,6 +173,7 @@ static void buildGas(
     }
     else
     {
+        // original size is smaller, so point d_gas_output_buffer directly to the original device GAS memory.
         d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
     }
 }
@@ -235,7 +237,7 @@ void createGeometry( WhittedState& state, int batch_id )
         state,
         accel_options,
         aabb_input,
-        state.gas_handle,
+        state.gas_handle[batch_id],
         state.d_gas_output_buffer[batch_id],
         batch_id);
 
@@ -527,7 +529,7 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
                                   state.numQueries * state.params.limit * sizeof(unsigned int),
                                   state.stream[batch_id] ) );
 
-    state.params.handle = state.gas_handle;
+    state.params.handle = state.gas_handle[batch_id];
 
     CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
@@ -566,7 +568,9 @@ void cleanupState( WhittedState& state )
       CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
       CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
       CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
+      // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
+      if (state.d_gas_output_buffer[i])
+        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
     }
 
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );

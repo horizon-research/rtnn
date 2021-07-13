@@ -32,7 +32,7 @@
 #include <optix_types.h>
 #include "optixRangeSearch.h"
 
-//#define E2EMSR
+#define E2EMSR
 
 #ifdef E2EMSR
   #define OMIT_ON_E2EMSR(x)
@@ -43,7 +43,7 @@
 struct WhittedState
 {
     OptixDeviceContext          context                   = 0;
-    OptixTraversableHandle      gas_handle                = {};
+    OptixTraversableHandle      gas_handle[2]             = {};
     CUdeviceptr                 d_gas_output_buffer[2]    = {};
 
     OptixModule                 geometry_module           = 0;
