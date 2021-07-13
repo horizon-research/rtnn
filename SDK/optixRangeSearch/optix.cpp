@@ -107,19 +107,6 @@ void uploadData ( WhittedState& state ) {
   Timing::stopTiming(true);
 }
 
-//static void sphere_bound(float3 center, float radius, float result[6])
-//{
-//    OptixAabb *aabb = reinterpret_cast<OptixAabb*>(result);
-//
-//    float3 m_min = center - radius;
-//    float3 m_max = center + radius;
-//
-//    *aabb = {
-//        m_min.x, m_min.y, m_min.z,
-//        m_max.x, m_max.y, m_max.z
-//    };
-//}
-
 static void buildGas(
     WhittedState &state,
     const OptixAccelBuildOptions &accel_options,
