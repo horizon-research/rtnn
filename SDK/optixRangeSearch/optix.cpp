@@ -121,7 +121,7 @@ void uploadData ( WhittedState& state ) {
 //}
 
 static void buildGas(
-    const WhittedState &state,
+    WhittedState &state,
     const OptixAccelBuildOptions &accel_options,
     const OptixBuildInput &build_input,
     OptixTraversableHandle &gas_handle,
@@ -169,7 +169,7 @@ static void buildGas(
         &emitProperty,
         1) );
 
-    CUDA_CHECK( cudaFree( (void*)d_temp_buffer_gas ) );
+    state.d_temp_buffer_gas[batch_id] = reinterpret_cast<void*>(d_temp_buffer_gas);
 
     size_t compacted_gas_size;
     CUDA_CHECK( cudaMemcpyAsync( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost, state.stream[batch_id] ) );
@@ -181,7 +181,7 @@ static void buildGas(
         // use handle as input and output
         OPTIX_CHECK( optixAccelCompact( state.context, state.stream[batch_id], gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
-        CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
+        state.d_buffer_temp_output_gas_and_compacted_size[batch_id] = (void*)d_buffer_temp_output_gas_and_compacted_size;
     }
     else
     {
@@ -249,11 +249,11 @@ void createGeometry( WhittedState& state, int batch_id )
         accel_options,
         aabb_input,
         state.gas_handle,
-        state.d_gas_output_buffer,
+        state.d_gas_output_buffer[batch_id],
         batch_id);
 
-    CUDA_CHECK( cudaFree( (void*)d_aabb) );
-    OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) ); // TODO: just so we can measure time
+    state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
+    OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
   Timing::stopTiming(true);
 }
 
@@ -572,19 +572,26 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixModuleDestroy       ( state.camera_module           ) );
     OPTIX_CHECK( optixDeviceContextDestroy( state.context                 ) );
 
-    CUDA_CHECK( cudaStreamDestroy(state.stream[0]) );
-    if (state.partition) CUDA_CHECK( cudaStreamDestroy(state.stream[1]) );
+    for (int i = 0; i < state.numOfBatches; i++) {
+      CUDA_CHECK( cudaStreamDestroy(state.stream[i]) );
+      CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
+      CUDA_CHECK( cudaFree( state.d_res[i] ) );
+      CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
+      CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
+      CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
+      CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
+    }
 
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer    ) ) );
-    if (state.d_r2q_map)
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map     ) ) );
     if (state.params.queries != state.params.points)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points          ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
+    if (state.d_r2q_map)
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map     ) ) );
     if (state.d_key)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_key                ) ) );
 

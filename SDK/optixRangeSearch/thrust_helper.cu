@@ -86,6 +86,15 @@ thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int N) {
   return d_memory_ptr;
 }
 
+thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int N) {
+  float* d_memory;
+  cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(unsigned int) );
+  thrust::device_ptr<float> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
   unsigned int* d_memory;
   cudaMalloc(reinterpret_cast<void**>(&d_memory),

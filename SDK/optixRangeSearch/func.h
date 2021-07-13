@@ -37,6 +37,7 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
 thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
+thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int);
 thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int);
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int);
 thrust::device_ptr<unsigned int> genSeqDevice(unsigned int, cudaStream_t);
@@ -52,8 +53,7 @@ void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned in
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
 void kCountingSortIndices_genMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, bool*, bool*);
 
-void sanityCheck_knn(WhittedState&, void*);
-void sanityCheck(WhittedState&, void*);
+void sanityCheck(WhittedState&);
 
 void computeMinMax(WhittedState&, ParticleType);
 void gridSort(WhittedState&, ParticleType, bool);

@@ -32,7 +32,7 @@
 #include <optix_types.h>
 #include "optixRangeSearch.h"
 
-//#define E2EMSR
+#define E2EMSR
 
 #ifdef E2EMSR
   #define OMIT_ON_E2EMSR(x)
@@ -44,7 +44,7 @@ struct WhittedState
 {
     OptixDeviceContext          context                   = 0;
     OptixTraversableHandle      gas_handle                = {};
-    CUdeviceptr                 d_gas_output_buffer       = {};
+    CUdeviceptr                 d_gas_output_buffer[2]    = {};
 
     OptixModule                 geometry_module           = 0;
     OptixModule                 camera_module             = 0;
@@ -87,13 +87,19 @@ struct WhittedState
     unsigned int                numTotalQueries           = 0;
     unsigned int                numActQueries[2]          = {0};
     float                       launchRadius[2]           = {0.0};
-
+    void*                       h_res[2]                  = {nullptr};
+    void*                       d_res[2]                  = {nullptr};
     float3*                     d_actQs[2]                = {nullptr};
     float3*                     h_actQs[2]                = {nullptr};
+    void*                       d_aabb[2]                 = {nullptr};
+    void*                       d_firsthit_idx[2]         = {nullptr};
+    void*                       d_temp_buffer_gas[2]      = {nullptr};
+    void*                       d_buffer_temp_output_gas_and_compacted_size[2] = {nullptr};
 
     bool                        partition                 = false;
     bool*                       cellMask                  = nullptr;
     int                         partThd                   = 1;
+    int                         numOfBatches              = 1;
 
     float3                      Min;
     float3                      Max;

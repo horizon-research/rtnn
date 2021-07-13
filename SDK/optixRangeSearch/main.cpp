@@ -96,10 +96,9 @@ int main( int argc, char* argv[] )
 
     setupOptiX(state);
 
-    int batch;
-    if (state.partition) batch = 2;
+    if (state.partition) state.numOfBatches = 2;
     else {
-      batch = 1;
+      state.numOfBatches = 1;
       state.numActQueries[0] = state.numQueries;
       state.d_actQs[0] = state.params.queries;
       state.h_actQs[0] = state.h_queries;
@@ -107,8 +106,8 @@ int main( int argc, char* argv[] )
 
     Timing::startTiming("total search time");
     //TODO: try a better scheduling here.
-    //for (int i = 0; i < batch; i++) {
-    for (int i = batch - 1; i >= 0; i--) {
+    for (int i = 0; i < state.numOfBatches; i++) {
+    //for (int i = state.numOfBatches - 1; i >= 0; i--) {
       fprintf(stdout, "\n************** Batch %u **************\n", i);
       state.numQueries = state.numActQueries[i];
       state.params.queries = state.d_actQs[i];
@@ -127,7 +126,9 @@ int main( int argc, char* argv[] )
     CUDA_SYNC_CHECK();
     Timing::stopTiming(true);
 
-    cleanupState( state );
+    sanityCheck(state);
+
+    cleanupState(state);
   }
   catch( std::exception& e )
   {

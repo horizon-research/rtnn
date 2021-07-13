@@ -11,6 +11,7 @@ void search(WhittedState& state, int batch_id) {
     Timing::startTiming("search compute");
       state.params.limit = state.params.knn;
       thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
+      state.d_res[batch_id] = reinterpret_cast<void*>(thrust::raw_pointer_cast(output_buffer));
 
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map;
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
@@ -30,15 +31,16 @@ void search(WhittedState& state, int batch_id) {
       //}
 
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state, batch_id );
-      OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) ); // TODO: just so we can measure time
+      OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
     Timing::stopTiming(true);
 
     // cudaMallocHost is time consuming; must be hidden behind async launch
     Timing::startTiming("result copy D2H");
       void* data;
       cudaMallocHost(reinterpret_cast<void**>(&data), state.numQueries * state.params.limit * sizeof(unsigned int));
+      state.h_res[batch_id] = data;
 
-      // TODO: do a thrust copy
+      // TODO: do a thrust copy?
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       thrust::raw_pointer_cast(output_buffer),
@@ -46,14 +48,9 @@ void search(WhittedState& state, int batch_id) {
                       cudaMemcpyDeviceToHost,
                       state.stream[batch_id]
                       ) );
-      OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) ); // TODO: just so we can measure time
+      OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
     Timing::stopTiming(true);
   Timing::stopTiming(true);
-
-  if (state.searchMode == "radius") OMIT_ON_E2EMSR( sanityCheck( state, data ) );
-  else OMIT_ON_E2EMSR( sanityCheck_knn( state, data ) );
-  CUDA_CHECK( cudaFreeHost(data) );
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch_id) {
@@ -66,7 +63,7 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch
 
     launchSubframe( thrust::raw_pointer_cast(output_buffer), state, batch_id );
     // TODO: could delay this until sort, but initial traversal is lightweight anyways
-    OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) ); // TODO: just so we can measure time
+    OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
   Timing::stopTiming(true);
 
   return output_buffer;
@@ -82,7 +79,7 @@ void gasSortSearch(WhittedState& state, int batch_id) {
     d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr, batch_id);
   else if (state.qGasSortMode == 2)
     d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr, batch_id);
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_firsthit_idx_ptr) ) );
+  state.d_firsthit_idx[batch_id] = reinterpret_cast<void*>(thrust::raw_pointer_cast(d_firsthit_idx_ptr));
 
   if (state.toGather)
     gatherQueries( state, d_indices_ptr, batch_id );

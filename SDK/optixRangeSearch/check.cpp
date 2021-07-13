@@ -17,7 +17,7 @@ class Compare
 };
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
-void sanityCheck_knn( WhittedState& state, void* data ) {
+void sanityCheckKNN( WhittedState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
@@ -36,7 +36,7 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
       float dists = dot(diff, diff);
       if ((dists > 0) && (dists < state.radius * state.radius)) {
         knn_res_t res = std::make_pair(dists, p);
-        if (size < state.params.limit) {
+        if (size < state.params.knn) {
           topKQ.push(res);
           size++;
         } else if (dists < topKQ.top().first) {
@@ -61,8 +61,8 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
     if (printRes) std::cout << "RTX: ";
     std::unordered_set<unsigned int> gpu_idxs;
     std::unordered_set<float> gpu_dists;
-    for (unsigned int n = 0; n < state.params.limit; n++) {
-      unsigned int p = static_cast<unsigned int*>( data )[ q * state.params.limit + n ];
+    for (unsigned int n = 0; n < state.params.knn; n++) {
+      unsigned int p = static_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.params.knn + n ];
       if (p == UINT_MAX) break;
       else {
         float3 diff = state.h_points[p] - query;
@@ -97,15 +97,16 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
   std::cerr << "\tSanity check done." << std::endl;
 }
 
-void sanityCheck( WhittedState& state, void* data ) {
+void sanityCheckRadius( WhittedState& state, int batch_id ) {
   // this is stateful in that it relies on state.params.limit
+  // TODO: now use knn rather than limit. good?
 
   unsigned int totalNeighbors = 0;
   unsigned int totalWrongNeighbors = 0;
   double totalWrongDist = 0;
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < state.params.limit; n++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( data )[ q * state.params.limit + n ];
+    for (unsigned int n = 0; n < state.params.knn; n++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.params.knn + n ];
       //std::cout << p << std::endl; break;
       if (p == UINT_MAX) break;
       else {
@@ -116,7 +117,6 @@ void sanityCheck( WhittedState& state, void* data ) {
           //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
           totalWrongNeighbors++;
           totalWrongDist += sqrt(dists);
-          //exit(1);
         }
         //std::cout << sqrt(dists) << " ";
       }
@@ -130,4 +130,12 @@ void sanityCheck( WhittedState& state, void* data ) {
   if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
 }
 
+void sanityCheck(WhittedState& state) {
+  for (int i = 0; i < state.numOfBatches; i++) {
+    state.numQueries = state.numActQueries[i];
+    state.h_queries = state.h_actQs[i];
 
+    if (state.searchMode == "radius") sanityCheckRadius( state, i );
+    else sanityCheckKNN( state, i );
+  }
+}
