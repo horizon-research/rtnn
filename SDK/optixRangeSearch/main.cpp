@@ -106,8 +106,9 @@ int main( int argc, char* argv[] )
     }
 
     // TODO: should launch the last batch since that's got the least rays and so the GPU utilization is low --- good for overlapping.
+    Timing::startTiming("total search time");
     for (unsigned int i = 0; i < batch; i++) {
-      std::cout << "\tBatch: " << i << std::endl;
+      fprintf(stdout, "\n************** Batch %u **************\n", i);
       state.numQueries = state.numActQueries[i];
       state.params.queries = state.d_actQs[i];
       state.h_queries = state.h_actQs[i];
@@ -118,10 +119,11 @@ int main( int argc, char* argv[] )
       // create the GAS using the current order of points and the launchRadius of the current batch.
       createGeometry (state, i); // batch_id ignored if not partition.
 
-      if (state.qGasSortMode) gasSortSearch(state);
+      if (state.qGasSortMode) gasSortSearch(state, i);
 
       search(state, i);
     }
+    Timing::stopTiming(true);
 
     cleanupState( state );
   }

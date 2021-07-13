@@ -32,9 +32,6 @@
 #include <optix_types.h>
 #include "optixRangeSearch.h"
 
-// TODO remove this but use cudaStream_t for stream
-//#include <sutil/CUDAOutputBuffer.h>
-
 struct WhittedState
 {
     OptixDeviceContext          context                   = 0;
@@ -51,7 +48,7 @@ struct WhittedState
     OptixPipeline               pipeline                  = 0;
     OptixPipelineCompileOptions pipeline_compile_options  = {};
 
-    cudaStream_t                stream                    = 0;
+    cudaStream_t                stream[2]                 = {0};
     Params                      params;
     Params*                     d_params                  = nullptr;
 

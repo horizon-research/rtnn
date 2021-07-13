@@ -82,7 +82,7 @@ void uploadData ( WhittedState& state ) {
         state.h_points,
         state.numPoints * sizeof(float3),
         cudaMemcpyHostToDevice,
-        state.stream
+        state.stream[0]
     ) );
 
     if (state.samepq) {
@@ -101,10 +101,10 @@ void uploadData ( WhittedState& state ) {
           state.h_queries,
           state.numQueries * sizeof(float3),
           cudaMemcpyHostToDevice,
-          state.stream
+          state.stream[0]
       ) );
     }
-    CUDA_CHECK( cudaStreamSynchronize( state.stream ) ); // TODO: just so we can measure time
+    CUDA_CHECK( cudaStreamSynchronize( state.stream[0] ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
 }
 
@@ -126,7 +126,8 @@ static void buildGas(
     const OptixAccelBuildOptions &accel_options,
     const OptixBuildInput &build_input,
     OptixTraversableHandle &gas_handle,
-    CUdeviceptr &d_gas_output_buffer
+    CUdeviceptr &d_gas_output_buffer,
+    unsigned int batch_id
     )
 {
     OptixAccelBufferSizes gas_buffer_sizes;
@@ -157,7 +158,7 @@ static void buildGas(
 
     OPTIX_CHECK( optixAccelBuild(
         state.context,
-        state.stream,
+        state.stream[batch_id],
         &accel_options,
         &build_input,
         1,
@@ -179,7 +180,7 @@ static void buildGas(
         CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
 
         // use handle as input and output
-        OPTIX_CHECK( optixAccelCompact( state.context, state.stream, gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
+        OPTIX_CHECK( optixAccelCompact( state.context, state.stream[batch_id], gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
         CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
     }
@@ -189,7 +190,7 @@ static void buildGas(
     }
 }
 
-CUdeviceptr createAABB( WhittedState& state, int batch )
+CUdeviceptr createAABB( WhittedState& state, int batch_id )
 {
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
@@ -198,7 +199,7 @@ CUdeviceptr createAABB( WhittedState& state, int batch )
 
   float radius;
   if (state.partition) {
-    radius = state.launchRadius[batch];
+    radius = state.launchRadius[batch_id];
   } else {
     radius = state.radius / state.sortingGAS;
   }
@@ -220,16 +221,16 @@ CUdeviceptr createAABB( WhittedState& state, int batch )
               aabb,
               numPrims * sizeof( OptixAabb ),
               cudaMemcpyHostToDevice,
-              state.stream
+              state.stream[batch_id]
   ) );
 
   return d_aabb;
 }
 
-void createGeometry( WhittedState& state, int batch )
+void createGeometry( WhittedState& state, int batch_id )
 {
   Timing::startTiming("create and upload geometry");
-    CUdeviceptr d_aabb = createAABB(state, batch);
+    CUdeviceptr d_aabb = createAABB(state, batch_id);
 
     unsigned int numPrims = state.numPoints;
 
@@ -262,7 +263,8 @@ void createGeometry( WhittedState& state, int batch )
         accel_options,
         aabb_input,
         state.gas_handle,
-        state.d_gas_output_buffer);
+        state.d_gas_output_buffer,
+        batch_id);
 
     CUDA_CHECK( cudaFree( (void*)d_aabb) );
   Timing::stopTiming(true);
@@ -537,19 +539,19 @@ void createContext( WhittedState& state )
     state.context = context;
 }
 
-void launchSubframe( unsigned int* output_buffer, WhittedState& state )
+void launchSubframe( unsigned int* output_buffer, WhittedState& state, unsigned int batch_id )
 {
     state.params.frame_buffer = output_buffer;
 
-    fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
-    fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
-    fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
-    fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
+    //fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
+    //fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
+    //fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
+    //fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
 
     // note cudamemset sets #count number of BYTES to value.
     CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,
                                   state.numQueries * state.params.limit * sizeof(unsigned int),
-                                  state.stream ) );
+                                  state.stream[batch_id] ) );
 
     state.params.handle = state.gas_handle;
 
@@ -558,12 +560,12 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state )
                                  &state.params,
                                  sizeof( Params ),
                                  cudaMemcpyHostToDevice,
-                                 state.stream
+                                 state.stream[batch_id]
     ) );
 
     OPTIX_CHECK( optixLaunch(
         state.pipeline,
-        state.stream,
+        state.stream[batch_id],
         reinterpret_cast<CUdeviceptr>( state.d_params ),
         sizeof( Params ),
         &state.sbt,
@@ -583,6 +585,9 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixModuleDestroy       ( state.geometry_module         ) );
     OPTIX_CHECK( optixModuleDestroy       ( state.camera_module           ) );
     OPTIX_CHECK( optixDeviceContextDestroy( state.context                 ) );
+
+    CUDA_CHECK( cudaStreamDestroy(state.stream[0]) );
+    if (state.partition) CUDA_CHECK( cudaStreamDestroy(state.stream[1]) );
 
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );

@@ -283,7 +283,8 @@ void setupCUDA( WhittedState& state) {
   CUDA_CHECK( cudaSetDevice( state.device_id ) );
   std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
 
-  CUDA_CHECK( cudaStreamCreate( &state.stream ) );
+  CUDA_CHECK( cudaStreamCreate( &state.stream[0] ) );
+  if (state.partition) CUDA_CHECK( cudaStreamCreate( &state.stream[1] ) );
 }
 
 void readData(WhittedState& state) {

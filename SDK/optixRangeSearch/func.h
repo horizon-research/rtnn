@@ -58,7 +58,7 @@ void gatherQueries(WhittedState&, thrust::device_ptr<unsigned int>);
 void setupCUDA(WhittedState&);
 void uploadData(WhittedState&);
 void createGeometry(WhittedState&, int);
-void launchSubframe(unsigned int*, WhittedState&);
+void launchSubframe(unsigned int*, WhittedState&, unsigned int);
 void initLaunchParams(WhittedState&);
 void setupOptiX(WhittedState&);
 void cleanupState(WhittedState&);
@@ -68,7 +68,5 @@ void parseArgs(WhittedState&, int, char**);
 void readData(WhittedState&);
 
 void search(WhittedState&, unsigned int);
-void gasSortSearch(WhittedState&);
-//void nonsortedSearch(WhittedState&);
-//void searchTraversal(WhittedState&);
+void gasSortSearch(WhittedState&, unsigned int);
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState&);

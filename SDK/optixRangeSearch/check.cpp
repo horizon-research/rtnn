@@ -24,7 +24,7 @@ void sanityCheck_knn( WhittedState& state, void* data ) {
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
-    std::cout << "\tSanity check for query " << q << std::endl;
+    if (printRes) std::cout << "\tSanity check for query " << q << std::endl;
 
     // generate ground truth res
     float3 query = state.h_queries[q];
