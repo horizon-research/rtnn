@@ -69,7 +69,6 @@ typedef Record<GeomData>        RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
-
 void uploadData ( WhittedState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
@@ -194,7 +193,7 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
 {
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
-  OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
+  //OptixAabb* aabb = (OptixAabb*)malloc(numPrims * sizeof(OptixAabb));
   CUdeviceptr d_aabb;
 
   float radius;
@@ -207,22 +206,28 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
   //std::cout << "\tAABB radius: " << radius << std::endl;
   //std::cout << "\tnum of points in GAS: " << numPrims << std::endl;
 
-  for(unsigned int i = 0; i < numPrims; i++) {
-    sphere_bound(
-        state.h_points[i], radius,
-        reinterpret_cast<float*>(&aabb[i]));
+  //for(unsigned int i = 0; i < numPrims; i++) {
+  //  sphere_bound(
+  //      state.h_points[i], radius,
+  //      reinterpret_cast<float*>(&aabb[i]));
 
-  }
+  //}
 
   CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
       ), numPrims * sizeof( OptixAabb ) ) );
-  CUDA_CHECK( cudaMemcpyAsync(
-              reinterpret_cast<void*>( d_aabb ),
-              aabb,
-              numPrims * sizeof( OptixAabb ),
-              cudaMemcpyHostToDevice,
-              state.stream[batch_id]
-  ) );
+  //CUDA_CHECK( cudaMemcpyAsync(
+  //            reinterpret_cast<void*>( d_aabb ),
+  //            aabb,
+  //            numPrims * sizeof( OptixAabb ),
+  //            cudaMemcpyHostToDevice,
+  //            state.stream[batch_id]
+  //) );
+
+  kGenAABB(state.params.points,
+           radius,
+           numPrims,
+           d_aabb
+          );
 
   return d_aabb;
 }
@@ -234,13 +239,8 @@ void createGeometry( WhittedState& state, int batch_id )
 
     unsigned int numPrims = state.numPoints;
 
-    // Setup AABB build input
-    uint32_t* aabb_input_flags = (uint32_t*)malloc(numPrims * sizeof(uint32_t));
-
-    for (unsigned int i = 0; i < numPrims; i++) {
-      //aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-      aabb_input_flags[i] = OPTIX_GEOMETRY_FLAG_NONE;
-    }
+    // Setup AABB build input. Don't disable AH.
+    uint32_t aabb_input_flags[1] = { OPTIX_GEOMETRY_FLAG_NONE };
 
     OptixBuildInput aabb_input = {};
     aabb_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;

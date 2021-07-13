@@ -55,6 +55,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord(WhittedState&, thrust::dev
 thrust::device_ptr<unsigned int> sortQueriesByFHIdx(WhittedState&, thrust::device_ptr<unsigned int>);
 void gatherQueries(WhittedState&, thrust::device_ptr<unsigned int>);
 
+void kGenAABB(float3*, float, unsigned int, CUdeviceptr);
 void setupCUDA(WhittedState&);
 void uploadData(WhittedState&);
 void createGeometry(WhittedState&, int);
