@@ -143,13 +143,14 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
 
         int iter = 0;
         int count = 0;
-	// in radius search we want to completely skip dist calc and sphere
-	// check in GPU (bottleneck) so we constrain the maxWidth such that the
-	// AABB is completely enclosed by the sphere. in knn search dist calc
-	// can't be skipped and is not the bottleneck anyway (invoking IS
-	// programs is) so we relax the maxWidth to give points more
-	// opportunity to find a smaller search radius.
-        int maxWidth;
+
+	    // in radius search we want to completely skip dist calc and sphere
+	    // check in GPU (bottleneck) so we constrain the maxWidth such that the
+	    // AABB is completely enclosed by the sphere. in knn search dist calc
+	    // can't be skipped and is not the bottleneck anyway (invoking IS
+	    // programs is) so we relax the maxWidth to give points more
+	    // opportunity to find a smaller search radius.
+        float maxWidth;
         if (state.searchMode == "knn") maxWidth = state.radius * 2;
         else maxWidth = state.radius / sqrt(2) * 2;
 
@@ -166,32 +167,33 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
             }
           }
 
-	  // in the knn mode, if we want to be absolutely certain, we need to
-	  //  add 2 (not 1) to accommodate points at the edges/corners of the
-	  //  central cell. width means there are count # of points within the
-	  //  width^3 AABB, whose center is the center point of the current
-	  //  cell. for corner points in the cell, its width^3 AABB might have
-	  //  less than count # of points if the point distrition becomes
-	  //  dramatically sparse outside of the current AABB. if we +2, then
-	  //  the launchRadius calculation needs to be changed too.
-	  // in the radius mode, + 1 is sufficient as we are not interseted in
-	  //  the K nearest neighbors.
+	      // in the knn mode, if we want to be absolutely certain, we need to
+	      //  add 2 (not 1) to accommodate points at the edges/corners of the
+	      //  central cell. width means there are count # of points within the
+	      //  width^3 AABB, whose center is the center point of the current
+	      //  cell. for corner points in the cell, its width^3 AABB might have
+	      //  less than count # of points if the point distrition becomes
+	      //  dramatically sparse outside of the current AABB. if we +2, then
+	      //  the launchRadius calculation needs to be changed too.
+	      // in the radius mode, + 1 is sufficient as we are not interseted in
+	      //  the K nearest neighbors.
 
-	  // TODO: there could be corner cases here, e.g., maxWidth is very
-	  // small, cellSize will be 0 (same as uninitialized), or when
-	  // maxWidth is huge (to support unbounded KNN), we can stop checking
-	  // sooner when, e.g., count == N.
-          int width = (iter * 2 + 1) * state.radius / state.crRatio;
-          //int width = (iter * 2 + 2) * state.radius / state.crRatio;
+	      // TODO: there could be corner cases here, e.g., maxWidth is very
+	      // small, cellSize will be 0 (same as uninitialized), or when
+	      // maxWidth is huge (to support unbounded KNN), we can stop checking
+	      // sooner when, e.g., count == N.
+          float width = (iter * 2 + 1) * state.radius / state.crRatio;
+          //float width = (iter * 2 + 2) * state.radius / state.crRatio;
 
+          //fprintf(stdout, "%d, %f\n", iter, width);
           if (width > maxWidth) {
             cellSearchSize[cellIndex] = 0; // if width > maxWidth, we need to do a full search.
             break;
           }
           else if (count >= state.params.knn) {
-	    // now we know the width^3 AABB has K points, but we can't tell if
-	    // the K nearest points are in the AABB. we must blow up a sphere
-	    // with a radius of width/2 and search there to be sure.
+	        // now we know the width^3 AABB has K points, but we can't tell if
+	        // the K nearest points are in the AABB. we must blow up a sphere
+	        // with a radius of width/2 and search there to be sure.
             cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
             break;
           }

@@ -73,6 +73,7 @@ int main( int argc, char* argv[] )
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
+  std::cout << "Partition Thd: " << state.partThd << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
   std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;

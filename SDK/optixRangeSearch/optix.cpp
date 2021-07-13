@@ -518,9 +518,9 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
     state.params.frame_buffer = output_buffer;
 
     fprintf(stdout, "\tLaunch %u (%f) queries\n", state.numQueries, (float)state.numQueries/(float)state.numTotalQueries);
-    //fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
-    //fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
-    //fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
+    fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
+    fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
+    fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
 
     // note cudamemset sets #count number of BYTES to value.
     CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,

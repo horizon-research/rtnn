@@ -135,6 +135,9 @@ void sanityCheck(WhittedState& state) {
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 
+    // for empty batches, skip sanity check.
+    if (state.numQueries == 0) continue;
+
     if (state.searchMode == "radius") sanityCheckRadius( state, i );
     else sanityCheckKNN( state, i );
   }

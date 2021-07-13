@@ -177,6 +177,8 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --searchmode    | -sm             Search mode; can only be \"knn\" or \"radius\" \n";
     std::cerr << "         --radius        | -r              Search radius\n";
     std::cerr << "         --knn           | -k              Max K returned\n";
+    std::cerr << "         --partition     | -p              Allow query partition?\n";
+    std::cerr << "         --partthd       | -pt             The threshold between query partitions\n";
     std::cerr << "         --samepq        | -spq            Same points and queries?\n";
     std::cerr << "         --device        | -d              Which GPU to use?\n";
     std::cerr << "         --gassort       | -s              GAS-based query sort mode\n";
@@ -236,6 +238,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.partition = (bool)(atoi(argv[++i]));
+      }
+      else if( arg == "--partthd" || arg == "-pt" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.partThd = atoi(argv[++i]);
       }
       else if( arg == "--samepq" || arg == "-spq" )
       {
