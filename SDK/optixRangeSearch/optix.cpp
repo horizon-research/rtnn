@@ -575,7 +575,6 @@ void cleanupState( WhittedState& state )
     for (int i = 0; i < state.numOfBatches; i++) {
       CUDA_CHECK( cudaStreamDestroy(state.stream[i]) );
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
-      CUDA_CHECK( cudaFree( state.d_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
       CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
       CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );

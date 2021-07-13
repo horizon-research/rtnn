@@ -9,9 +9,46 @@
 #include <sutil/Exception.h>
 #include <sutil/vec_math.h>
 
+#include <thrust/device_vector.h>
 #include <thrust/copy.h>
 
 #include "state.h"
+
+thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int N) {
+  bool* d_memory;
+  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(bool) ) );
+  thrust::device_ptr<bool> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
+thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int N) {
+  float* d_memory;
+  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(unsigned int) ) );
+  thrust::device_ptr<float> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
+thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
+  unsigned int* d_memory;
+  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(unsigned int) ) );
+  thrust::device_ptr<unsigned int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
+
+thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int N) {
+  float3* d_memory;
+  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
+             N * sizeof(float3) ) );
+  thrust::device_ptr<float3> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+
+  return d_memory_ptr;
+}
 
 int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lineId)
 {

@@ -77,55 +77,13 @@ void gatherByKey ( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_pt
   thrust::gather(d_key_ptr, d_key_ptr + N, d_orig_val_ptr, d_new_val_ptr);
 }
 
-thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int N) {
-  bool* d_memory;
-  cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(bool) );
-  thrust::device_ptr<bool> d_memory_ptr = thrust::device_pointer_cast(d_memory);
-
-  return d_memory_ptr;
-}
-
-thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int N) {
-  float* d_memory;
-  cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(unsigned int) );
-  thrust::device_ptr<float> d_memory_ptr = thrust::device_pointer_cast(d_memory);
-
-  return d_memory_ptr;
-}
-
-thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
-  unsigned int* d_memory;
-  cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(unsigned int) );
-  thrust::device_ptr<unsigned int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
-
-  return d_memory_ptr;
-}
-
-thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int N) {
-  float3* d_memory;
-  cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(float3) );
-  thrust::device_ptr<float3> d_memory_ptr = thrust::device_pointer_cast(d_memory);
-
-  return d_memory_ptr;
-}
-
-thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims) {
-  thrust::device_ptr<unsigned int> d_init_val_ptr = getThrustDevicePtr(numPrims);
+void genSeqDevice(thrust::device_ptr<unsigned int> d_init_val_ptr, unsigned int numPrims) {
   thrust::sequence(d_init_val_ptr, d_init_val_ptr + numPrims);
-
-  return d_init_val_ptr;
 }
 
-thrust::device_ptr<unsigned int> genSeqDevice(unsigned int numPrims, cudaStream_t stream) {
-  thrust::device_ptr<unsigned int> d_init_val_ptr = getThrustDevicePtr(numPrims);
+void genSeqDevice(thrust::device_ptr<unsigned int> d_init_val_ptr, unsigned int numPrims, cudaStream_t stream) {
   thrust::sequence(thrust::cuda::par.on(stream),
        d_init_val_ptr, d_init_val_ptr + numPrims);
-
-  return d_init_val_ptr;
 }
 
 // https://forums.developer.nvidia.com/t/thrust-and-streams/53199

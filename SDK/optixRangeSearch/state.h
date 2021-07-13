@@ -88,7 +88,6 @@ struct WhittedState
     unsigned int                numActQueries[2]          = {0};
     float                       launchRadius[2]           = {0.0};
     void*                       h_res[2]                  = {nullptr};
-    void*                       d_res[2]                  = {nullptr};
     float3*                     d_actQs[2]                = {nullptr};
     float3*                     h_actQs[2]                = {nullptr};
     void*                       d_aabb[2]                 = {nullptr};

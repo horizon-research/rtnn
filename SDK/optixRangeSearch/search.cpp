@@ -11,7 +11,6 @@ void search(WhittedState& state, int batch_id) {
     Timing::startTiming("search compute");
       state.params.limit = state.params.knn;
       thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
-      state.d_res[batch_id] = reinterpret_cast<void*>(thrust::raw_pointer_cast(output_buffer));
 
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map;
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
@@ -51,6 +50,8 @@ void search(WhittedState& state, int batch_id) {
       OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
     Timing::stopTiming(true);
   Timing::stopTiming(true);
+
+  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch_id) {

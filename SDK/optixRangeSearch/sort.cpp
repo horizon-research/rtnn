@@ -494,7 +494,8 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
 
     // initialize a sequence to be sorted, which will become the r2q map.
     // TODO: need to free this.
-    thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.numQueries, state.stream[batch_id]);
+    thrust::device_ptr<unsigned int> d_r2q_map_ptr = getThrustDevicePtr(state.numQueries);
+    genSeqDevice(d_r2q_map_ptr, state.numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
   
   Timing::startTiming("gas-sort queries");
@@ -532,7 +533,8 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
 
   // initialize a sequence to be sorted, which will become the r2q map
   Timing::startTiming("gas-sort queries init");
-    thrust::device_ptr<unsigned int> d_r2q_map_ptr = genSeqDevice(state.numQueries, state.stream[batch_id]);
+    thrust::device_ptr<unsigned int> d_r2q_map_ptr = getThrustDevicePtr(state.numQueries);
+    genSeqDevice(d_r2q_map_ptr, state.numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
 
   Timing::startTiming("gas-sort queries");
