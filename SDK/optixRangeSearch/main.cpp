@@ -53,9 +53,6 @@ void setupSearch( WhittedState& state ) {
 int main( int argc, char* argv[] )
 {
   WhittedState state;
-  //state.radius = 2; // this is the given radius
-  //state.params.radius = state.radius; // this indicates the search radius of a launch
-  //state.params.knn = 50;
 
   parseArgs( state, argc, argv );
 
@@ -96,17 +93,11 @@ int main( int argc, char* argv[] )
 
     Timing::startTiming("total search time");
     //TODO: try a better scheduling here (reverse the order)?
-    //for (int i = state.numOfBatches - 1; i >= 0; i--) {
-    //for (int i = 0; i < state.numOfBatches; i++) {
-    for (int i = 3; i < 4; i++) {
+    for (int i = 0; i < state.numOfBatches; i++) {
       fprintf(stdout, "\n************** Batch %u **************\n", i);
-      if (state.numActQueries[i] == 0) continue;
-
-      //state.numQueries = state.numActQueries[i];
-      //state.params.queries = state.d_actQs[i];
-      //state.h_queries = state.h_actQs[i];
 
       // it's possible that certain batches have 0 query (e.g., state.partThd too low).
+      if (state.numActQueries[i] == 0) continue;
 
       // create the GAS using the current order of points and the launchRadius of the current batch.
       createGeometry (state, i); // batch_id ignored if not partition.
@@ -115,17 +106,6 @@ int main( int argc, char* argv[] )
 
       search(state, i);
     }
-
-    //for (int i = state.numOfBatches - 1; i >= 0; i--) {
-    //  // has to do a gather here so that we don't have to make copies of the r2q map
-    //  state.numQueries = state.numActQueries[i];
-    //  state.params.queries = state.d_actQs[i];
-    //  state.h_queries = state.h_actQs[i];
-    //  state.params.radius = state.launchRadius[i]; // hack
-
-    //  search(state, i);
-    //}
-
 
     CUDA_SYNC_CHECK();
     Timing::stopTiming(true);
