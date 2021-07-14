@@ -216,9 +216,9 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.params.knn = atoi(argv[++i]);
+          state.knn = atoi(argv[++i]);
       }
-      else if( arg == "--searchmode" || arg == "-sm" ) // need to be after --knn so that we can overwrite params.knn if needed
+      else if( arg == "--searchmode" || arg == "-sm" ) // need to be after --knn so that we can overwrite state.knn if needed
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
@@ -312,7 +312,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
 
   // do a round of sanity check here
   if (state.searchMode == "knn")
-    state.params.knn = K; // a macro
+    state.knn = K; // a macro
 
   if (state.partition)
     state.samepq = 1; // must be samepq if we want to partition queries.

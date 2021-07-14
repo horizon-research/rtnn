@@ -79,9 +79,6 @@ void setupSearch( WhittedState& state ) {
 int main( int argc, char* argv[] )
 {
   WhittedState state;
-  state.radius = 2; // this is the given radius
-  state.params.radius = 2; // this indicates the search radius of a launch
-  state.params.knn = 50;
 
   parseArgs( state, argc, argv );
 
@@ -92,7 +89,7 @@ int main( int argc, char* argv[] )
   std::cout << "numQueries: " << state.numTotalQueries << std::endl;
   std::cout << "searchMode: " << state.searchMode << std::endl;
   std::cout << "radius: " << state.radius << std::endl;
-  std::cout << "K: " << state.params.knn << std::endl;
+  std::cout << "K: " << state.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;

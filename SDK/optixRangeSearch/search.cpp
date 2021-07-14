@@ -9,7 +9,7 @@
 void search(WhittedState& state, int batch_id) {
   Timing::startTiming("batch search time");
     Timing::startTiming("search compute");
-      state.params.limit = state.params.knn;
+      state.params.limit = state.knn;
       thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
 
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map;

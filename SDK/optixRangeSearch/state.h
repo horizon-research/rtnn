@@ -77,7 +77,8 @@ struct WhittedState
     std::string                 searchMode                = "radius";
     std::string                 pfile;
     std::string                 qfile;
-    float                       radius                    = 0.0;
+    float                       radius                    = 2.0;
+    unsigned int                knn                       = 50;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order

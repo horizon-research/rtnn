@@ -230,7 +230,7 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
             searchSizeHist[iter + 1]++;
             break;
           }
-          else if (count >= state.params.knn) {
+          else if (count >= state.knn) {
 	        // now we know the width^3 AABB has K points, but we can't tell if
 	        // the K nearest points are in the AABB. we must blow up a sphere
 	        // with a radius of width/2 and search there to be sure.

@@ -36,7 +36,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
       float dists = dot(diff, diff);
       if ((dists > 0) && (dists < state.radius * state.radius)) {
         knn_res_t res = std::make_pair(dists, p);
-        if (size < state.params.knn) {
+        if (size < state.knn) {
           topKQ.push(res);
           size++;
         } else if (dists < topKQ.top().first) {
@@ -61,8 +61,8 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
     if (printRes) std::cout << "RTX: ";
     std::unordered_set<unsigned int> gpu_idxs;
     std::unordered_set<float> gpu_dists;
-    for (unsigned int n = 0; n < state.params.knn; n++) {
-      unsigned int p = static_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.params.knn + n ];
+    for (unsigned int n = 0; n < state.knn; n++) {
+      unsigned int p = static_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.knn + n ];
       if (p == UINT_MAX) break;
       else {
         float3 diff = state.h_points[p] - query;
@@ -105,8 +105,8 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
   unsigned int totalWrongNeighbors = 0;
   double totalWrongDist = 0;
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < state.params.knn; n++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.params.knn + n ];
+    for (unsigned int n = 0; n < state.knn; n++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.knn + n ];
       //std::cout << p << std::endl; break;
       if (p == UINT_MAX) break;
       else {
