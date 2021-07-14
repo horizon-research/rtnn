@@ -18,9 +18,12 @@ void search(WhittedState& state, int batch_id) {
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
 
       state.params.isApprox = false;
-      // approximate in the first batch of radius search. can't approximate in the knn search.
+      // approximate in the first batch of radius search. can't approximate in
+      // the knn search. note that AABB test is inherently approximately so if
+      // we choose to approximate the early batches in radius earch, the result
+      // might be incorrect. see:
+      // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
       // TODO: change it when the batch order changes.
-      // TODO: amazingly, if we approx the batches before the last batch, the result is sligtly inaccurate. numerical precision issue???
       //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) state.params.isApprox = true;
 
       state.params.radius = state.launchRadius[batch_id];
