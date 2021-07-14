@@ -231,7 +231,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.radius = std::stof(argv[++i]);
-          state.params.radius = state.radius;
+          state.params.radius = state.radius; // this indicates the search radius of a launch
       }
       else if( arg == "--partition" || arg == "-p" )
       {
@@ -289,12 +289,6 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
       }
-      else if( arg == "--reorderpoints" || arg == "-rp" )
-      {
-          if( i >= argc - 1 )
-              printUsageAndExit( argv[0] );
-          state.reorderPoints = (bool)(atoi(argv[++i]));
-      }
       else if( arg == "--sortingGAS" || arg == "-sg" )
       {
           if( i >= argc - 1 )
@@ -342,7 +336,5 @@ void readData(WhittedState& state) {
     //state.h_ndqueries = read_pc_data(state.qfile.c_str(), &state.numQueries, &query_dim);
     //assert(query_dim == state.dim);
   }
-
-  state.numTotalQueries = state.numQueries;
 }
 

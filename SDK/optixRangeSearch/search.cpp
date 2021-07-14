@@ -9,25 +9,21 @@
 void search(WhittedState& state, int batch_id) {
   Timing::startTiming("batch search time");
     Timing::startTiming("search compute");
-      state.params.limit = state.knn;
-      thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
+      unsigned int numQueries = state.numActQueries[batch_id];
 
-      if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map;
+      state.params.limit = state.knn;
+      thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(numQueries * state.params.limit);
+
+      if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map[batch_id];
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
 
       state.params.isApprox = false;
       // approximate in the first batch of radius search. can't approximate in the knn search.
       // TODO: change it when the batch order changes.
-      if ((state.searchMode == "radius") && state.partition && !batch_id) state.params.isApprox = true;
+      // TODO: amazingly, if we approx the batches before the last batch, the result is sligtly inaccurate. numerical precision issue???
+      //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) state.params.isApprox = true;
 
-      // TODO: revisit this. create a new GAS if the sorting GAS is different,
-      // or if we want to reorder points using the gas-sorted query order.
-      //if ( (state.sortingGAS != 1) || (state.samepq && state.toGather && state.reorderPoints) ) {
-      //  Timing::startTiming("create search GAS");
-      //    createGeometry ( state );
-      //    CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) );
-      //  Timing::stopTiming(true);
-      //}
+      state.params.radius = state.launchRadius[batch_id];
 
       launchSubframe( thrust::raw_pointer_cast(output_buffer), state, batch_id );
       OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
@@ -36,14 +32,14 @@ void search(WhittedState& state, int batch_id) {
     // cudaMallocHost is time consuming; must be hidden behind async launch
     Timing::startTiming("result copy D2H");
       void* data;
-      cudaMallocHost(reinterpret_cast<void**>(&data), state.numQueries * state.params.limit * sizeof(unsigned int));
+      cudaMallocHost(reinterpret_cast<void**>(&data), numQueries * state.params.limit * sizeof(unsigned int));
       state.h_res[batch_id] = data;
 
       // TODO: do a thrust copy?
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       thrust::raw_pointer_cast(output_buffer),
-                      state.numQueries * state.params.limit * sizeof(unsigned int),
+                      numQueries * state.params.limit * sizeof(unsigned int),
                       cudaMemcpyDeviceToHost,
                       state.stream[batch_id]
                       ) );
@@ -52,16 +48,19 @@ void search(WhittedState& state, int batch_id) {
   Timing::stopTiming(true);
 
   // TODO: this is free device memory but will block until the previous optix launch finish and the res is written back.
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
+  //CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
 }
 
 thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch_id) {
   Timing::startTiming("initial traversal");
+    unsigned int numQueries = state.numActQueries[batch_id];
+
     state.params.limit = 1;
-    thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(state.numQueries * state.params.limit);
+    thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(numQueries * state.params.limit);
 
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
     state.params.isApprox = true;
+    state.params.radius = state.launchRadius[batch_id];
 
     launchSubframe( thrust::raw_pointer_cast(output_buffer), state, batch_id );
     // TODO: could delay this until sort, but initial traversal is lightweight anyways
@@ -75,7 +74,7 @@ void gasSortSearch(WhittedState& state, int batch_id) {
   // Initial traversal to aggregate the queries
   thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = initialTraversal(state, batch_id);
 
-  // Sort the queries
+  // Generate the GAS-sorted query order
   thrust::device_ptr<unsigned int> d_indices_ptr;
   if (state.qGasSortMode == 1)
     d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr, batch_id);
@@ -83,6 +82,7 @@ void gasSortSearch(WhittedState& state, int batch_id) {
     d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr, batch_id);
   state.d_firsthit_idx[batch_id] = reinterpret_cast<void*>(thrust::raw_pointer_cast(d_firsthit_idx_ptr));
 
+  // Actually sort queries in memory if toGather is enabled
   if (state.toGather)
     gatherQueries( state, d_indices_ptr, batch_id );
 }

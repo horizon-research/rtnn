@@ -18,9 +18,10 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheckKNN( WhittedState& state, int batch_id ) {
-  bool printRes = false;
+  bool printRes = true;
   srand(time(NULL));
-  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  //std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  std::vector<unsigned int> randQ {14509};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
@@ -81,7 +82,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
     //if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
     // https://www.techiedelight.com/print-set-unordered_set-cpp/
     if (gt_dists != gpu_dists) {
-      std::cout << "Incorrect!" << std::endl;
+      fprintf(stdout, "Incorrect %u\n", q);
       //std::cout << "GT:\n";
       //std::copy(gt_dists.begin(),
       //      gt_dists.end(),
@@ -131,7 +132,9 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
 }
 
 void sanityCheck(WhittedState& state) {
-  for (int i = 0; i < state.numOfBatches; i++) {
+  //for (int i = 0; i < state.numOfBatches; i++) {
+  for (int i = 3; i < 4; i++) {
+    printf("%u\n", i);
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 
