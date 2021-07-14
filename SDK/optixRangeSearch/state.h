@@ -58,7 +58,7 @@ struct WhittedState
     OptixProgramGroup           radiance_miss_prog_group  = 0;
     OptixProgramGroup           radiance_metal_sphere_prog_group  = 0;
 
-    OptixPipeline               pipeline                  = 0;
+    OptixPipeline               pipeline[2]               = {0};
     OptixPipelineCompileOptions pipeline_compile_options  = {};
 
     cudaStream_t*               stream                    = nullptr;

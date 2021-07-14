@@ -399,7 +399,17 @@ void createPipeline( WhittedState &state )
         static_cast<unsigned int>( program_groups.size() ),
         log,
         &sizeof_log,
-        &state.pipeline ) );
+        &state.pipeline[0] ) );
+
+    OPTIX_CHECK_LOG( optixPipelineCreate(
+        state.context,
+        &state.pipeline_compile_options,
+        &pipeline_link_options,
+        program_groups.data(),
+        static_cast<unsigned int>( program_groups.size() ),
+        log,
+        &sizeof_log,
+        &state.pipeline[1] ) );
 
     OptixStackSizes stack_sizes = {};
     for( auto& prog_group : program_groups )
@@ -415,7 +425,11 @@ void createPipeline( WhittedState &state )
                                              0,  // maxDCDepth
                                              &direct_callable_stack_size_from_traversal,
                                              &direct_callable_stack_size_from_state, &continuation_stack_size ) );
-    OPTIX_CHECK( optixPipelineSetStackSize( state.pipeline, direct_callable_stack_size_from_traversal,
+    OPTIX_CHECK( optixPipelineSetStackSize( state.pipeline[0], direct_callable_stack_size_from_traversal,
+                                            direct_callable_stack_size_from_state, continuation_stack_size,
+                                            1  // maxTraversableDepth
+                                            ) );
+    OPTIX_CHECK( optixPipelineSetStackSize( state.pipeline[1], direct_callable_stack_size_from_traversal,
                                             direct_callable_stack_size_from_state, continuation_stack_size,
                                             1  // maxTraversableDepth
                                             ) );
@@ -541,21 +555,35 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
                                  state.stream[batch_id]
     ) );
 
-    OPTIX_CHECK( optixLaunch(
-        state.pipeline,
-        state.stream[batch_id],
-        reinterpret_cast<CUdeviceptr>( state.d_params ),
-        sizeof( Params ),
-        &state.sbt,
-        numQueries, // launch width
-        1,                // launch height
-        1                 // launch depth
-    ) );
+    if (batch_id == 0) {
+      OPTIX_CHECK( optixLaunch(
+          state.pipeline[0],
+          state.stream[batch_id],
+          reinterpret_cast<CUdeviceptr>( state.d_params ),
+          sizeof( Params ),
+          &state.sbt,
+          numQueries, // launch width
+          1,                // launch height
+          1                 // launch depth
+      ) );
+    } else {
+      OPTIX_CHECK( optixLaunch(
+          state.pipeline[1],
+          state.stream[batch_id],
+          reinterpret_cast<CUdeviceptr>( state.d_params ),
+          sizeof( Params ),
+          &state.sbt,
+          numQueries, // launch width
+          1,                // launch height
+          1                 // launch depth
+      ) );
+    }
 }
 
 void cleanupState( WhittedState& state )
 {
-    OPTIX_CHECK( optixPipelineDestroy     ( state.pipeline                ) );
+    OPTIX_CHECK( optixPipelineDestroy     ( state.pipeline[0]                ) );
+    OPTIX_CHECK( optixPipelineDestroy     ( state.pipeline[1]                ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.raygen_prog_group       ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_metal_sphere_prog_group ) );
     OPTIX_CHECK( optixProgramGroupDestroy ( state.radiance_miss_prog_group         ) );
