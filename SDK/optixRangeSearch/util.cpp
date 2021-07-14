@@ -14,11 +14,11 @@
 
 #include "state.h"
 
-thrust::device_ptr<bool> getThrustDeviceBoolPtr(unsigned int N) {
-  bool* d_memory;
+thrust::device_ptr<char> getThrustDeviceCharPtr(unsigned int N) {
+  char* d_memory;
   CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(bool) ) );
-  thrust::device_ptr<bool> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+             N * sizeof(char) ) );
+  thrust::device_ptr<char> d_memory_ptr = thrust::device_pointer_cast(d_memory);
 
   return d_memory_ptr;
 }
@@ -231,7 +231,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.radius = std::stof(argv[++i]);
-          state.params.radius = std::stof(argv[++i]);
+          state.params.radius = state.radius;
       }
       else if( arg == "--partition" || arg == "-p" )
       {
@@ -239,12 +239,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.partition = (bool)(atoi(argv[++i]));
       }
-      else if( arg == "--partthd" || arg == "-pt" )
-      {
-          if( i >= argc - 1 )
-              printUsageAndExit( argv[0] );
-          state.partThd = atoi(argv[++i]);
-      }
+      //else if( arg == "--partthd" || arg == "-pt" )
+      //{
+      //    if( i >= argc - 1 )
+      //        printUsageAndExit( argv[0] );
+      //    state.partThd = atoi(argv[++i]);
+      //}
       else if( arg == "--samepq" || arg == "-spq" )
       {
           if( i >= argc - 1 )
@@ -318,19 +318,20 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   if (state.partition) assert(state.samepq);
 }
 
-void setupCUDA( WhittedState& state) {
-  int32_t device_count = 0;
-  CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
-  std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
-  
-  cudaDeviceProp prop;
-  CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
-  CUDA_CHECK( cudaSetDevice( state.device_id ) );
-  std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
-
-  CUDA_CHECK( cudaStreamCreate( &state.stream[0] ) );
-  if (state.partition) CUDA_CHECK( cudaStreamCreate( &state.stream[1] ) );
-}
+//void setupCUDA( WhittedState& state) {
+//  int32_t device_count = 0;
+//  CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
+//  std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
+//  
+//  cudaDeviceProp prop;
+//  CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
+//  CUDA_CHECK( cudaSetDevice( state.device_id ) );
+//  std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
+//
+//  // TODO: fix it with numOfBatches
+//  for (unsigned int i = 0; i < 3; i++)
+//    CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
+//}
 
 void readData(WhittedState& state) {
   // p and q files being the same dones't mean samepq have to be true. we can

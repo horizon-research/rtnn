@@ -54,6 +54,25 @@
 #include "func.h"
 #include "grid.h"
 
+void setupCUDA( WhittedState& state ) {
+  int32_t device_count = 0;
+  CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
+  std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
+  
+  cudaDeviceProp prop;
+  CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
+  CUDA_CHECK( cudaSetDevice( state.device_id ) );
+  std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
+
+  CUDA_CHECK( cudaStreamCreate( &state.stream[0] ) );
+}
+
+void createAdditionalStreams( WhittedState& state ) {
+  // TODO: fix it with numOfBatches and move it somewhere else, maybe the partition logic?
+  for (unsigned int i = 1; i < 3; i++)
+    CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
+}
+
 int main( int argc, char* argv[] )
 {
   WhittedState state;
@@ -73,7 +92,7 @@ int main( int argc, char* argv[] )
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
-  std::cout << "Partition Thd: " << state.partThd << std::endl;
+  //std::cout << "Partition Thd: " << state.partThd << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
   std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
@@ -85,7 +104,6 @@ int main( int argc, char* argv[] )
 
   try
   {
-    // Set up CUDA device and stream
     setupCUDA(state);
 
     Timing::reset();
@@ -97,7 +115,9 @@ int main( int argc, char* argv[] )
 
     setupOptiX(state);
 
-    if (state.partition) state.numOfBatches = 2;
+    createAdditionalStreams(state);
+
+    if (state.partition) state.numOfBatches = 3;
     else {
       state.numOfBatches = 1;
       state.numActQueries[0] = state.numQueries;
@@ -106,10 +126,8 @@ int main( int argc, char* argv[] )
     }
 
     Timing::startTiming("total search time");
-    //TODO: try a better scheduling here?
-    for (int i = 0; i < 1; i++) {
-    //for (int i = 0; i < state.numOfBatches; i++) {
-    //for (int i = state.numOfBatches - 1; i >= 0; i--) {
+    //TODO: try a better scheduling here (reverse the order)?
+    for (int i = 0; i < state.numOfBatches; i++) {
       fprintf(stdout, "\n************** Batch %u **************\n", i);
       state.numQueries = state.numActQueries[i];
       state.params.queries = state.d_actQs[i];

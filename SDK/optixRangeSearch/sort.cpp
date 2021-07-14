@@ -133,6 +133,17 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
   // TODO: this whole thing needs to be done in CUDA.
 
   std::vector<unsigned int> cellSearchSize(numberOfCells, 0);
+  float cellSize = state.radius / state.crRatio;
+
+  float maxWidth;
+  //if (state.searchMode == "knn") maxWidth = state.radius * 2;
+  //else maxWidth = state.radius / sqrt(2) * 2;
+  maxWidth = state.radius / sqrt(2) * 2; // TODO: I think it should always be this one. check it later...
+  int maxIter = (int)floorf((maxWidth / cellSize - 1) / 2);
+  int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
+
+  unsigned int* searchSizeHist = new unsigned int[histCount];
+  memset(searchSizeHist, 0, sizeof (unsigned int) * histCount);
 
   for (int x = 0; x < gridInfo.GridDimension.x; x++) {
     for (int y = 0; y < gridInfo.GridDimension.y; y++) {
@@ -150,10 +161,6 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
 	    // can't be skipped and is not the bottleneck anyway (invoking IS
 	    // programs is) so we relax the maxWidth to give points more
 	    // opportunity to find a smaller search radius.
-        float maxWidth;
-        if (state.searchMode == "knn") maxWidth = state.radius * 2;
-        else maxWidth = state.radius / sqrt(2) * 2;
-
         while(1) {
           for (int ix = x-iter; ix <= x+iter; ix++) {
             for (int iy = y-iter; iy <= y+iter; iy++) {
@@ -182,15 +189,15 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
 	      //  the K nearest neighbors.
 
 	      // TODO: there could be corner cases here, e.g., maxWidth is very
-	      // small, cellSize will be 0 (same as uninitialized), or when
-	      // maxWidth is huge (to support unbounded KNN), we can stop checking
-	      // sooner when, e.g., count == N.
-          float width = (iter * 2 + 1) * state.radius / state.crRatio;
-          //float width = (iter * 2 + 2) * state.radius / state.crRatio;
+	      // small, cellSize will be 0 (same as uninitialized).
+          //float width = (iter * 2 + 1) * cellSize;
+          float width = (iter * 2 + 2) * cellSize;
 
           //fprintf(stdout, "%d, %f\n", iter, width);
-          if (width > maxWidth) {
-            cellSearchSize[cellIndex] = 0; // if width > maxWidth, we need to do a full search.
+          //if (width > maxWidth) {
+          if (iter > maxIter) {
+            cellSearchSize[cellIndex] = iter + 1; // if width > maxWidth, we need to do a full search.
+            searchSizeHist[iter + 1]++;
             break;
           }
           else if (count >= state.params.knn) {
@@ -198,6 +205,7 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
 	        // the K nearest points are in the AABB. we must blow up a sphere
 	        // with a radius of width/2 and search there to be sure.
             cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
+            searchSizeHist[iter + 1]++;
             break;
           }
           else {
@@ -205,12 +213,15 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
             count = 0;
           }
         }
-        //fprintf(stdout, "%u, %u\n", cellIndex, cellSearchSize[cellIndex]);
       }
     }
   }
 
-  state.cellMask = new bool[numberOfCells];
+  //for (unsigned int i = 0; i < histCount; i++) {
+  //  fprintf(stdout, "%u, %u\n", i, searchSizeHist[i]);
+  //}
+
+  state.cellMask = new char[numberOfCells];
   for (unsigned int i = 0; i < numberOfCells; i++) {
     //if (cellSearchSize[i] != 0) fprintf(stdout, "%u, %u, %u, %f\n",
     //                                    i,
@@ -220,11 +231,14 @@ void genMask (unsigned int* h_CellParticleCounts, unsigned int numberOfCells, Wh
     //                                   );
 
     // TODO: need a better decision logic, e.g., through a histogram and some sort of cost model.
-    if (cellSearchSize[i] > 0 && cellSearchSize[i] <= state.partThd) {
-       state.cellMask[i] = true;
-    }
-    else state.cellMask[i] = false;
+    if (cellSearchSize[i] > 0 && cellSearchSize[i] <= histCount / 3) {
+       state.cellMask[i] = 0;
+    } else if (cellSearchSize[i] > histCount / 3 && cellSearchSize[i] <= histCount * 2 / 3) {
+       state.cellMask[i] = 1;
+    } else state.cellMask[i] = 2;
   }
+  state.partThd[0] = histCount / 3;
+  state.partThd[1] = histCount * 2 / 3;
 }
 
 void sortGenPartInfo(WhittedState& state,
@@ -245,8 +259,8 @@ void sortGenPartInfo(WhittedState& state,
 
     genMask(h_CellParticleCounts.data(), numberOfCells, state, gridInfo, N);
 
-    thrust::device_ptr<bool> d_rayMask = getThrustDeviceBoolPtr(state.numQueries);
-    thrust::device_ptr<bool> d_cellMask = getThrustDeviceBoolPtr(numberOfCells);
+    thrust::device_ptr<char> d_rayMask = getThrustDeviceCharPtr(state.numQueries);
+    thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);
     thrust::copy(state.cellMask, state.cellMask + numberOfCells, d_cellMask);
 
     kCountingSortIndices_genMask(numOfBlocks,
@@ -277,27 +291,37 @@ void sortGenPartInfo(WhittedState& state,
     // this MUST happen right after sorting the masks and before copy so that the queries and the masks are consistent!!!
     sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.queries), N);
 
-    state.numActQueries[0] = countByPred(d_rayMask, N, true);
-    state.numActQueries[1] = N - state.numActQueries[0];
+    state.numActQueries[0] = countById(d_rayMask, N, 0);
+    state.numActQueries[1] = countById(d_rayMask, N, 1);
+    state.numActQueries[2] = countById(d_rayMask, N, 2);
 
     // See notes in sortGenPartInfo about whether to -1 or not.
-    //float aabbWidth = state.partThd * 2 * state.radius / state.crRatio;
-    float aabbWidth = (state.partThd * 2 - 1) * state.radius / state.crRatio;
-    // in case we specify a huge partThd, we should neve search beyond
+    float aabbWidth_0 = state.partThd[0] * 2 * state.radius / state.crRatio;
+    float aabbWidth_1 = state.partThd[1] * 2 * state.radius / state.crRatio;
+    printf("%d, %d\n", state.partThd[0], state.partThd[1]);
+    //float aabbWidth = (state.partThd * 2 - 1) * state.radius / state.crRatio;
+
+    // in case we specify a huge partThd, we should never search beyond
     // state.radius. float conversion is because std::sqrt returns a double for
     // an integral input (https://en.cppreference.com/w/cpp/numeric/math/sqrt),
     // and std::min can't compare float with double.
-    if (state.searchMode == "knn") state.launchRadius[0] = std::min((float)(aabbWidth / 2 * sqrt(2)), state.radius);
-    else state.launchRadius[0] = std::min(aabbWidth / 2, state.radius);
-    state.launchRadius[1] = state.radius;
+    if (state.searchMode == "knn") state.launchRadius[0] = std::min((float)(aabbWidth_0 / 2 * sqrt(2)), state.radius);
+    else state.launchRadius[0] = std::min(aabbWidth_0 / 2, state.radius);
+    if (state.searchMode == "knn") state.launchRadius[1] = std::min((float)(aabbWidth_1 / 2 * sqrt(2)), state.radius);
+    else state.launchRadius[1] = std::min(aabbWidth_1 / 2, state.radius);
+    state.launchRadius[2] = state.radius;
 
     thrust::device_ptr<float3> d_actQs_0 = getThrustDeviceF3Ptr(state.numActQueries[0]);
-    copyIfStencil(state.params.queries, N, d_rayMask, d_actQs_0, true); // use N since state.numQueries is updated now
+    copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs_0, 0); // use N since state.numQueries is updated now
     state.d_actQs[0] = thrust::raw_pointer_cast(d_actQs_0);
 
     thrust::device_ptr<float3> d_actQs_1 = getThrustDeviceF3Ptr(state.numActQueries[1]);
-    copyIfStencil(state.params.queries, N, d_rayMask, d_actQs_1, false); // use N since state.numQueries is updated now
+    copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs_1, 1); // use N since state.numQueries is updated now
     state.d_actQs[1] = thrust::raw_pointer_cast(d_actQs_1);
+
+    thrust::device_ptr<float3> d_actQs_2 = getThrustDeviceF3Ptr(state.numActQueries[2]);
+    copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs_2, 2); // use N since state.numQueries is updated now
+    state.d_actQs[2] = thrust::raw_pointer_cast(d_actQs_2);
 
 
     //thrust::host_vector<bool> h_rayMask(N);
@@ -319,6 +343,8 @@ void sortGenPartInfo(WhittedState& state,
     thrust::copy(d_actQs_0, d_actQs_0 + state.numActQueries[0], state.h_actQs[0]);
     state.h_actQs[1] = new float3[state.numActQueries[1]];
     thrust::copy(d_actQs_1, d_actQs_1 + state.numActQueries[1], state.h_actQs[1]);
+    state.h_actQs[2] = new float3[state.numActQueries[2]];
+    thrust::copy(d_actQs_2, d_actQs_2 + state.numActQueries[2], state.h_actQs[2]);
 
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_rayMask) ) );
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );

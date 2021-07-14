@@ -32,6 +32,11 @@
 #include <optix_types.h>
 #include "optixRangeSearch.h"
 
+// the SDK cmake defines NDEBUG in the Release build, but we still want to use assert
+// TODO: fix it in cmake files?
+#undef NDEBUG
+#include <assert.h>
+
 #define E2EMSR
 
 #ifdef E2EMSR
@@ -43,8 +48,8 @@
 struct WhittedState
 {
     OptixDeviceContext          context                   = 0;
-    OptixTraversableHandle      gas_handle[2]             = {};
-    CUdeviceptr                 d_gas_output_buffer[2]    = {};
+    OptixTraversableHandle      gas_handle[3]             = {};
+    CUdeviceptr                 d_gas_output_buffer[3]    = {};
 
     OptixModule                 geometry_module           = 0;
     OptixModule                 camera_module             = 0;
@@ -56,7 +61,7 @@ struct WhittedState
     OptixPipeline               pipeline                  = 0;
     OptixPipelineCompileOptions pipeline_compile_options  = {};
 
-    cudaStream_t                stream[2]                 = {0};
+    cudaStream_t                stream[3]                 = {0};
     Params                      params;
     Params*                     d_params                  = nullptr;
 
@@ -85,19 +90,20 @@ struct WhittedState
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
     unsigned int                numTotalQueries           = 0;
-    unsigned int                numActQueries[2]          = {0};
-    float                       launchRadius[2]           = {0.0};
-    void*                       h_res[2]                  = {nullptr};
-    float3*                     d_actQs[2]                = {nullptr};
-    float3*                     h_actQs[2]                = {nullptr};
-    void*                       d_aabb[2]                 = {nullptr};
-    void*                       d_firsthit_idx[2]         = {nullptr};
-    void*                       d_temp_buffer_gas[2]      = {nullptr};
-    void*                       d_buffer_temp_output_gas_and_compacted_size[2] = {nullptr};
+    unsigned int                numActQueries[3]          = {0};
+    float                       launchRadius[3]           = {0.0};
+    int                         partThd[3]                = {0};
+    void*                       h_res[3]                  = {nullptr};
+    float3*                     d_actQs[3]                = {nullptr};
+    float3*                     h_actQs[3]                = {nullptr};
+    void*                       d_aabb[3]                 = {nullptr};
+    void*                       d_firsthit_idx[3]         = {nullptr};
+    void*                       d_temp_buffer_gas[3]      = {nullptr};
+    void*                       d_buffer_temp_output_gas_and_compacted_size[3] = {nullptr};
 
     bool                        partition                 = false;
-    bool*                       cellMask                  = nullptr;
-    int                         partThd                   = 1;
+    char*                       cellMask                  = nullptr;
+    //int                         partThd                   = 1;
     int                         numOfBatches              = 1;
 
     float3                      Min;

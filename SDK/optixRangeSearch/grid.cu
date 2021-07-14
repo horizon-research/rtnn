@@ -123,8 +123,8 @@ __global__ void kCountingSortIndices_genMask(
   const uint* cellOffsets,
   const uint* localSortedIndices,
   uint* posInSortedPoints,
-  bool* cellMask,
-  bool* rayMask
+  char* cellMask,
+  char* rayMask
 )
 {
   uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -195,8 +195,8 @@ void kCountingSortIndices_genMask(unsigned int numOfBlocks, unsigned int threads
       unsigned int* d_CellOffsets,
       unsigned int* d_LocalSortedIndices,
       unsigned int* d_posInSortedPoints,
-      bool* cellMask,
-      bool* rayMask
+      char* cellMask,
+      char* rayMask
       ) {
   kCountingSortIndices_genMask <<<numOfBlocks, threadsPerBlock>>> (
       gridInfo,

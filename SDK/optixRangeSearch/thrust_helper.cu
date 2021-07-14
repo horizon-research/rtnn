@@ -49,7 +49,7 @@ void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<f
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
-void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<bool> d_val_ptr, unsigned int N ) {
+void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<char> d_val_ptr, unsigned int N ) {
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
@@ -127,6 +127,27 @@ struct is_false
     }
 };
 
+// https://forums.developer.nvidia.com/t/using-thrust-copy-if-with-a-parameter/119735/6
+// https://www.bu.edu/pasi/files/2011/01/NathanBell3-12-1000.pdf#page=18
+struct isSameID
+{
+    char kID;
+    isSameID(char id) {kID = id;}
+
+  __host__ __device__
+    bool operator()(const char x)
+    {
+        return (x == kID);
+    }
+
+};
+
+void copyIfIdMatch(float3* source, unsigned int N, thrust::device_ptr<char> mask, thrust::device_ptr<float3> dest, char id) {
+    thrust::copy_if(thrust::device_pointer_cast(source),
+                    thrust::device_pointer_cast(source) + N,
+                    mask, dest, isSameID(id));
+}
+
 void copyIfStencil(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest, bool cond) {
   if (cond)
     thrust::copy_if(thrust::device_pointer_cast(source),
@@ -138,7 +159,7 @@ void copyIfStencil(float3* source, unsigned int N, thrust::device_ptr<bool> mask
                     mask, dest, is_false());
 }
 
-unsigned int countByPred(thrust::device_ptr<bool> val, unsigned int N, bool pred) {
-  unsigned int numOfActiveQueries = thrust::count(val, val + N, pred);
+unsigned int countById(thrust::device_ptr<char> val, unsigned int N, char id) {
+  unsigned int numOfActiveQueries = thrust::count(val, val + N, id);
   return numOfActiveQueries;
 }
