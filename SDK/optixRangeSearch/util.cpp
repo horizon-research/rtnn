@@ -216,9 +216,9 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.params.knn = atoi(argv[++i]);
+          state.knn = atoi(argv[++i]);
       }
-      else if( arg == "--searchmode" || arg == "-sm" ) // need to be after --knn so that we can overwrite params.knn if needed
+      else if( arg == "--searchmode" || arg == "-sm" ) // need to be after --knn so that we can overwrite state.knn if needed
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
@@ -231,7 +231,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.radius = std::stof(argv[++i]);
-          state.params.radius = state.radius;
+          state.params.radius = state.radius; // this indicates the search radius of a launch
       }
       else if( arg == "--partition" || arg == "-p" )
       {
@@ -289,12 +289,6 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
       }
-      else if( arg == "--reorderpoints" || arg == "-rp" )
-      {
-          if( i >= argc - 1 )
-              printUsageAndExit( argv[0] );
-          state.reorderPoints = (bool)(atoi(argv[++i]));
-      }
       else if( arg == "--sortingGAS" || arg == "-sg" )
       {
           if( i >= argc - 1 )
@@ -312,7 +306,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
 
   // do a round of sanity check here
   if (state.searchMode == "knn")
-    state.params.knn = K; // a macro
+    state.knn = K; // a macro
 
   if (state.partition)
     state.samepq = 1; // must be samepq if we want to partition queries.
@@ -342,7 +336,5 @@ void readData(WhittedState& state) {
     //state.h_ndqueries = read_pc_data(state.qfile.c_str(), &state.numQueries, &query_dim);
     //assert(query_dim == state.dim);
   }
-
-  state.numTotalQueries = state.numQueries;
 }
 

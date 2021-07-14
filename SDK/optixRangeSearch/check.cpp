@@ -18,9 +18,10 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheckKNN( WhittedState& state, int batch_id ) {
-  bool printRes = false;
+  bool printRes = true;
   srand(time(NULL));
-  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  //std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  std::vector<unsigned int> randQ {14509};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
@@ -36,7 +37,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
       float dists = dot(diff, diff);
       if ((dists > 0) && (dists < state.radius * state.radius)) {
         knn_res_t res = std::make_pair(dists, p);
-        if (size < state.params.knn) {
+        if (size < state.knn) {
           topKQ.push(res);
           size++;
         } else if (dists < topKQ.top().first) {
@@ -61,8 +62,8 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
     if (printRes) std::cout << "RTX: ";
     std::unordered_set<unsigned int> gpu_idxs;
     std::unordered_set<float> gpu_dists;
-    for (unsigned int n = 0; n < state.params.knn; n++) {
-      unsigned int p = static_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.params.knn + n ];
+    for (unsigned int n = 0; n < state.knn; n++) {
+      unsigned int p = static_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.knn + n ];
       if (p == UINT_MAX) break;
       else {
         float3 diff = state.h_points[p] - query;
@@ -81,7 +82,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
     //if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
     // https://www.techiedelight.com/print-set-unordered_set-cpp/
     if (gt_dists != gpu_dists) {
-      std::cout << "Incorrect!" << std::endl;
+      fprintf(stdout, "Incorrect %u\n", q);
       //std::cout << "GT:\n";
       //std::copy(gt_dists.begin(),
       //      gt_dists.end(),
@@ -105,8 +106,8 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
   unsigned int totalWrongNeighbors = 0;
   double totalWrongDist = 0;
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    for (unsigned int n = 0; n < state.params.knn; n++) {
-      unsigned int p = reinterpret_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.params.knn + n ];
+    for (unsigned int n = 0; n < state.knn; n++) {
+      unsigned int p = reinterpret_cast<unsigned int*>( state.h_res[batch_id] )[ q * state.knn + n ];
       //std::cout << p << std::endl; break;
       if (p == UINT_MAX) break;
       else {
@@ -131,7 +132,9 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
 }
 
 void sanityCheck(WhittedState& state) {
-  for (int i = 0; i < state.numOfBatches; i++) {
+  //for (int i = 0; i < state.numOfBatches; i++) {
+  for (int i = 3; i < 4; i++) {
+    printf("%u\n", i);
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 

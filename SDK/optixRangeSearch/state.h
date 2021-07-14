@@ -68,7 +68,7 @@ struct WhittedState
     float*                      d_key                     = nullptr;
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
-    unsigned int*               d_r2q_map                 = nullptr;
+    unsigned int**              d_r2q_map                 = nullptr;
     float3**                    h_ndpoints                = nullptr;
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
@@ -77,19 +77,18 @@ struct WhittedState
     std::string                 searchMode                = "radius";
     std::string                 pfile;
     std::string                 qfile;
-    float                       radius                    = 0.0;
+    unsigned int                knn                       = 50;
+    float                       radius                    = 2.0;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     float                       crRatio                   = 8; // celSize = radius / crRatio
     float                       sortingGAS                = 1;
     bool                        toGather                  = false;
-    bool                        reorderPoints             = false;
     bool                        samepq                    = false;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
-    unsigned int                numTotalQueries           = 0;
     unsigned int*               numActQueries             = nullptr;
     float*                      launchRadius              = nullptr;
     float*                      partThd                   = nullptr;
