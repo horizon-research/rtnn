@@ -54,7 +54,7 @@
 #include "func.h"
 #include "grid.h"
 
-void setupCUDA( WhittedState& state ) {
+void setDevice ( WhittedState& state ) {
   int32_t device_count = 0;
   CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
   std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
@@ -69,6 +69,7 @@ void setupSearch( WhittedState& state ) {
   // TODO: this is temporary.
   if (!state.partition) {
     assert(state.numOfBatches == 1);
+    initBatches(state);
     state.numActQueries[0] = state.numQueries;
     state.d_actQs[0] = state.params.queries;
     state.h_actQs[0] = state.h_queries;
@@ -94,19 +95,18 @@ int main( int argc, char* argv[] )
   std::cout << "K: " << state.params.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
-  //std::cout << "Partition Thd: " << state.partThd << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
   std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
   std::cout << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2
   std::cout << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when qGasSortMode != 0
   std::cout << "Gather? " << std::boolalpha << state.toGather << std::endl;
-  std::cout << "reorderPoints? " << std::boolalpha << state.reorderPoints << std::endl; // only useful under samepq and toGather
+  //std::cout << "reorderPoints? " << std::boolalpha << state.reorderPoints << std::endl; // only useful under samepq and toGather
   std::cout << "========================================" << std::endl << std::endl;
 
   try
   {
-    setupCUDA(state);
+    setDevice(state);
 
     Timing::reset();
 
@@ -124,6 +124,7 @@ int main( int argc, char* argv[] )
     Timing::startTiming("total search time");
     //TODO: try a better scheduling here (reverse the order)?
     for (int i = 0; i < state.numOfBatches; i++) {
+    //for (int i = state.numOfBatches - 1; i >= 0; i--) {
       fprintf(stdout, "\n************** Batch %u **************\n", i);
       state.numQueries = state.numActQueries[i];
       state.params.queries = state.d_actQs[i];

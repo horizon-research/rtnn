@@ -168,6 +168,7 @@ static void buildGas(
         OPTIX_CHECK( optixAccelCompact( state.context, state.stream[batch_id], gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
         state.d_buffer_temp_output_gas_and_compacted_size[batch_id] = (void*)d_buffer_temp_output_gas_and_compacted_size;
+        CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[batch_id] ) );
     }
     else
     {
@@ -241,6 +242,7 @@ void createGeometry( WhittedState& state, int batch_id )
         batch_id);
 
     state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
+    CUDA_CHECK( cudaFree( state.d_aabb[batch_id] ) );
     OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
   Timing::stopTiming(true);
 }
@@ -564,10 +566,10 @@ void cleanupState( WhittedState& state )
       CUDA_CHECK( cudaStreamDestroy(state.stream[i]) );
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
-      CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
+      //CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
       CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
-      CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
       // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
+      //CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
       if (state.d_gas_output_buffer[i])
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
     }

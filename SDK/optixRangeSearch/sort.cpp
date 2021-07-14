@@ -294,7 +294,7 @@ void sortGenPartInfo(WhittedState& state,
 
     genMask(state, h_CellParticleCounts.data(), numberOfCells, gridInfo, N);
 
-    thrust::device_ptr<char> d_rayMask = getThrustDeviceCharPtr(state.numQueries); // TODO: use N?
+    thrust::device_ptr<char> d_rayMask = getThrustDeviceCharPtr(N); // TODO: use N?
     thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);
     thrust::copy(state.cellMask, state.cellMask + numberOfCells, d_cellMask);
     delete state.cellMask;
@@ -310,7 +310,9 @@ void sortGenPartInfo(WhittedState& state,
                                  thrust::raw_pointer_cast(d_rayMask)
                                 );
 
-    // make a copy of the keys since they are useless after the first sort. no need to use stable sort since the keys are unique, so masks and the queries are gauranteed to be sorted in exactly the same way.
+    // make a copy of the keys since they are useless after the first sort. no
+    // need to use stable sort since the keys are unique, so masks and the
+    // queries are gauranteed to be sorted in exactly the same way.
     // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
     thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy = getThrustDevicePtr(N);
     //thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + N, d_posInSortedPoints_ptr_copy); // not sure why this doesn't link.
@@ -344,46 +346,13 @@ void sortGenPartInfo(WhittedState& state,
       else state.launchRadius[i] = std::min(aabbWidth / 2, state.radius);
 
       thrust::device_ptr<float3> d_actQs = getThrustDeviceF3Ptr(state.numActQueries[i]);
-      copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs, i); // use N since state.numQueries is updated now (TODO: use N?)
+      copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs, i);
       state.d_actQs[i] = thrust::raw_pointer_cast(d_actQs);
 
       // Copy the active queries to host.
       state.h_actQs[i] = new float3[state.numActQueries[i]];
       thrust::copy(d_actQs, d_actQs + state.numActQueries[i], state.h_actQs[i]);
     }
-
-    //state.numActQueries[0] = countById(d_rayMask, N, 0);
-    //state.numActQueries[1] = countById(d_rayMask, N, 1);
-    //state.numActQueries[2] = countById(d_rayMask, N, 2);
-
-    // See notes in sortGenPartInfo about whether to -1 or not.
-    //float aabbWidth_0 = state.partThd[0] * 2 * state.radius / state.crRatio;
-    //float aabbWidth_1 = state.partThd[1] * 2 * state.radius / state.crRatio;
-    //printf("%d, %d\n", state.partThd[0], state.partThd[1]);
-    //float aabbWidth = (state.partThd * 2 - 1) * state.radius / state.crRatio;
-
-    // in case we specify a huge partThd, we should never search beyond
-    // state.radius. float conversion is because std::sqrt returns a double for
-    // an integral input (https://en.cppreference.com/w/cpp/numeric/math/sqrt),
-    // and std::min can't compare float with double.
-    //if (state.searchMode == "knn") state.launchRadius[0] = std::min((float)(aabbWidth_0 / 2 * sqrt(2)), state.radius);
-    //else state.launchRadius[0] = std::min(aabbWidth_0 / 2, state.radius);
-    //if (state.searchMode == "knn") state.launchRadius[1] = std::min((float)(aabbWidth_1 / 2 * sqrt(2)), state.radius);
-    //else state.launchRadius[1] = std::min(aabbWidth_1 / 2, state.radius);
-    //state.launchRadius[2] = state.radius;
-
-    //thrust::device_ptr<float3> d_actQs_0 = getThrustDeviceF3Ptr(state.numActQueries[0]);
-    //copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs_0, 0); // use N since state.numQueries is updated now
-    //state.d_actQs[0] = thrust::raw_pointer_cast(d_actQs_0);
-
-    //thrust::device_ptr<float3> d_actQs_1 = getThrustDeviceF3Ptr(state.numActQueries[1]);
-    //copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs_1, 1); // use N since state.numQueries is updated now
-    //state.d_actQs[1] = thrust::raw_pointer_cast(d_actQs_1);
-
-    //thrust::device_ptr<float3> d_actQs_2 = getThrustDeviceF3Ptr(state.numActQueries[2]);
-    //copyIfIdMatch(state.params.queries, N, d_rayMask, d_actQs_2, 2); // use N since state.numQueries is updated now
-    //state.d_actQs[2] = thrust::raw_pointer_cast(d_actQs_2);
-
 
     //thrust::host_vector<bool> h_rayMask(N);
     //thrust::host_vector<float3> h_curQs(numOfActiveQueries);
@@ -396,16 +365,6 @@ void sortGenPartInfo(WhittedState& state,
     //}
     //thrust::copy(h_curQs.begin(), h_curQs.end(), d_actQs);
     //state.params.queries = thrust::raw_pointer_cast(d_actQs);
-
-
-
-    // Copy the active queries to host.
-    //state.h_actQs[0] = new float3[state.numActQueries[0]];
-    //thrust::copy(d_actQs_0, d_actQs_0 + state.numActQueries[0], state.h_actQs[0]);
-    //state.h_actQs[1] = new float3[state.numActQueries[1]];
-    //thrust::copy(d_actQs_1, d_actQs_1 + state.numActQueries[1], state.h_actQs[1]);
-    //state.h_actQs[2] = new float3[state.numActQueries[2]];
-    //thrust::copy(d_actQs_2, d_actQs_2 + state.numActQueries[2], state.h_actQs[2]);
 
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_rayMask) ) );
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );

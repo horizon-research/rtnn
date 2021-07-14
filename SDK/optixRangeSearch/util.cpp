@@ -311,27 +311,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   }
 
   // do a round of sanity check here
-  if (state.searchMode == "knn") {
+  if (state.searchMode == "knn")
     state.params.knn = K; // a macro
-  }
 
-  if (state.partition) assert(state.samepq);
+  if (state.partition)
+    state.samepq = 1; // must be samepq if we want to partition queries.
 }
-
-//void setupCUDA( WhittedState& state) {
-//  int32_t device_count = 0;
-//  CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
-//  std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
-//  
-//  cudaDeviceProp prop;
-//  CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
-//  CUDA_CHECK( cudaSetDevice( state.device_id ) );
-//  std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
-//
-//  // TODO: fix it with numOfBatches
-//  for (unsigned int i = 0; i < 3; i++)
-//    CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
-//}
 
 void readData(WhittedState& state) {
   // p and q files being the same dones't mean samepq have to be true. we can
