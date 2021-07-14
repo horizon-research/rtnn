@@ -63,14 +63,16 @@ void setupCUDA( WhittedState& state ) {
   CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
   CUDA_CHECK( cudaSetDevice( state.device_id ) );
   std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
-
-  CUDA_CHECK( cudaStreamCreate( &state.stream[0] ) );
 }
 
-void createAdditionalStreams( WhittedState& state ) {
-  // TODO: fix it with numOfBatches and move it somewhere else, maybe the partition logic?
-  for (unsigned int i = 1; i < 3; i++)
-    CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
+void setupSearch( WhittedState& state ) {
+  // TODO: this is temporary.
+  if (!state.partition) {
+    assert(state.numOfBatches == 1);
+    state.numActQueries[0] = state.numQueries;
+    state.d_actQs[0] = state.params.queries;
+    state.h_actQs[0] = state.h_queries;
+  }
 }
 
 int main( int argc, char* argv[] )
@@ -110,20 +112,14 @@ int main( int argc, char* argv[] )
 
     uploadData(state);
 
-    sortParticles(state, POINT, state.pointSortMode); // if partition is enabled, we do it here.
-    if (!state.samepq) sortParticles(state, QUERY, state.querySortMode); // when samepq, queries are sorted using the point sort mode.
+    // if partition is enabled, we do it here too, where state.numOfBatches is set and batch related data structures are allocated.
+    sortParticles(state, POINT, state.pointSortMode);
+    // when samepq, queries are sorted using the point sort mode so no need to sort queries again.
+    if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
+
+    setupSearch(state);
 
     setupOptiX(state);
-
-    createAdditionalStreams(state);
-
-    if (state.partition) state.numOfBatches = 3;
-    else {
-      state.numOfBatches = 1;
-      state.numActQueries[0] = state.numQueries;
-      state.d_actQs[0] = state.params.queries;
-      state.h_actQs[0] = state.h_queries;
-    }
 
     Timing::startTiming("total search time");
     //TODO: try a better scheduling here (reverse the order)?

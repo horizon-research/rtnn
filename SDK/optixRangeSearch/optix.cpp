@@ -76,12 +76,11 @@ void uploadData ( WhittedState& state ) {
         reinterpret_cast<void**>( &state.params.points ),
         state.numPoints * sizeof(float3) ) );
     
-    CUDA_CHECK( cudaMemcpyAsync(
+    CUDA_CHECK( cudaMemcpy(
         reinterpret_cast<void*>( state.params.points ),
         state.h_points,
         state.numPoints * sizeof(float3),
-        cudaMemcpyHostToDevice,
-        state.stream[0]
+        cudaMemcpyHostToDevice
     ) );
 
     if (state.samepq) {
@@ -95,15 +94,14 @@ void uploadData ( WhittedState& state ) {
           reinterpret_cast<void**>( &state.params.queries),
           state.numQueries * sizeof(float3) ) );
       
-      CUDA_CHECK( cudaMemcpyAsync(
+      CUDA_CHECK( cudaMemcpy(
           reinterpret_cast<void*>( state.params.queries ),
           state.h_queries,
           state.numQueries * sizeof(float3),
-          cudaMemcpyHostToDevice,
-          state.stream[0]
+          cudaMemcpyHostToDevice
       ) );
     }
-    CUDA_CHECK( cudaStreamSynchronize( state.stream[0] ) ); // TODO: just so we can measure time
+    //CUDA_CHECK( cudaStreamSynchronize( state.stream[0] ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
 }
 
@@ -176,6 +174,7 @@ static void buildGas(
         // original size is smaller, so point d_gas_output_buffer directly to the original device GAS memory.
         d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
     }
+    fprintf(stdout, "\tGAS size: %lu MB\n", compacted_gas_size/(1024 * 1024));
 }
 
 CUdeviceptr createAABB( WhittedState& state, int batch_id )
@@ -572,6 +571,20 @@ void cleanupState( WhittedState& state )
       if (state.d_gas_output_buffer[i])
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
     }
+
+    delete state.gas_handle;
+    delete state.d_gas_output_buffer;
+    delete state.stream;
+    delete state.numActQueries;
+    delete state.launchRadius;
+    delete state.partThd;
+    delete state.h_res;
+    delete state.d_actQs;
+    delete state.h_actQs;
+    delete state.d_aabb;
+    delete state.d_firsthit_idx;
+    delete state.d_temp_buffer_gas;
+    delete state.d_buffer_temp_output_gas_and_compacted_size;
 
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );

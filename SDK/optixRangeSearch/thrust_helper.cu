@@ -8,15 +8,6 @@
 // be compiled by nvcc needs to have .cu extensions. See here:
 // https://github.com/NVIDIA/thrust/issues/614
 
-//void sortByKey( thrust::device_vector<float>* d_vec_key, thrust::device_vector<unsigned int>* d_vec_val ) {
-//  thrust::sort_by_key(d_vec_key->begin(), d_vec_key->end(), d_vec_val->begin());
-//}
-//
-//void sortByKey( thrust::device_vector<float>* d_vec_key, thrust::device_ptr<unsigned int> d_init_val_ptr ) {
-//  thrust::sort_by_key(d_vec_key->begin(), d_vec_key->end(), d_init_val_ptr);
-//}
-//
-
 void sortByKey( thrust::device_ptr<float> d_key_ptr, thrust::device_ptr<unsigned int> d_val_ptr, unsigned int N, cudaStream_t stream ) {
   thrust::sort_by_key(thrust::cuda::par.on(stream), d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
@@ -24,10 +15,6 @@ void sortByKey( thrust::device_ptr<float> d_key_ptr, thrust::device_ptr<unsigned
 void sortByKey( thrust::device_ptr<float> d_key_ptr, thrust::device_ptr<unsigned int> d_val_ptr, unsigned int N ) {
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
-
-//void sortByKey( thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_vector<unsigned int>* d_vec_val, unsigned int N ) {
-//  thrust::sort_by_key(d_vec_key_ptr, d_vec_key_ptr + N, d_vec_val->begin());
-//}
 
 void sortByKey( thrust::device_ptr<unsigned int> d_vec_key_ptr, thrust::device_ptr<unsigned int> d_vec_val_ptr, unsigned int N, cudaStream_t stream ) {
   thrust::sort_by_key(thrust::cuda::par.on(stream), d_vec_key_ptr, d_vec_key_ptr + N, d_vec_val_ptr);

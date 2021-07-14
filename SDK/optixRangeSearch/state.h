@@ -48,8 +48,8 @@
 struct WhittedState
 {
     OptixDeviceContext          context                   = 0;
-    OptixTraversableHandle      gas_handle[3]             = {};
-    CUdeviceptr                 d_gas_output_buffer[3]    = {};
+    OptixTraversableHandle*     gas_handle                = nullptr;
+    CUdeviceptr*                d_gas_output_buffer       = nullptr;
 
     OptixModule                 geometry_module           = 0;
     OptixModule                 camera_module             = 0;
@@ -61,7 +61,7 @@ struct WhittedState
     OptixPipeline               pipeline                  = 0;
     OptixPipelineCompileOptions pipeline_compile_options  = {};
 
-    cudaStream_t                stream[3]                 = {0};
+    cudaStream_t*               stream                    = nullptr;
     Params                      params;
     Params*                     d_params                  = nullptr;
 
@@ -90,20 +90,19 @@ struct WhittedState
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
     unsigned int                numTotalQueries           = 0;
-    unsigned int                numActQueries[3]          = {0};
-    float                       launchRadius[3]           = {0.0};
-    int                         partThd[3]                = {0};
-    void*                       h_res[3]                  = {nullptr};
-    float3*                     d_actQs[3]                = {nullptr};
-    float3*                     h_actQs[3]                = {nullptr};
-    void*                       d_aabb[3]                 = {nullptr};
-    void*                       d_firsthit_idx[3]         = {nullptr};
-    void*                       d_temp_buffer_gas[3]      = {nullptr};
-    void*                       d_buffer_temp_output_gas_and_compacted_size[3] = {nullptr};
+    unsigned int*               numActQueries             = nullptr;
+    float*                      launchRadius              = nullptr;
+    float*                      partThd                   = nullptr;
+    void* *                     h_res                     = nullptr;
+    float3**                    d_actQs                   = nullptr;
+    float3**                    h_actQs                   = nullptr;
+    void**                      d_aabb                    = nullptr;
+    void**                      d_firsthit_idx            = nullptr;
+    void**                      d_temp_buffer_gas         = nullptr;
+    void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
 
     bool                        partition                 = false;
     char*                       cellMask                  = nullptr;
-    //int                         partThd                   = 1;
     int                         numOfBatches              = 1;
 
     float3                      Min;
