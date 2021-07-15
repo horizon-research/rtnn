@@ -130,25 +130,15 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
 }
 
 float getWidthFromIter(int iter, float cellSize) {
-  // in the knn mode, if we want to be absolutely certain, we need to
-  //  add 2 (not 1) to accommodate points at the edges/corners of the
-  //  central cell. width means there are K points within the
-  //  width^3 AABB, whose center is the center point of the current
-  //  cell. for corner points in the cell, its width^3 AABB might have
-  //  less than count # of points if the point distrition becomes
-  //  dramatically sparse outside of the current AABB. we empirically
-  //  observe no issue with >1M points, but with about ~100K points
-  //  this could be an issue (query 76354 in batch 0 in
-  //  0000000000.txt). if we +2, then the launchRadius calculation
-  //  needs to be changed too.
-  // in the radius mode, + 1 is sufficient as we are not interseted in
-  //  the K nearest neighbors.
-  // TODO: should it all be +2???
+  // to be absolutely certain, we add 2 (not 1) to iter to accommodate points
+  // at the edges of the central cell. width means there are K points within
+  // the width^3 AABB, whose center is the center point of the current cell.
+  // for corner points in the cell, its width^3 AABB might have less than count
+  // # of points if the point distrition becomes dramatically sparse outside of
+  // the current AABB. we empirically observe no issue with >1M points, but
+  // with about ~100K points this could be an issue.
 
-  //if (state.searchMode == "knn")
-    return (iter * 2 + 2) * cellSize;
-  //else
-  //  return (iter * 2 + 1) * cellSize;
+  return (iter * 2 + 2) * cellSize;
 }
 
 void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N) {
