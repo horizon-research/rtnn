@@ -40,7 +40,6 @@ void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void copyIfIdMatch(float3*, unsigned int, thrust::device_ptr<char>, thrust::device_ptr<float3>, char);
 unsigned int countById(thrust::device_ptr<char>, unsigned int, char);
 
-void initBatches(WhittedState&);
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
@@ -66,6 +65,8 @@ void cleanupState(WhittedState&);
 int tokenize(std::string, std::string, float3**, unsigned int);
 void parseArgs(WhittedState&, int, char**);
 void readData(WhittedState&);
+void initBatches(WhittedState&);
+bool isClose(float3, float3);
 
 void search(WhittedState&, int);
 void gasSortSearch(WhittedState&, int);

@@ -21,10 +21,10 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  //std::vector<unsigned int> randQ {2816};
+  //std::vector<unsigned int> randQ {10286};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    //if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
+    if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
     if (printRes) std::cout << "\tSanity check for query " << q << std::endl;
 
     // generate ground truth res
@@ -133,8 +133,8 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
 }
 
 void sanityCheck(WhittedState& state) {
-  //for (int i = 0; i < state.numOfBatches; i++) {
-  for (int i = 0; i < 1; i++) {
+  for (int i = 0; i < state.numOfBatches; i++) {
+  //for (int i = 0; i < 1; i++) {
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 

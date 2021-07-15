@@ -98,9 +98,14 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   gridInfo.GridDelta.z = gridInfo.GridDimension.z / gridSize.z;
 
   // morton code can only be correctly calcuated for a cubic, where each
-  // dimension is of the same size. currently we generate the largely meta_grid
-  // possible, which would divice the entire grid into multiple meta grids.
-  gridInfo.meta_grid_dim = std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z});
+  // dimension is of the same size and the dimension is a power of 2. if we
+  // were to generate one single morton code for the entire grid, this would
+  // waste a lot of space since a lot of empty cells will have to be padded.
+  // the strategy is to divide the grid into smaller equal-dimension-power-of-2
+  // smaller grids (meta_grid here). the order within each meta_grid is morton,
+  // but the order across meta_grids is raster order. the current
+  // implementation uses a heuristics. TODO: revisit this later.
+  gridInfo.meta_grid_dim = (int)pow(2, floorf(log2(std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z}))))/2;
   gridInfo.meta_grid_size = gridInfo.meta_grid_dim * gridInfo.meta_grid_dim * gridInfo.meta_grid_dim;
 
   // One meta grid cell contains meta_grid_dim^3 cells. The morton curve is
@@ -116,9 +121,9 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   unsigned int numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * gridInfo.meta_grid_size;
   fprintf(stdout, "\tGrid dimension (without meta grids): %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
   fprintf(stdout, "\tGrid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
-  //fprintf(stdout, "\tMeta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
-  //fprintf(stdout, "\tLength of a meta grid: %u\n", gridInfo.meta_grid_dim);
-  fprintf(stdout, "\tGridDelta: %f, %f, %f\n", gridInfo.GridDelta.x, gridInfo.GridDelta.y, gridInfo.GridDelta.z);
+  fprintf(stdout, "\tMeta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
+  fprintf(stdout, "\t# of cells in a meta grid: %u\n", gridInfo.meta_grid_dim);
+  //fprintf(stdout, "\tGridDelta: %f, %f, %f\n", gridInfo.GridDelta.x, gridInfo.GridDelta.y, gridInfo.GridDelta.z);
   fprintf(stdout, "\tNumber of cells: %u\n", numberOfCells);
   fprintf(stdout, "\tCell size: %f\n", cellSize);
 
@@ -126,7 +131,6 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   gridInfo.GridDimension.x = gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim;
   gridInfo.GridDimension.y = gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim;
   gridInfo.GridDimension.z = gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim;
-
   return numberOfCells;
 }
 
@@ -144,7 +148,7 @@ float getWidthFromIter(int iter, float cellSize) {
 
 uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
 
-void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N) {
+void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N, bool morton) {
   // TODO: this whole thing needs to be done in CUDA.
 
   std::vector<unsigned int> cellSearchSize(numberOfCells, 0);
@@ -155,7 +159,6 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
   // can't be approximated.
   float maxWidth = state.radius / sqrt(2) * 2;
 
-  //int maxIter = (int)floorf((maxWidth / cellSize - 1) / 2); // if + 1 in getWidthFromIter
   int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
   int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
 
@@ -168,13 +171,13 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
     for (int y = 0; y < gridInfo.GridDimension.y; y++) {
       for (int z = 0; z < gridInfo.GridDimension.z; z++) {
         // now let's check;
-        int cellIndex = (x * gridInfo.GridDimension.y + y) * gridInfo.GridDimension.z + z;
-        //int3 gridCell = make_int3(x, y, z);
-        //int cellIndex = kToCellIndex_MortonMetaGrid(gridInfo, gridCell);
-        //printf("(%d, %d, %d), %d\n", x, y, z, cellIndex);
-        //if (x == 259 && y == 19 && z == 334) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
-
-        // TODO: need to get a z-order cellIndex if we order points by z-order. right now it's raster order!
+        int cellIndex;
+        if (morton) // z-order sort
+          cellIndex = kToCellIndex_MortonMetaGrid(gridInfo, make_int3(x, y, z));
+        else  // raster sort
+          cellIndex = (x * gridInfo.GridDimension.y + y) * gridInfo.GridDimension.z + z;
+        //if (x == 402 && y == 11 && z == 265) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
+        assert(cellIndex <= numberOfCells);
         if (h_CellParticleCounts[cellIndex] == 0) continue;
 
         int iter = 0;
@@ -192,7 +195,11 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
               for (int iz = z-iter; iz <= z+iter; iz++) {
                 if (ix < 0 || ix >= gridInfo.GridDimension.x || iy < 0 || iy >= gridInfo.GridDimension.y || iz < 0 || iz >= gridInfo.GridDimension.z) continue;
                 else {
-                  unsigned int iCellIdx = (ix * gridInfo.GridDimension.y + iy) * gridInfo.GridDimension.z + iz;
+                  unsigned int iCellIdx;
+                  if (morton) // z-order sort
+                    iCellIdx = kToCellIndex_MortonMetaGrid(gridInfo, make_int3(ix, iy, iz));
+                  else // raster order
+                    iCellIdx = (ix * gridInfo.GridDimension.y + iy) * gridInfo.GridDimension.z + iz;
                   count += h_CellParticleCounts[iCellIdx];
                 }
               }
@@ -203,9 +210,6 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
 	      // small, cellSize will be 0 (same as uninitialized).
           float width = getWidthFromIter(iter, cellSize);
 
-          //if (x == 259 && y == 19 && z == 334) printf("%d, %d, %f\n", iter, count, width);
-
-          //fprintf(stdout, "%d, %f\n", iter, width);
           if (width > maxWidth) {
           //if (iter > maxIter) {
             cellSearchSize[cellIndex] = iter + 1; // if width > maxWidth, we need to do a full search.
@@ -254,26 +258,9 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
   }
 }
 
-bool isClose(float3 a, float3 b) {
-  if (fabs(a.x - b.x) < 0.001 && fabs(a.y - b.y) < 0.001 && fabs(a.z - b.z) < 0.001) return true;
-  else return false;
-}
-
-uint3 to3D(unsigned int idx, GridInfo gridInfo) {
-  unsigned int xMax = gridInfo.GridDimension.x;
-  unsigned int yMax = gridInfo.GridDimension.y;
-  unsigned int zMax = gridInfo.GridDimension.z;
-
-  unsigned int z = idx / (xMax * yMax);
-  idx -= (z * xMax * yMax);
-  unsigned int y = idx / xMax;
-  unsigned int x = idx % xMax;
-
-  return make_uint3(x, y, z);
-}
-
 void sortGenPartInfo(WhittedState& state,
                  unsigned int N,
+                 bool morton,
                  unsigned int numberOfCells,
                  unsigned int numOfBlocks,
                  unsigned int threadsPerBlock,
@@ -288,7 +275,7 @@ void sortGenPartInfo(WhittedState& state,
     thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
     thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, h_CellParticleCounts.begin());
 
-    genMask(state, h_CellParticleCounts.data(), numberOfCells, gridInfo, N);
+    genMask(state, h_CellParticleCounts.data(), numberOfCells, gridInfo, N, morton);
 
     thrust::device_ptr<char> d_rayMask = getThrustDeviceCharPtr(N);
     thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);
@@ -325,27 +312,13 @@ void sortGenPartInfo(WhittedState& state,
     thrust::host_vector<unsigned int> h_ParticleCellIndices(N);
     thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, h_ParticleCellIndices.begin());
 
-    for (unsigned int i = 0; i < N; i++) {
-      float3 query = state.h_queries[i];
-      if (isClose(query, make_float3(-14.238000, 1.946000, 3.575000))) {
-        //printf("particle [%f, %f, %f], %d, in cell %u\n", query.x, query.y, query.z, h_rayMask[i], h_ParticleCellIndices[i]);
-        //uint3 index = to3D(h_ParticleCellIndices[i], gridInfo);
-        //printf("[%u, %u, %u]\n", index.x, index.y, index.z);
-        break;
-      }
-    }
-    //exit(1);
-
-
-
-
-
-
-
-
-
-
-
+    //for (unsigned int i = 0; i < N; i++) {
+    //  float3 query = state.h_queries[i];
+    //  if (isClose(query, make_float3(21.618000, -0.005000, -13.505000))) {
+    //    printf("particle [%f, %f, %f], %d, in cell %u\n", query.x, query.y, query.z, h_rayMask[i], h_ParticleCellIndices[i]);
+    //    break;
+    //  }
+    //}
 
     // sort the ray masks as well the same way as query sorting.
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
@@ -356,11 +329,6 @@ void sortGenPartInfo(WhittedState& state,
 
     for (int i = 0; i < state.numOfBatches; i++) {
       state.numActQueries[i] = countById(d_rayMask, N, i);
-
-      // See notes in sortGenPartInfo about whether to -1 or not.
-      //float aabbWidth = (state.partThd[i] * 2 - 1) * state.radius / state.crRatio;
-      //float aabbWidth = state.partThd[i] * 2 * state.radius / state.crRatio;
-      //float aabbWidth = state.partThd[i];
 
       // the min check is technically not needed except for the last batch, for
       // which we should never need to search beyond state.radius. float
@@ -433,6 +401,7 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
     // normal particle sorting is done here too.
     sortGenPartInfo(state,
                     N,
+                    morton,
                     numberOfCells,
                     numOfBlocks,
                     threadsPerBlock,
@@ -519,6 +488,10 @@ void oneDSort ( WhittedState& state, ParticleType type ) {
 }
 
 void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
+  // 0: no sort
+  // 1: z-order sort
+  // 2: raster sort
+  // 3: 1D sort
   if (!sortMode) return;
 
   // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.

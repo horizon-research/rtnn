@@ -9,6 +9,8 @@
 /* GPU code */
 inline __host__ __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridInfo, int3 gridCell)
 {
+  //int3 temp = gridCell;
+
   int3 metaGridCell = make_int3(
     gridCell.x / GridInfo.meta_grid_dim,
     gridCell.y / GridInfo.meta_grid_dim,
@@ -19,7 +21,8 @@ inline __host__ __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridI
   gridCell.z %= GridInfo.meta_grid_dim;
   uint metaGridIndex = CellIndicesToLinearIndex(GridInfo.MetaGridDimension, metaGridCell);
 
-  //printf("(%d, %d, %d), (%d, %d, %d), %u, %u, %u\n", metaGridCell.x, metaGridCell.y, metaGridCell.z, gridCell.x, gridCell.y, gridCell.z, metaGridIndex, metaGridIndex * GridInfo.meta_grid_size, MortonCode3(gridCell.x, gridCell.y, gridCell.z));
+  //if (temp.x == 503 && temp.y == 33 && temp.z == 645)
+  //  printf("(%d, %d, %d), (%d, %d, %d), %u, %u, %u\n", metaGridCell.x, metaGridCell.y, metaGridCell.z, gridCell.x, gridCell.y, gridCell.z, metaGridIndex, metaGridIndex * GridInfo.meta_grid_size, MortonCode3(gridCell.x, gridCell.y, gridCell.z));
 
   return metaGridIndex * GridInfo.meta_grid_size + MortonCode3(gridCell.x, gridCell.y, gridCell.z);
 }
@@ -67,14 +70,15 @@ __global__ void kInsertParticles_Raster(
 
   float3 gridCellF = (particles[particleIndex] - GridInfo.GridMin) * GridInfo.GridDelta;
   int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
+
   unsigned int cellIndex = (gridCell.x * GridInfo.GridDimension.y + gridCell.y) * GridInfo.GridDimension.z + gridCell.z;
   particleCellIndices[particleIndex] = cellIndex;
 
-      //float3 query = particles[particleIndex];
-      //float3 b = make_float3(-14.238000, 1.946000, 3.575000);
-      //if (fabs(query.x - b.x) < 0.001 && fabs(query.y - b.y) < 0.001 && fabs(query.z - b.z) < 0.001) {
-      //  printf("particle [%f, %f, %f], [%d, %d, %d] in cell %u\n", query.x, query.y, query.z, gridCell.x, gridCell.y, gridCell.z, cellIndex);
-      //}
+  //float3 query = particles[particleIndex];
+  //float3 b = make_float3(-14.238000, 1.946000, 3.575000);
+  //if (fabs(query.x - b.x) < 0.001 && fabs(query.y - b.y) < 0.001 && fabs(query.z - b.z) < 0.001) {
+  //  printf("particle [%f, %f, %f], [%d, %d, %d] in cell %u\n", query.x, query.y, query.z, gridCell.x, gridCell.y, gridCell.z, cellIndex);
+  //}
 
   // this stores the within-cell sorted indices of particles
   localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
@@ -101,6 +105,12 @@ __global__ void kInsertParticles_Morton(
 
   unsigned int cellIndex = ToCellIndex_MortonMetaGrid(GridInfo, gridCell);
   particleCellIndices[particleIndex] = cellIndex;
+
+  //float3 query = particles[particleIndex];
+  //float3 b = make_float3(21.618000, -0.005000, -13.505000);
+  //if (fabs(query.x - b.x) < 0.001 && fabs(query.y - b.y) < 0.001 && fabs(query.z - b.z) < 0.001) {
+  //  printf("particle [%f, %f, %f], [%d, %d, %d] in cell %u\n", query.x, query.y, query.z, gridCell.x, gridCell.y, gridCell.z, cellIndex);
+  //}
 
   // this stores the within-cell sorted indices of particles
   localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
@@ -220,6 +230,7 @@ void kCountingSortIndices_genMask(unsigned int numOfBlocks, unsigned int threads
 }
 
 uint kToCellIndex_MortonMetaGrid(const GridInfo& gridInfo, int3 cell) {
+  if (cell.x == 503 && cell.y == 33 && cell.z == 645) printf("here\n");
   return ToCellIndex_MortonMetaGrid(gridInfo, cell);
 }
 
