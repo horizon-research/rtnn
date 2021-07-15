@@ -232,8 +232,6 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
   state.numOfBatches = histCount - 1;
   fprintf(stdout, "\tNumber of batches: %d\n", state.numOfBatches);
 
-  initBatches(state);
-
   // the last partThd won't be used -- radius will be state.radius for the last batch.
   for (unsigned int i = 0; i < state.numOfBatches; i++) {
     state.partThd[i] = getWidthFromIter(i, cellSize); 

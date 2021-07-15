@@ -338,3 +338,31 @@ void readData(WhittedState& state) {
   }
 }
 
+void initBatches(WhittedState& state) {
+  // see |genMask| for the logic behind this.
+  float cellSize = state.radius / state.crRatio;
+  float maxWidth = state.radius / sqrt(2) * 2;
+  int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
+  int maxBatchCount = maxIter + 2; // could be fewer than this.
+  state.maxBatchCount = maxBatchCount;
+
+  state.gas_handle = new OptixTraversableHandle[maxBatchCount];
+  state.d_gas_output_buffer = new CUdeviceptr[maxBatchCount];
+  state.stream = new cudaStream_t[maxBatchCount];
+  state.d_r2q_map = new unsigned int*[maxBatchCount];
+  state.numActQueries = new unsigned int[maxBatchCount];
+  state.launchRadius = new float[maxBatchCount];
+  state.partThd = new float[maxBatchCount];
+  state.h_res = new void*[maxBatchCount];
+  state.d_actQs = new float3*[maxBatchCount];
+  state.h_actQs = new float3*[maxBatchCount];
+  state.d_aabb = new void*[maxBatchCount];
+  state.d_firsthit_idx = new void*[maxBatchCount];
+  state.d_temp_buffer_gas = new void*[maxBatchCount];
+  state.d_buffer_temp_output_gas_and_compacted_size = new void*[maxBatchCount];
+  state.pipeline = new OptixPipeline[maxBatchCount];
+
+  for (unsigned int i = 0; i < maxBatchCount; i++)
+      CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
+}
+
