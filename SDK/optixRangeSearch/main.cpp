@@ -41,6 +41,7 @@ int main( int argc, char* argv[] )
   std::cout << "numQueries: " << state.numQueries << std::endl;
   std::cout << "searchMode: " << state.searchMode << std::endl;
   std::cout << "radius: " << state.radius << std::endl;
+  std::cout << "E2E Measure? " << std::boolalpha << state.msr << std::endl;
   std::cout << "K: " << state.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;

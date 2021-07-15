@@ -37,13 +37,8 @@
 #undef NDEBUG
 #include <assert.h>
 
-#define E2EMSR
-
-#ifdef E2EMSR
-  #define OMIT_ON_E2EMSR(x)
-#else
-  #define OMIT_ON_E2EMSR(x) x
-#endif
+#define OMIT_ON_E2EMSR(x) \
+  if (state.msr == 0) x   \
 
 struct WhittedState
 {
@@ -72,6 +67,7 @@ struct WhittedState
     float3**                    h_ndpoints                = nullptr;
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
+    bool                        msr                       = true;
 
     int32_t                     device_id                 = 1;
     std::string                 searchMode                = "radius";

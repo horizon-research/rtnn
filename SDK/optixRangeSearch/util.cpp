@@ -233,6 +233,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           state.radius = std::stof(argv[++i]);
           state.params.radius = state.radius; // this indicates the search radius of a launch
       }
+      else if( arg == "--msr" || arg == "-m" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.msr = (bool)(atoi(argv[++i]));
+      }
       else if( arg == "--partition" || arg == "-p" )
       {
           if( i >= argc - 1 )
@@ -359,7 +365,7 @@ void initBatches(WhittedState& state) {
   state.d_buffer_temp_output_gas_and_compacted_size = new void*[maxBatchCount];
   state.pipeline = new OptixPipeline[maxBatchCount];
 
-  for (unsigned int i = 0; i < maxBatchCount; i++)
+  for (int i = 0; i < maxBatchCount; i++)
       CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
 }
 
