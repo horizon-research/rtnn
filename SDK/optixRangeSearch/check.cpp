@@ -20,8 +20,8 @@ typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queu
 void sanityCheckKNN( WhittedState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
-  //std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  std::vector<unsigned int> randQ {10};
+  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  //std::vector<unsigned int> randQ {10};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     //if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;

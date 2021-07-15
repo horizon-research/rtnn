@@ -171,7 +171,7 @@ void addCount(int& count, unsigned int* h_CellParticleCounts, GridInfo gridInfo,
     //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
 }
 
-void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N, bool morton) {
+void genMask (WhittedState& state, thrust::device_ptr<unsigned int> d_part_seq, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N, unsigned int numUniqQs, bool morton) {
   // TODO: this whole thing needs to be done in CUDA.
 
   std::vector<unsigned int> cellSearchSize(numberOfCells, 0);
@@ -190,9 +190,24 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
   unsigned int* searchSizeHist = new unsigned int[histCount];
   memset(searchSizeHist, 0, sizeof (unsigned int) * histCount);
 
-  for (int x = 0; x < gridInfo.GridDimension.x; x++) {
-    for (int y = 0; y < gridInfo.GridDimension.y; y++) {
-      for (int z = 0; z < gridInfo.GridDimension.z; z++) {
+  //for (int x = 0; x < gridInfo.GridDimension.x; x++) {
+  //  for (int y = 0; y < gridInfo.GridDimension.y; y++) {
+  //    for (int z = 0; z < gridInfo.GridDimension.z; z++) {
+
+  thrust::host_vector<unsigned int> h_part_seq(numUniqQs);
+  thrust::copy(d_part_seq, d_part_seq + numUniqQs, h_part_seq.begin());
+
+  for (unsigned int i = 0; i < numUniqQs; i++) {
+
+        unsigned int qId = h_part_seq[i];
+        float3 point = state.h_points[qId];
+        float3 gridCellF = (point - gridInfo.GridMin) * gridInfo.GridDelta;
+        int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
+        int x = gridCell.x;
+        int y = gridCell.y;
+        int z = gridCell.z;
+
+
         // now let's check;
         int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
         //if (x == 87 && y == 22 && z == 358) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
@@ -221,8 +236,7 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
 	      // small, cellSize will be 0 (same as uninitialized).
           float width = getWidthFromIter(iter, cellSize);
 
-          //if (iter > maxIter) {
-          if (width > maxWidth) {
+          if (width > maxWidth) { //if (iter > maxIter) {
             cellSearchSize[cellIndex] = iter + 1; // if width > maxWidth, we need to do a full search.
             searchSizeHist[iter + 1]++;
             break;
@@ -300,9 +314,10 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
           addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmin, morton);
           addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmax, morton);
         }
-      }
     }
-  }
+  //    }
+  //  }
+  //}
 
   // setup the batches
   state.numOfBatches = histCount - 1;
@@ -347,7 +362,28 @@ void sortGenPartInfo(WhittedState& state,
     thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
     thrust::copy(d_CellParticleCounts_ptr, d_CellParticleCounts_ptr + numberOfCells, h_CellParticleCounts.begin());
 
-    genMask(state, h_CellParticleCounts.data(), numberOfCells, gridInfo, N, morton);
+
+    thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_copy = getThrustDevicePtr(N);
+    //thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, d_ParticleCellIndices_ptr_copy);
+    CUDA_CHECK( cudaMemcpy(
+                reinterpret_cast<void*>( thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_copy ) ),
+                thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
+                N * sizeof( unsigned int ),
+                cudaMemcpyDeviceToDevice
+    ) );
+    thrust::device_ptr<unsigned int> d_part_seq = getThrustDevicePtr(N);
+    genSeqDevice(d_part_seq, N);
+    sortByKey(d_ParticleCellIndices_ptr_copy, d_part_seq, N);
+    unsigned int numUniqQs = uniqueByKey(d_ParticleCellIndices_ptr_copy, N, d_part_seq);
+    printf("%u\n", numUniqQs);
+
+
+
+
+
+
+
+    genMask(state, d_part_seq, h_CellParticleCounts.data(), numberOfCells, gridInfo, N, numUniqQs, morton);
 
     thrust::device_ptr<char> d_rayMask = getThrustDeviceCharPtr(N);
     thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);

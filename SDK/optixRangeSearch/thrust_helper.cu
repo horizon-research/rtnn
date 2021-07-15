@@ -96,21 +96,12 @@ void fillByValue(thrust::device_ptr<unsigned int> d_src_ptr, unsigned int N, int
   thrust::fill(d_src_ptr, d_src_ptr + N, value);
 }
 
-struct is_true
+struct is_nonzero
 {
   __host__ __device__
     bool operator()(const bool x)
     {
       return x;
-    }
-};
-
-struct is_false
-{
-  __host__ __device__
-    bool operator()(const bool x)
-    {
-      return !x;
     }
 };
 
@@ -135,18 +126,20 @@ void copyIfIdMatch(float3* source, unsigned int N, thrust::device_ptr<char> mask
                     mask, dest, isSameID(id));
 }
 
-void copyIfStencil(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest, bool cond) {
-  if (cond)
+void copyIfNonZero(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest) {
     thrust::copy_if(thrust::device_pointer_cast(source),
                     thrust::device_pointer_cast(source) + N,
-                    mask, dest, is_true());
-  else
-    thrust::copy_if(thrust::device_pointer_cast(source),
-                    thrust::device_pointer_cast(source) + N,
-                    mask, dest, is_false());
+                    mask, dest, is_nonzero());
 }
 
 unsigned int countById(thrust::device_ptr<char> val, unsigned int N, char id) {
   unsigned int numOfActiveQueries = thrust::count(val, val + N, id);
   return numOfActiveQueries;
+}
+
+unsigned int uniqueByKey(thrust::device_ptr<unsigned int> key, unsigned int N, thrust::device_ptr<unsigned int> dest) {
+  // thrust unique_by_key returns "a pair of iterators at end of the ranges [key_first, keys_new_last) and [values_first, values_new_last)."
+  // https://stackoverflow.com/questions/54532859/count-number-of-unique-elements-using-thrust-unique-by-key-when-the-set-of-value
+  auto end = thrust::unique_by_key(key, key + N, dest);
+  return thrust::get<0>(end) - key;
 }
