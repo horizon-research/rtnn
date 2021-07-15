@@ -68,7 +68,6 @@ void initBatches(WhittedState& state) {
 void setupSearch( WhittedState& state ) {
   if (!state.partition) {
     assert(state.numOfBatches == 1);
-    initBatches(state);
 
     state.numActQueries[0] = state.numQueries;
     state.d_actQs[0] = state.params.queries;
