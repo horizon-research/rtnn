@@ -1,25 +1,5 @@
-#include <cuda_runtime.h>
-
-#include <sutil/Camera.h>
 #include <sutil/Exception.h>
-#include <sutil/Matrix.h>
-#include <sutil/sutil.h>
-#include <sutil/vec_math.h>
 #include <sutil/Timing.h>
-
-#include <thrust/device_vector.h>
-#include <thrust/sort.h>
-#include <thrust/sequence.h>
-#include <thrust/gather.h>
-
-#include <iomanip>
-#include <cstring>
-#include <fstream>
-#include <string>
-#include <random>
-#include <cstdlib>
-#include <queue>
-#include <unordered_set>
 
 #include "optixRangeSearch.h"
 #include "state.h"
@@ -92,23 +72,36 @@ int main( int argc, char* argv[] )
     setupOptiX(state);
 
     Timing::startTiming("total search time");
-    //TODO: try a better scheduling here (reverse the order)?
-    for (int i = 0; i < state.numOfBatches; i++) {
-      fprintf(stdout, "\n************** Batch %u **************\n", i);
 
-      // it's possible that certain batches have 0 query (e.g., state.partThd too low).
-      if (state.numActQueries[i] == 0) continue;
+    bool interleave = true;
+    if (interleave) {
+      for (int i = 0; i < state.numOfBatches; i++) {
+        if (state.numActQueries[i] == 0) continue;
+        createGeometry (state, i); // batch_id ignored if not partition.
+      }
 
-      // create the GAS using the current order of points and the launchRadius of the current batch.
-      createGeometry (state, i); // batch_id ignored if not partition.
+      for (int i = 0; i < state.numOfBatches; i++) {
+        if (state.numActQueries[i] == 0) continue;
+        if (state.qGasSortMode) gasSortSearch(state, i);
+      }
 
-      if (state.qGasSortMode) gasSortSearch(state, i);
+      for (int i = 0; i < state.numOfBatches; i++) {
+        if (state.numActQueries[i] == 0) continue;
+        search(state, i);
+      }
+    } else {
+      for (int i = 0; i < state.numOfBatches; i++) {
+        fprintf(stdout, "\n************** Batch %u **************\n", i);
+        // it's possible that certain batches have 0 query (e.g., state.partThd too low).
+        if (state.numActQueries[i] == 0) continue;
 
-      //search(state, i);
-    }
+        // create the GAS using the current order of points and the launchRadius of the current batch.
+        createGeometry (state, i); // batch_id ignored if not partition.
 
-    for (int i = 0; i < state.numOfBatches; i++) {
-      search(state, i);
+        if (state.qGasSortMode) gasSortSearch(state, i);
+
+        search(state, i);
+      }
     }
 
     CUDA_SYNC_CHECK();
