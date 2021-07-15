@@ -90,6 +90,7 @@ struct WhittedState
     float*                      launchRadius              = nullptr;
     float*                      partThd                   = nullptr;
     void**                      h_res                     = nullptr;
+    void**                      d_res                     = nullptr;
     float3**                    d_actQs                   = nullptr;
     float3**                    h_actQs                   = nullptr;
     void**                      d_aabb                    = nullptr;

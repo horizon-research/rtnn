@@ -357,6 +357,7 @@ void initBatches(WhittedState& state) {
   state.launchRadius = new float[maxBatchCount];
   state.partThd = new float[maxBatchCount];
   state.h_res = new void*[maxBatchCount];
+  state.d_res = new void*[maxBatchCount];
   state.d_actQs = new float3*[maxBatchCount];
   state.h_actQs = new float3*[maxBatchCount];
   state.d_aabb = new void*[maxBatchCount];

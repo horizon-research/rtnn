@@ -576,6 +576,7 @@ void cleanupState( WhittedState& state )
       CUDA_CHECK( cudaStreamDestroy(state.stream[i]) );
 
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
+      CUDA_CHECK( cudaFree( state.d_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
       CUDA_CHECK( cudaFree( state.d_actQs[i] ) );
       delete state.h_actQs[i];
@@ -609,17 +610,16 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
-    //if (state.params.queries != state.params.points) // TODO: there are cases we need to free params.queries and state.h_queries.
-    //  CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points          ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
+    // device queries and host queries have been freed before.
+    if (state.partition || !state.samepq) {
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points        ) ) );
+      delete state.h_points;
+    }
     if (state.d_1dsort_key)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_1dsort_key         ) ) );
     if (state.d_fhsort_key)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_fhsort_key         ) ) );
-
-    //if (state.h_queries != state.h_points) delete state.h_queries;
-    delete state.h_points;
 }
 
 void setupOptiX( WhittedState& state ) {
