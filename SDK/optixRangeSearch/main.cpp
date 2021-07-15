@@ -75,7 +75,7 @@ int main( int argc, char* argv[] )
 
     Timing::startTiming("total search time");
 
-    bool interleave = true;
+    bool interleave = false;
     if (interleave) {
       for (int i = 0; i < state.numOfBatches; i++) {
         if (state.numActQueries[i] == 0) continue;
@@ -93,6 +93,7 @@ int main( int argc, char* argv[] )
       }
     } else {
       for (int i = 0; i < state.numOfBatches; i++) {
+      //for (int i = 1; i < 2; i++) {
         fprintf(stdout, "\n************** Batch %u **************\n", i);
         // it's possible that certain batches have 0 query (e.g., state.partThd too low).
         if (state.numActQueries[i] == 0) continue;

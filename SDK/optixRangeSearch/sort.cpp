@@ -148,6 +148,29 @@ float getWidthFromIter(int iter, float cellSize) {
 
 uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
 
+unsigned int getCellIdx(GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
+  if (morton) // z-order sort
+    return kToCellIndex_MortonMetaGrid(gridInfo, make_int3(ix, iy, iz));
+  else // raster order
+    return (ix * gridInfo.GridDimension.y + iy) * gridInfo.GridDimension.z + iz;
+}
+
+bool oob(GridInfo gridInfo, int ix, int iy, int iz) {
+  if (ix < 0 || ix >= gridInfo.GridDimension.x
+   || iy < 0 || iy >= gridInfo.GridDimension.y
+   || iz < 0 || iz >= gridInfo.GridDimension.z)
+    return true;
+  else return false;
+}
+
+void addCount(int& count, unsigned int* h_CellParticleCounts, GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
+    if (oob(gridInfo, ix, iy, iz)) return;
+
+    unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
+    count += h_CellParticleCounts[iCellIdx];
+    //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
+}
+
 void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N, bool morton) {
   // TODO: this whole thing needs to be done in CUDA.
 
@@ -171,17 +194,14 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
     for (int y = 0; y < gridInfo.GridDimension.y; y++) {
       for (int z = 0; z < gridInfo.GridDimension.z; z++) {
         // now let's check;
-        int cellIndex;
-        if (morton) // z-order sort
-          cellIndex = kToCellIndex_MortonMetaGrid(gridInfo, make_int3(x, y, z));
-        else  // raster sort
-          cellIndex = (x * gridInfo.GridDimension.y + y) * gridInfo.GridDimension.z + z;
-        //if (x == 402 && y == 11 && z == 265) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
+        int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
+        //if (x == 87 && y == 22 && z == 358) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
         assert(cellIndex <= numberOfCells);
         if (h_CellParticleCounts[cellIndex] == 0) continue;
 
         int iter = 0;
         int count = 0;
+        addCount(count, h_CellParticleCounts, gridInfo, x, y, z, morton);
 
 	    // in radius search we want to completely skip dist calc and sphere
 	    // check in GPU (bottleneck) so we constrain the maxWidth such that the
@@ -189,29 +209,20 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
 	    // can't be skipped and is not the bottleneck anyway (invoking IS
 	    // programs is) so we relax the maxWidth to give points more
 	    // opportunity to find a smaller search radius.
-        while(1) {
-          for (int ix = x-iter; ix <= x+iter; ix++) {
-            for (int iy = y-iter; iy <= y+iter; iy++) {
-              for (int iz = z-iter; iz <= z+iter; iz++) {
-                if (ix < 0 || ix >= gridInfo.GridDimension.x || iy < 0 || iy >= gridInfo.GridDimension.y || iz < 0 || iz >= gridInfo.GridDimension.z) continue;
-                else {
-                  unsigned int iCellIdx;
-                  if (morton) // z-order sort
-                    iCellIdx = kToCellIndex_MortonMetaGrid(gridInfo, make_int3(ix, iy, iz));
-                  else // raster order
-                    iCellIdx = (ix * gridInfo.GridDimension.y + iy) * gridInfo.GridDimension.z + iz;
-                  count += h_CellParticleCounts[iCellIdx];
-                }
-              }
-            }
-          }
+        int xmin = x;
+        int xmax = x;
+        int ymin = y;
+        int ymax = y;
+        int zmin = z;
+        int zmax = z;
 
+        while(1) {
 	      // TODO: there could be corner cases here, e.g., maxWidth is very
 	      // small, cellSize will be 0 (same as uninitialized).
           float width = getWidthFromIter(iter, cellSize);
 
-          if (width > maxWidth) {
           //if (iter > maxIter) {
+          if (width > maxWidth) {
             cellSearchSize[cellIndex] = iter + 1; // if width > maxWidth, we need to do a full search.
             searchSizeHist[iter + 1]++;
             break;
@@ -225,8 +236,69 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
           }
           else {
             iter++;
-            count = 0;
+            //count = 0;
           }
+          //if (x == 87 && y == 22 && z == 358) printf("%d, %d\n", iter, count);
+
+          int ix, iy, iz;
+
+          iz = zmin - 1;
+          for (ix = xmin; ix <= xmax; ix++) {
+            for (iy = ymin; iy <= ymax; iy++) {
+              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+            }
+          }
+
+          iz = zmax + 1;
+          for (ix = xmin; ix <= xmax; ix++) {
+            for (iy = ymin; iy <= ymax; iy++) {
+              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+            }
+          }
+
+          ix = xmin - 1;
+          for (iy = ymin; iy <= ymax; iy++) {
+            for (iz = zmin; iz <= zmax; iz++) {
+              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+            }
+          }
+
+          ix = xmax + 1;
+          for (iy = ymin; iy <= ymax; iy++) {
+            for (iz = zmin; iz <= zmax; iz++) {
+              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+            }
+          }
+
+          iy = ymin - 1;
+          for (ix = xmin; ix <= xmax; ix++) {
+            for (iz = zmin; iz <= zmax; iz++) {
+              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+            }
+          }
+
+          iy = ymax + 1;
+          for (ix = xmin; ix <= xmax; ix++) {
+            for (iz = zmin; iz <= zmax; iz++) {
+              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+            }
+          }
+
+          xmin--;
+          xmax++;
+          ymin--;
+          ymax++;
+          zmin--;
+          zmax++;
+
+          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymin, zmin, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymin, zmax, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymax, zmin, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymax, zmax, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymin, zmin, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymin, zmax, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmin, morton);
+          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmax, morton);
         }
       }
     }
@@ -314,11 +386,12 @@ void sortGenPartInfo(WhittedState& state,
 
     //for (unsigned int i = 0; i < N; i++) {
     //  float3 query = state.h_queries[i];
-    //  if (isClose(query, make_float3(21.618000, -0.005000, -13.505000))) {
+    //  if (isClose(query, make_float3(-57.230999, 2.710000, 9.608000))) {
     //    printf("particle [%f, %f, %f], %d, in cell %u\n", query.x, query.y, query.z, h_rayMask[i], h_ParticleCellIndices[i]);
     //    break;
     //  }
     //}
+    //exit(1);
 
     // sort the ray masks as well the same way as query sorting.
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
