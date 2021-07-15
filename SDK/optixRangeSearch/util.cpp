@@ -239,12 +239,6 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.partition = (bool)(atoi(argv[++i]));
       }
-      //else if( arg == "--partthd" || arg == "-pt" )
-      //{
-      //    if( i >= argc - 1 )
-      //        printUsageAndExit( argv[0] );
-      //    state.partThd = atoi(argv[++i]);
-      //}
       else if( arg == "--samepq" || arg == "-spq" )
       {
           if( i >= argc - 1 )
@@ -308,8 +302,11 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   if (state.searchMode == "knn")
     state.knn = K; // a macro
 
-  if (state.partition)
-    state.samepq = 1; // must be samepq if we want to partition queries.
+  // currently must be samepq to support query partition
+  if (state.partition) {
+    assert(state.qfile.empty() || (state.qfile == state.pfile));
+    state.samepq = 1;
+  }
 }
 
 void readData(WhittedState& state) {
