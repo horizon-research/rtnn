@@ -114,10 +114,11 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
 
   // metagrids will slightly increase the total cells
   unsigned int numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * gridInfo.meta_grid_size;
-  //fprintf(stdout, "\tGrid dimension (without meta grids): %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
-  //fprintf(stdout, "\tGrid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
+  fprintf(stdout, "\tGrid dimension (without meta grids): %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
+  fprintf(stdout, "\tGrid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
   //fprintf(stdout, "\tMeta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
   //fprintf(stdout, "\tLength of a meta grid: %u\n", gridInfo.meta_grid_dim);
+  fprintf(stdout, "\tGridDelta: %f, %f, %f\n", gridInfo.GridDelta.x, gridInfo.GridDelta.y, gridInfo.GridDelta.z);
   fprintf(stdout, "\tNumber of cells: %u\n", numberOfCells);
   fprintf(stdout, "\tCell size: %f\n", cellSize);
 
@@ -141,6 +142,8 @@ float getWidthFromIter(int iter, float cellSize) {
   return (iter * 2 + 2) * cellSize;
 }
 
+uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
+
 void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N) {
   // TODO: this whole thing needs to be done in CUDA.
 
@@ -156,7 +159,7 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
   int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
   int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
 
-  printf("%d, %f\n", maxIter, maxWidth);
+  //printf("%d, %f\n", maxIter, maxWidth);
 
   unsigned int* searchSizeHist = new unsigned int[histCount];
   memset(searchSizeHist, 0, sizeof (unsigned int) * histCount);
@@ -166,6 +169,12 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
       for (int z = 0; z < gridInfo.GridDimension.z; z++) {
         // now let's check;
         int cellIndex = (x * gridInfo.GridDimension.y + y) * gridInfo.GridDimension.z + z;
+        //int3 gridCell = make_int3(x, y, z);
+        //int cellIndex = kToCellIndex_MortonMetaGrid(gridInfo, gridCell);
+        //printf("(%d, %d, %d), %d\n", x, y, z, cellIndex);
+        //if (x == 259 && y == 19 && z == 334) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
+
+        // TODO: need to get a z-order cellIndex if we order points by z-order. right now it's raster order!
         if (h_CellParticleCounts[cellIndex] == 0) continue;
 
         int iter = 0;
@@ -194,6 +203,8 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
 	      // small, cellSize will be 0 (same as uninitialized).
           float width = getWidthFromIter(iter, cellSize);
 
+          //if (x == 259 && y == 19 && z == 334) printf("%d, %d, %f\n", iter, count, width);
+
           //fprintf(stdout, "%d, %f\n", iter, width);
           if (width > maxWidth) {
           //if (iter > maxIter) {
@@ -201,10 +212,9 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
             searchSizeHist[iter + 1]++;
             break;
           }
-          else if (count >= state.knn) {
-	        // now we know the width^3 AABB has K points, but we can't tell if
-	        // the K nearest points are in the AABB. we must blow up a sphere
-	        // with a radius of width/2 and search there to be sure.
+          else if (count >= (state.knn + 1)) {
+            // + 1 because the count in h_CellParticleCounts includes the point
+            // itself whereas our KNN search isn't going to return itself!
             cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
             searchSizeHist[iter + 1]++;
             break;
@@ -238,9 +248,28 @@ void genMask (WhittedState& state, unsigned int* h_CellParticleCounts, unsigned 
 
     // TODO: need a better decision logic, e.g., through a histogram and some sort of cost model.
     if (cellSearchSize[i] != 0) {
+      //if (i == 6054598) printf("search size for cell 6054598: %d\n", cellSearchSize[i]);
       state.cellMask[i] = cellSearchSize[i] - 1;
     }
   }
+}
+
+bool isClose(float3 a, float3 b) {
+  if (fabs(a.x - b.x) < 0.001 && fabs(a.y - b.y) < 0.001 && fabs(a.z - b.z) < 0.001) return true;
+  else return false;
+}
+
+uint3 to3D(unsigned int idx, GridInfo gridInfo) {
+  unsigned int xMax = gridInfo.GridDimension.x;
+  unsigned int yMax = gridInfo.GridDimension.y;
+  unsigned int zMax = gridInfo.GridDimension.z;
+
+  unsigned int z = idx / (xMax * yMax);
+  idx -= (z * xMax * yMax);
+  unsigned int y = idx / xMax;
+  unsigned int x = idx % xMax;
+
+  return make_uint3(x, y, z);
 }
 
 void sortGenPartInfo(WhittedState& state,
@@ -289,6 +318,35 @@ void sortGenPartInfo(WhittedState& state,
                 N * sizeof( unsigned int ),
                 cudaMemcpyDeviceToDevice
     ) );
+
+
+    thrust::host_vector<char> h_rayMask(N);
+    thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
+    thrust::host_vector<unsigned int> h_ParticleCellIndices(N);
+    thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, h_ParticleCellIndices.begin());
+
+    for (unsigned int i = 0; i < N; i++) {
+      float3 query = state.h_queries[i];
+      if (isClose(query, make_float3(-14.238000, 1.946000, 3.575000))) {
+        //printf("particle [%f, %f, %f], %d, in cell %u\n", query.x, query.y, query.z, h_rayMask[i], h_ParticleCellIndices[i]);
+        //uint3 index = to3D(h_ParticleCellIndices[i], gridInfo);
+        //printf("[%u, %u, %u]\n", index.x, index.y, index.z);
+        break;
+      }
+    }
+    //exit(1);
+
+
+
+
+
+
+
+
+
+
+
+
     // sort the ray masks as well the same way as query sorting.
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
@@ -310,6 +368,7 @@ void sortGenPartInfo(WhittedState& state,
       // (https://en.cppreference.com/w/cpp/numeric/math/sqrt), and std::min
       // can't compare float with double.
       // TODO: last batch needs to be 2
+
       if (state.searchMode == "knn") state.launchRadius[i] = std::min((float)(state.partThd[i] / 2 * sqrt(2)), state.radius);
       else state.launchRadius[i] = std::min(state.partThd[i] / 2, state.radius);
 
@@ -325,18 +384,6 @@ void sortGenPartInfo(WhittedState& state,
       state.h_actQs[i] = new float3[state.numActQueries[i]];
       thrust::copy(d_actQs, d_actQs + state.numActQueries[i], state.h_actQs[i]);
     }
-
-    //thrust::host_vector<bool> h_rayMask(N);
-    //thrust::host_vector<float3> h_curQs(numOfActiveQueries);
-    //unsigned int x = 0;
-    //for (unsigned int i = 0; i < N; i++) {
-    //  if (h_rayMask[i] == true) {
-    //    h_curQs[x++] = state.h_queries[i];
-    //    //printf("%u: %f, %f, %f\n", i, state.h_queries[i].x, state.h_queries[i].y, state.h_queries[i].z);
-    //  }
-    //}
-    //thrust::copy(h_curQs.begin(), h_curQs.end(), d_actQs);
-    //state.params.queries = thrust::raw_pointer_cast(d_actQs);
 
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_rayMask) ) );
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );

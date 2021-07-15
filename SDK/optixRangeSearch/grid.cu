@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 /* GPU code */
-inline __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridInfo, int3 gridCell)
+inline __host__ __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridInfo, int3 gridCell)
 {
   int3 metaGridCell = make_int3(
     gridCell.x / GridInfo.meta_grid_dim,
@@ -63,14 +63,24 @@ __global__ void kInsertParticles_Raster(
 {
   unsigned int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
   if (particleIndex >= GridInfo.ParticleCount) return;
+  //printf("%u, %u\n", particleIndex, GridInfo.ParticleCount);
 
   float3 gridCellF = (particles[particleIndex] - GridInfo.GridMin) * GridInfo.GridDelta;
   int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
   unsigned int cellIndex = (gridCell.x * GridInfo.GridDimension.y + gridCell.y) * GridInfo.GridDimension.z + gridCell.z;
   particleCellIndices[particleIndex] = cellIndex;
 
+      //float3 query = particles[particleIndex];
+      //float3 b = make_float3(-14.238000, 1.946000, 3.575000);
+      //if (fabs(query.x - b.x) < 0.001 && fabs(query.y - b.y) < 0.001 && fabs(query.z - b.z) < 0.001) {
+      //  printf("particle [%f, %f, %f], [%d, %d, %d] in cell %u\n", query.x, query.y, query.z, gridCell.x, gridCell.y, gridCell.z, cellIndex);
+      //}
+
   // this stores the within-cell sorted indices of particles
   localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
+
+  //if (cellIndex == 6054598)
+  //  printf("cell 6054598 has %u particles [%f, %f, %f]. Dist: %f\n", cellParticleCounts[cellIndex], query.x, query.y, query.z, sqrt((query.x - b.x) * (query.x - b.x) + (query.y - b.y) * (query.y - b.y) + (query.z - b.z) * (query.z - b.z)));
 
   //printf("%u, %u, (%d, %d, %d)\n", particleIndex, cellIndex, gridCell.x, gridCell.y, gridCell.z);
 }
@@ -207,5 +217,9 @@ void kCountingSortIndices_genMask(unsigned int numOfBlocks, unsigned int threads
       cellMask,
       rayMask
       );
+}
+
+uint kToCellIndex_MortonMetaGrid(const GridInfo& gridInfo, int3 cell) {
+  return ToCellIndex_MortonMetaGrid(gridInfo, cell);
 }
 

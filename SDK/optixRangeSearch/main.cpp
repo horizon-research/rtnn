@@ -73,7 +73,7 @@ int main( int argc, char* argv[] )
 
     Timing::startTiming("total search time");
 
-    bool interleave = true;
+    bool interleave = false;
     if (interleave) {
       for (int i = 0; i < state.numOfBatches; i++) {
         if (state.numActQueries[i] == 0) continue;
