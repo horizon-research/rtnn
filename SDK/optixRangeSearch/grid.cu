@@ -75,7 +75,7 @@ __global__ void kInsertParticles_Raster(
   particleCellIndices[particleIndex] = cellIndex;
 
   //float3 query = particles[particleIndex];
-  //float3 b = make_float3(-14.238000, 1.946000, 3.575000);
+  //float3 b = make_float3(-57.230999, 2.710000, 9.608000);
   //if (fabs(query.x - b.x) < 0.001 && fabs(query.y - b.y) < 0.001 && fabs(query.z - b.z) < 0.001) {
   //  printf("particle [%f, %f, %f], [%d, %d, %d] in cell %u\n", query.x, query.y, query.z, gridCell.x, gridCell.y, gridCell.z, cellIndex);
   //}

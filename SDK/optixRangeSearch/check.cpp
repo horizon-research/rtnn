@@ -20,15 +20,14 @@ typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queu
 void sanityCheckKNN( WhittedState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
-  std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  //std::vector<unsigned int> randQ {10286};
+  //std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
+  std::vector<unsigned int> randQ {10};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
-    if (printRes) std::cout << "\tSanity check for query " << q << std::endl;
+    //if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
+    float3 query = state.h_queries[q];
 
     // generate ground truth res
-    float3 query = state.h_queries[q];
     knn_queue topKQ;
     unsigned int size = 0;
     for (unsigned int p = 0; p < state.numPoints; p++) {
@@ -46,7 +45,6 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
         }
       }
     }
-    //printf("%f, %f, %f\n", query.x, query.y, query.z);
 
     if (printRes) std::cout << "GT: ";
     std::unordered_set<unsigned int> gt_idxs;
@@ -83,7 +81,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
     //if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
     // https://www.techiedelight.com/print-set-unordered_set-cpp/
     if (gt_dists != gpu_dists) {
-      fprintf(stdout, "Incorrect %u\n", q);
+      fprintf(stdout, "Incorrect query [%u] %f, %f, %f\n", q, query.x, query.y, query.z);
       //std::cout << "GT:\n";
       //std::copy(gt_dists.begin(),
       //      gt_dists.end(),
@@ -134,7 +132,7 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
 
 void sanityCheck(WhittedState& state) {
   for (int i = 0; i < state.numOfBatches; i++) {
-  //for (int i = 0; i < 1; i++) {
+  //for (int i = 1; i < 2; i++) {
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 
