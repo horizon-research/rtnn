@@ -133,7 +133,6 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
 
 void sanityCheck(WhittedState& state) {
   for (int i = 0; i < state.numOfBatches; i++) {
-  //for (int i = 3; i < 4; i++) {
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 

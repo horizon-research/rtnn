@@ -167,8 +167,8 @@ static void buildGas(
         // use handle as input and output
         OPTIX_CHECK( optixAccelCompact( state.context, state.stream[batch_id], gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
-        state.d_buffer_temp_output_gas_and_compacted_size[batch_id] = (void*)d_buffer_temp_output_gas_and_compacted_size;
-        //CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[batch_id] ) );
+        //state.d_buffer_temp_output_gas_and_compacted_size[batch_id] = (void*)d_buffer_temp_output_gas_and_compacted_size;
+        CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
     }
     else
     {
@@ -241,8 +241,8 @@ void createGeometry( WhittedState& state, int batch_id )
         state.d_gas_output_buffer[batch_id],
         batch_id);
 
-    state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
-    //CUDA_CHECK( cudaFree( state.d_aabb[batch_id] ) );
+    //state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
+    CUDA_CHECK( cudaFree( reinterpret_cast<void*>(d_aabb) ) );
     OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
   Timing::stopTiming(true);
 }
@@ -555,7 +555,7 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
                                  state.stream[batch_id]
     ) );
 
-    if (batch_id == 0) {
+    if (batch_id < state.numOfBatches - 2) {
       OPTIX_CHECK( optixLaunch(
           state.pipeline[0],
           state.stream[batch_id],
@@ -563,8 +563,8 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
           sizeof( Params ),
           &state.sbt,
           numQueries, // launch width
-          1,                // launch height
-          1                 // launch depth
+          1,          // launch height
+          1           // launch depth
       ) );
     } else {
       OPTIX_CHECK( optixLaunch(
@@ -574,8 +574,8 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
           sizeof( Params ),
           &state.sbt,
           numQueries, // launch width
-          1,                // launch height
-          1                 // launch depth
+          1,          // launch height
+          1           // launch depth
       ) );
     }
 }
@@ -592,17 +592,24 @@ void cleanupState( WhittedState& state )
     OPTIX_CHECK( optixDeviceContextDestroy( state.context                 ) );
 
     for (int i = 0; i < state.numOfBatches; i++) {
+      if (state.numActQueries[i] == 0) continue;
+
       CUDA_CHECK( cudaStreamDestroy(state.stream[i]) );
+
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
+      CUDA_CHECK( cudaFree( state.d_actQs[i] ) );
+      delete state.h_actQs[i];
+
       //CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
       CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
+      if (state.d_r2q_map[i])
+        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map[i]     ) ) );
+
       // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
       //CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
       if (state.d_gas_output_buffer[i])
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
-      if (state.d_r2q_map[i])
-        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map[i]     ) ) );
     }
 
     delete state.gas_handle;
@@ -623,15 +630,16 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
-    // TODO: need to free queries of all batches and all the r2q maps.
-    if (state.params.queries != state.params.points)
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
+    //if (state.params.queries != state.params.points) // TODO: there are cases we need to free params.queries and state.h_queries.
+    //  CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.queries       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points          ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
-    if (state.d_key)
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_key                ) ) );
+    if (state.d_1dsort_key)
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_1dsort_key         ) ) );
+    if (state.d_fhsort_key)
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_fhsort_key         ) ) );
 
-    if (state.h_queries != state.h_points) delete state.h_queries;
+    //if (state.h_queries != state.h_points) delete state.h_queries;
     delete state.h_points;
 }
 

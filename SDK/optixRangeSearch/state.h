@@ -65,10 +65,10 @@ struct WhittedState
     Params                      params;
     Params*                     d_params                  = nullptr;
 
-    float*                      d_key                     = nullptr;
+    float*                      d_1dsort_key              = nullptr;
+    float*                      d_fhsort_key              = nullptr;
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
-    unsigned int**              d_r2q_map                 = nullptr;
     float3**                    h_ndpoints                = nullptr;
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
@@ -89,10 +89,11 @@ struct WhittedState
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
+    unsigned int**              d_r2q_map                 = nullptr;
     unsigned int*               numActQueries             = nullptr;
     float*                      launchRadius              = nullptr;
     float*                      partThd                   = nullptr;
-    void* *                     h_res                     = nullptr;
+    void**                      h_res                     = nullptr;
     float3**                    d_actQs                   = nullptr;
     float3**                    h_actQs                   = nullptr;
     void**                      d_aabb                    = nullptr;

@@ -38,7 +38,6 @@ void setDevice ( WhittedState& state ) {
 }
 
 void setupSearch( WhittedState& state ) {
-  // TODO: this is temporary.
   if (!state.partition) {
     assert(state.numOfBatches == 1);
     initBatches(state);
@@ -104,6 +103,10 @@ int main( int argc, char* argv[] )
 
       if (state.qGasSortMode) gasSortSearch(state, i);
 
+      //search(state, i);
+    }
+
+    for (int i = 0; i < state.numOfBatches; i++) {
       search(state, i);
     }
 
