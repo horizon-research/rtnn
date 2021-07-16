@@ -119,13 +119,30 @@ struct isSameID
     {
         return (x == kID);
     }
+};
 
+struct isInRange
+{
+    char kmin, kmax;
+    isInRange(char min, char max) {kmin = min; kmax = max;}
+
+  __host__ __device__
+    bool operator()(const char x)
+    {
+        return ((x >= kmin) && (x <= kmax));
+    }
 };
 
 void copyIfIdMatch(float3* source, unsigned int N, thrust::device_ptr<char> mask, thrust::device_ptr<float3> dest, char id) {
     thrust::copy_if(thrust::device_pointer_cast(source),
                     thrust::device_pointer_cast(source) + N,
                     mask, dest, isSameID(id));
+}
+
+void copyIfIdInRange(float3* source, unsigned int N, thrust::device_ptr<char> mask, thrust::device_ptr<float3> dest, char min, char max) {
+    thrust::copy_if(thrust::device_pointer_cast(source),
+                    thrust::device_pointer_cast(source) + N,
+                    mask, dest, isInRange(min, max));
 }
 
 void copyIfNonZero(float3* source, unsigned int N, thrust::device_ptr<bool> mask, thrust::device_ptr<float3> dest) {
@@ -155,21 +172,11 @@ void thrustCopyD2D(thrust::device_ptr<unsigned int> d_dst, thrust::device_ptr<un
     );
 }
 
-void thrustCopyD2DChar(thrust::device_ptr<char> d_dst, thrust::device_ptr<char> d_src, unsigned int N) {
-    cudaMemcpy(
-                reinterpret_cast<void*>( thrust::raw_pointer_cast(d_dst) ),
-                thrust::raw_pointer_cast(d_src),
-                N * sizeof( char ),
-                cudaMemcpyDeviceToDevice
-    );
-}
-
 // https://github.com/NVIDIA/thrust/blob/master/examples/histogram.cu
 unsigned int thrustGenHist(const thrust::device_ptr<char> d_value_ptr, thrust::device_vector<unsigned int>& d_histogram, unsigned int N) {
     // first make a copy of d_value since we are going to sort it.
     thrust::device_vector<char> d_value(N);
     thrust::copy(d_value_ptr, d_value_ptr + N, d_value.begin());
-    //thrustCopyD2DChar(&d_value_copy[0], d_rayMask, N);
 
     thrust::sort(d_value.begin(), d_value.end());
     unsigned int num_bins = d_value.back() + 1;

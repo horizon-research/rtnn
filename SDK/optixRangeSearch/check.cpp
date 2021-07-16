@@ -24,7 +24,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
   //std::vector<unsigned int> randQ {80210};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
+    //if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
     float3 query = state.h_queries[q];
 
     // generate ground truth res

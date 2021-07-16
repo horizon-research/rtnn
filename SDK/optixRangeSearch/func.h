@@ -38,17 +38,17 @@ void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::devic
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int, cudaStream_t);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void copyIfIdMatch(float3*, unsigned int, thrust::device_ptr<char>, thrust::device_ptr<float3>, char);
+void copyIfIdInRange(float3*, unsigned int, thrust::device_ptr<char>, thrust::device_ptr<float3>, char, char);
 void copyIfNonZero(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
 unsigned int countById(thrust::device_ptr<char>, unsigned int, char);
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrust::device_ptr<unsigned int> dest);
 void thrustCopyD2D(thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int N);
-void thrustCopyD2DChar(thrust::device_ptr<char>, thrust::device_ptr<char>, unsigned int);
 unsigned int thrustGenHist(const thrust::device_ptr<char>, thrust::device_vector<unsigned int>&, unsigned int);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
-void kCountingSortIndices_setMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, char*, char*);
+void kCountingSortIndices_setRayMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, char*, char*);
 uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
 void kCalcSearchSize(unsigned int,
                      unsigned int,

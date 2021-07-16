@@ -289,7 +289,7 @@ __global__ void kCountingSortIndices(
   //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
 }
 
-__global__ void kCountingSortIndices_setMask(
+__global__ void kCountingSortIndices_setRayMask(
   const GridInfo GridInfo,
   const uint* particleCellIndices,
   const uint* cellOffsets,
@@ -394,7 +394,7 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       );
 }
 
-void kCountingSortIndices_setMask(unsigned int numOfBlocks, unsigned int threadsPerBlock,
+void kCountingSortIndices_setRayMask(unsigned int numOfBlocks, unsigned int threadsPerBlock,
       GridInfo gridInfo,
       unsigned int* d_ParticleCellIndices,
       unsigned int* d_CellOffsets,
@@ -403,7 +403,7 @@ void kCountingSortIndices_setMask(unsigned int numOfBlocks, unsigned int threads
       char* cellMask,
       char* rayMask
       ) {
-  kCountingSortIndices_setMask <<<numOfBlocks, threadsPerBlock>>> (
+  kCountingSortIndices_setRayMask <<<numOfBlocks, threadsPerBlock>>> (
       gridInfo,
       d_ParticleCellIndices,
       d_CellOffsets,
