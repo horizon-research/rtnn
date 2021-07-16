@@ -66,7 +66,7 @@ void addCount(unsigned int& count, unsigned int* CellParticleCounts, GridInfo gr
     //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
 }
 
-__host__ __device__
+__device__
 void calcSearchSize(int3 gridCell,
                     GridInfo gridInfo,
                     bool morton, 
@@ -106,6 +106,7 @@ void calcSearchSize(int3 gridCell,
     if (width > maxWidth) { //if (iter > maxIter) {
       cellMask[cellIndex] = iter;
       //searchSizeHist[iter + 1]++; // this is the cell hist. we might want to get ray hist. atomic.
+      atomicAdd(&searchSizeHist[iter + 1], 1);
       break;
     }
     else if (count >= (knn + 1)) {
@@ -113,6 +114,7 @@ void calcSearchSize(int3 gridCell,
       // itself whereas our KNN search isn't going to return itself!
       cellMask[cellIndex] = iter;
       //searchSizeHist[iter + 1]++;
+      atomicAdd(&searchSizeHist[iter + 1], 1);
       break;
     }
     else {

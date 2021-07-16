@@ -152,8 +152,8 @@ thrust::device_ptr<char> genMask (WhittedState& state, unsigned int* d_repQuerie
   int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
 
   int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
-  unsigned int* searchSizeHist = new unsigned int[histCount];
-  memset(searchSizeHist, 0, sizeof(unsigned int) * histCount);
+  thrust::host_vector <unsigned int> h_searchSizeHist(histCount);
+  thrust::device_ptr<unsigned int> d_searchSizeHist = getThrustDevicePtr(histCount);
 
   thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);
 
@@ -170,18 +170,19 @@ thrust::device_ptr<char> genMask (WhittedState& state, unsigned int* d_repQuerie
                   cellSize,
                   maxWidth,
                   state.knn,
-                  searchSizeHist, // this needs to be a device pointer if we are using it.
+                  thrust::raw_pointer_cast(d_searchSizeHist),
                   thrust::raw_pointer_cast(d_cellMask)
                  );
 
   // setup the batches
   state.numOfBatches = histCount - 1;
   fprintf(stdout, "\tNumber of batches: %d\n", state.numOfBatches);
+  thrust::copy(d_searchSizeHist, d_searchSizeHist + histCount, h_searchSizeHist.begin());
 
   // the last partThd won't be used -- radius will be state.radius for the last batch.
   for (int i = 0; i < state.numOfBatches; i++) {
     state.partThd[i] = kGetWidthFromIter(i, cellSize); 
-    //fprintf(stdout, "%u, %u, %f\n", i, searchSizeHist[i + 1], state.partThd[i]);
+    //fprintf(stdout, "%u, %u, %f\n", i, h_searchSizeHist[i + 1], state.partThd[i]);
   }
 
   return d_cellMask;

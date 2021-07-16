@@ -18,7 +18,7 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheckKNN( WhittedState& state, int batch_id ) {
-  bool printRes = true;
+  bool printRes = false;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
   //std::vector<unsigned int> randQ {80210};
