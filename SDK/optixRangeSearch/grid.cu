@@ -74,7 +74,6 @@ void calcSearchSize(int3 gridCell,
                     float cellSize,
                     float maxWidth,
                     unsigned int knn,
-                    unsigned int* searchSizeHist,
                     char* cellMask
                    ) {
   // important that x/y/z are ints not units, as we check oob when they become negative.
@@ -105,14 +104,12 @@ void calcSearchSize(int3 gridCell,
   
     if (width > maxWidth) { //if (iter > maxIter) {
       cellMask[cellIndex] = iter;
-      //atomicAdd(&searchSizeHist[iter + 1], 1);
       break;
     }
     else if (count >= (knn + 1)) {
       // + 1 because the count in CellParticleCounts includes the point
       // itself whereas our KNN search isn't going to return itself!
       cellMask[cellIndex] = iter;
-      //atomicAdd(&searchSizeHist[iter + 1], 1);
       break;
     }
     else {
@@ -323,7 +320,6 @@ __global__ void kGenCellMask(GridInfo gridInfo,
                              float cellSize,
                              float maxWidth,
                              unsigned int knn,
-                             unsigned int* searchSizeHist,
                              char* cellMask
                             )
 {
@@ -342,7 +338,6 @@ __global__ void kGenCellMask(GridInfo gridInfo,
                  cellSize,
                  maxWidth,
                  knn,
-                 searchSizeHist,
                  cellMask
                 );
 }
@@ -433,7 +428,6 @@ void kCalcSearchSize(unsigned int numOfBlocks,
                      float cellSize,
                      float maxWidth,
                      unsigned int knn,
-                     unsigned int* searchSizeHist,
                      char* cellMask
                     ) {
   kGenCellMask <<<numOfBlocks, threadsPerBlock>>> (
@@ -445,7 +439,6 @@ void kCalcSearchSize(unsigned int numOfBlocks,
              cellSize,
              maxWidth,
              knn,
-             searchSizeHist,
              cellMask
             );
 }

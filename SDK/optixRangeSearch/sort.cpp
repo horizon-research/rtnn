@@ -152,7 +152,6 @@ thrust::device_ptr<char> genMask (WhittedState& state, unsigned int* d_repQuerie
   int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
   int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
 
-  thrust::device_ptr<unsigned int> d_searchSizeHist = getThrustDevicePtr(histCount);
   thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);
 
   unsigned int threadsPerBlock = 64;
@@ -168,16 +167,12 @@ thrust::device_ptr<char> genMask (WhittedState& state, unsigned int* d_repQuerie
                   cellSize,
                   maxWidth,
                   state.knn,
-                  thrust::raw_pointer_cast(d_searchSizeHist),
                   thrust::raw_pointer_cast(d_cellMask)
                  );
 
   // setup the batches
   state.numOfBatches = histCount - 1;
   fprintf(stdout, "\tNumber of batches: %d\n", state.numOfBatches);
-
-  //thrust::host_vector <unsigned int> h_searchSizeHist(histCount);
-  //thrust::copy(d_searchSizeHist, d_searchSizeHist + histCount, h_searchSizeHist.begin());
 
   for (int i = 0; i < state.numOfBatches; i++) {
     state.partThd[i] = kGetWidthFromIter(i, cellSize); 

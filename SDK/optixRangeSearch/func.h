@@ -60,7 +60,6 @@ void kCalcSearchSize(unsigned int,
                      float,
                      float,
                      unsigned int,
-                     unsigned int*,
                      char*
                     );
 float kGetWidthFromIter(int, float);
