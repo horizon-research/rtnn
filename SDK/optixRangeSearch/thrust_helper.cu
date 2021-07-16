@@ -164,6 +164,7 @@ void thrustCopyD2DChar(thrust::device_ptr<char> d_dst, thrust::device_ptr<char> 
     );
 }
 
+// https://github.com/NVIDIA/thrust/blob/master/examples/histogram.cu
 unsigned int thrustGenHist(const thrust::device_ptr<char> d_value_ptr, thrust::device_vector<unsigned int>& d_histogram, unsigned int N) {
     // first make a copy of d_value since we are going to sort it.
     thrust::device_vector<char> d_value(N);

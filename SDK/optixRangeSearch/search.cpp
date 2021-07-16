@@ -23,7 +23,6 @@ void search(WhittedState& state, int batch_id) {
       // we choose to approximate the early batches in radius earch, the result
       // might be incorrect. see:
       // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
-      // TODO: change it when the batch order changes.
       //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) state.params.isApprox = true;
 
       state.params.radius = state.launchRadius[batch_id];
