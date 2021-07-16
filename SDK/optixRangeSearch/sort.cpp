@@ -280,15 +280,12 @@ void sortGenPartInfo(WhittedState& state,
     for (int i = 0; i < state.numOfBatches; i++) {
       state.numActQueries[i] = countById(d_rayMask, N, i);
 
-      // the min check is technically not needed except for the last batch, for
-      // which we should never need to search beyond state.radius. float
-      // conversion is because std::sqrt returns a double for an integral input
-      // (https://en.cppreference.com/w/cpp/numeric/math/sqrt), and std::min
-      // can't compare float with double.
+      // see comments in how maxWidth is calculated in |genMask|
       if (state.searchMode == "knn")
-        state.launchRadius[i] = std::min((float)(state.partThd[i] / 2 * sqrt(2)), state.radius);
+        state.launchRadius[i] = state.partThd[i] / 2 * sqrt(2);
       else
-        state.launchRadius[i] = std::min(state.partThd[i] / 2, state.radius);
+        state.launchRadius[i] = state.partThd[i] / 2;
+      assert(state.launchRadius[i] < 2);
       if (i == (state.numOfBatches - 1)) state.launchRadius[i] = 2;
 
       // can't free state.params.queries, because it points to the points too.
