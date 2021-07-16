@@ -245,6 +245,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.partition = (bool)(atoi(argv[++i]));
       }
+      else if( arg == "--interleave" || arg == "-i" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.interleave = (bool)(atoi(argv[++i]));
+      }
       else if( arg == "--samepq" || arg == "-spq" )
       {
           if( i >= argc - 1 )

@@ -82,6 +82,8 @@ struct WhittedState
     float                       sortingGAS                = 1;
     bool                        toGather                  = false;
     bool                        samepq                    = false;
+    bool                        interleave                = true;
+    bool                        partition                 = false;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
@@ -98,7 +100,6 @@ struct WhittedState
     void**                      d_temp_buffer_gas         = nullptr;
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
 
-    bool                        partition                 = false;
     char*                       d_cellMask                = nullptr;
     int                         numOfBatches              = 1;
     int                         maxBatchCount             = 1;

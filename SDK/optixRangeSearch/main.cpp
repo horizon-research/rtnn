@@ -45,6 +45,7 @@ int main( int argc, char* argv[] )
   std::cout << "K: " << state.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
+  std::cout << "Interleave? " << std::boolalpha << state.interleave << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
   std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
@@ -75,8 +76,7 @@ int main( int argc, char* argv[] )
 
     setupSearch(state);
 
-    bool interleave = false;
-    if (interleave) {
+    if (state.interleave) {
       for (int i = 0; i < state.numOfBatches; i++) {
         if (state.numActQueries[i] == 0) continue;
         createGeometry (state, i); // batch_id ignored if not partition.
