@@ -57,20 +57,20 @@ int main( int argc, char* argv[] )
   {
     setDevice(state);
 
-    Timing::reset();
-
-    initBatches(state); // call this after set device.
+    // call this after set device.
+    initBatches(state);
 
     setupOptiX(state);
 
+    Timing::reset();
     Timing::startTiming("total search time");
 
     uploadData(state);
 
-    // if partition is enabled, we do it here too, where state.numOfBatches is
-    // set and batch related data structures are allocated.
+    // if partition is enabled, we do it here too, which generate batches.
     sortParticles(state, POINT, state.pointSortMode);
-    // when samepq, queries are sorted using the point sort mode so no need to sort queries again.
+    // when samepq, queries have been are sorted using the point sort mode so
+    // no need to sort queries again.
     if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
 
     setupSearch(state);
