@@ -139,11 +139,6 @@ extern "C" __global__ void __intersection__sphere_knn()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  //bool isApprox = false;
-
-  // if d_r2q_map is null and limit is 1, this is the initial run for sorting
-  //if (params.d_r2q_map == nullptr && params.limit == 1) isApprox = true;
-
   bool isApprox = params.isApprox;
 
   unsigned int queryIdx = optixGetPayload_0();

@@ -45,7 +45,22 @@ unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrus
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
-void kCountingSortIndices_genMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, char*, char*);
+void kCountingSortIndices_setMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, char*, char*);
+uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
+void kCalcSearchSize(unsigned int,
+                     unsigned int,
+                     GridInfo,
+                     bool, 
+                     unsigned int*,
+                     unsigned int*,
+                     float3*,
+                     float,
+                     float,
+                     unsigned int,
+                     unsigned int*,
+                     char*
+                    );
+float kGetWidthFromIter(int, float);
 
 void sanityCheck(WhittedState&);
 

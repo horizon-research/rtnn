@@ -99,7 +99,7 @@ struct WhittedState
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
 
     bool                        partition                 = false;
-    char*                       cellMask                  = nullptr;
+    char*                       d_cellMask                = nullptr;
     int                         numOfBatches              = 1;
     int                         maxBatchCount             = 1;
 

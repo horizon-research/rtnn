@@ -50,19 +50,19 @@ unsigned int getCellIdx(GridInfo gridInfo, int ix, int iy, int iz, bool morton) 
 
 inline __host__ __device__
 bool oob(GridInfo gridInfo, int ix, int iy, int iz) {
-  if (ix < 0 || ix >= gridInfo.GridDimension.x
-   || iy < 0 || iy >= gridInfo.GridDimension.y
-   || iz < 0 || iz >= gridInfo.GridDimension.z)
+  if (ix < 0 || ix >= (int)gridInfo.GridDimension.x
+   || iy < 0 || iy >= (int)gridInfo.GridDimension.y
+   || iz < 0 || iz >= (int)gridInfo.GridDimension.z)
     return true;
   else return false;
 }
 
 inline __host__ __device__
-void addCount(int& count, unsigned int* h_CellParticleCounts, GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
+void addCount(unsigned int& count, unsigned int* CellParticleCounts, GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
     if (oob(gridInfo, ix, iy, iz)) return;
 
     unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
-    count += h_CellParticleCounts[iCellIdx];
+    count += CellParticleCounts[iCellIdx];
     //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
 }
 
@@ -70,33 +70,27 @@ __host__ __device__
 void calcSearchSize(int3 gridCell,
                     GridInfo gridInfo,
                     bool morton, 
-                    unsigned int* h_CellParticleCounts,
+                    unsigned int* CellParticleCounts,
                     float cellSize,
                     float maxWidth,
                     unsigned int knn,
-                    //unsigned int* cellSearchSize,
                     unsigned int* searchSizeHist,
                     char* cellMask
                    ) {
+  // important that x/y/z are ints not units, as we check oob when they become negative.
   int x = gridCell.x;
   int y = gridCell.y;
   int z = gridCell.z;
 
   int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
-  //if (x == 87 && y == 22 && z == 358) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
+  //if (x == 87 && y == 22 && z == 358) printf("cell %d has %d particles\n", cellIndex, CellParticleCounts[cellIndex]);
   //assert(cellIndex <= numberOfCells);
-  //if (h_CellParticleCounts[cellIndex] == 0) return; // should never hit this.
+  //if (CellParticleCounts[cellIndex] == 0) return; // should never hit this.
   
   int iter = 0;
-  int count = 0;
-  addCount(count, h_CellParticleCounts, gridInfo, x, y, z, morton);
+  unsigned int count = 0;
+  addCount(count, CellParticleCounts, gridInfo, x, y, z, morton);
   
-  // in radius search we want to completely skip dist calc and sphere
-  // check in GPU (bottleneck) so we constrain the maxWidth such that the
-  // AABB is completely enclosed by the sphere. in knn search dist calc
-  // can't be skipped and is not the bottleneck anyway (invoking IS
-  // programs is) so we relax the maxWidth to give points more
-  // opportunity to find a smaller search radius.
   int xmin = x;
   int xmax = x;
   int ymin = y;
@@ -110,22 +104,19 @@ void calcSearchSize(int3 gridCell,
     float width = getWidthFromIter(iter, cellSize);
   
     if (width > maxWidth) { //if (iter > maxIter) {
-      //cellSearchSize[cellIndex] = iter + 1; // if width > maxWidth, we need to do a full search.
       cellMask[cellIndex] = iter;
-      searchSizeHist[iter + 1]++; // this is the cell hist. we might want to get ray hist.
+      //searchSizeHist[iter + 1]++; // this is the cell hist. we might want to get ray hist. atomic.
       break;
     }
     else if (count >= (knn + 1)) {
-      // + 1 because the count in h_CellParticleCounts includes the point
+      // + 1 because the count in CellParticleCounts includes the point
       // itself whereas our KNN search isn't going to return itself!
-      //cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
       cellMask[cellIndex] = iter;
-      searchSizeHist[iter + 1]++;
+      //searchSizeHist[iter + 1]++;
       break;
     }
     else {
       iter++;
-      //count = 0;
     }
     //if (x == 87 && y == 22 && z == 358) printf("%d, %d\n", iter, count);
   
@@ -134,42 +125,42 @@ void calcSearchSize(int3 gridCell,
     iz = zmin - 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iy = ymin; iy <= ymax; iy++) {
-        addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+        addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
   
     iz = zmax + 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iy = ymin; iy <= ymax; iy++) {
-        addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+        addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
   
     ix = xmin - 1;
     for (iy = ymin; iy <= ymax; iy++) {
       for (iz = zmin; iz <= zmax; iz++) {
-        addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+        addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
   
     ix = xmax + 1;
     for (iy = ymin; iy <= ymax; iy++) {
       for (iz = zmin; iz <= zmax; iz++) {
-        addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+        addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
   
     iy = ymin - 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iz = zmin; iz <= zmax; iz++) {
-        addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+        addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
   
     iy = ymax + 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iz = zmin; iz <= zmax; iz++) {
-        addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
+        addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
   
@@ -180,14 +171,14 @@ void calcSearchSize(int3 gridCell,
     zmin--;
     zmax++;
   
-    addCount(count, h_CellParticleCounts, gridInfo, xmin, ymin, zmin, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmin, ymin, zmax, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmin, ymax, zmin, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmin, ymax, zmax, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmax, ymin, zmin, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmax, ymin, zmax, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmin, morton);
-    addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmax, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmin, ymin, zmin, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmin, ymin, zmax, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmin, ymax, zmin, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmin, ymax, zmax, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmax, ymin, zmin, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmax, ymin, zmax, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmax, ymax, zmin, morton);
+    addCount(count, CellParticleCounts, gridInfo, xmax, ymax, zmax, morton);
   }
 }
 
@@ -301,7 +292,7 @@ __global__ void kCountingSortIndices(
   //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
 }
 
-__global__ void kCountingSortIndices_genMask(
+__global__ void kCountingSortIndices_setMask(
   const GridInfo GridInfo,
   const uint* particleCellIndices,
   const uint* cellOffsets,
@@ -324,10 +315,45 @@ __global__ void kCountingSortIndices_genMask(
   //printf("%u, %u, %u, %u, %u\n", particleIndex, gridCellIndex, localSortedIndices[particleIndex], cellOffsets[gridCellIndex], sortIndex);
 }
 
+__global__ void kGenCellMask(GridInfo gridInfo,
+                             bool morton, 
+                             unsigned int* cellParticleCounts,
+                             unsigned int* repQueries,
+                             float3* particles,
+                             float cellSize,
+                             float maxWidth,
+                             unsigned int knn,
+                             unsigned int* searchSizeHist,
+                             char* cellMask
+                            )
+{
+  uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
+  if (particleIndex >= gridInfo.ParticleCount) return;
+
+  unsigned int qId = repQueries[particleIndex];
+  float3 point = particles[qId];
+  float3 gridCellF = (point - gridInfo.GridMin) * gridInfo.GridDelta;
+  int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
+
+  calcSearchSize(gridCell,
+                 gridInfo,
+                 morton,
+                 cellParticleCounts,
+                 cellSize,
+                 maxWidth,
+                 knn,
+                 searchSizeHist,
+                 cellMask
+                );
+}
 
 
 
-/* CPU code */
+
+
+
+
+/* CPU wrapper code */
 void kComputeMinMax (unsigned int numOfBlocks, unsigned int threadsPerBlock, float3* points, unsigned int numPrims, int3* d_MinMax_0, int3* d_MinMax_1) {
   kComputeMinMax <<<numOfBlocks, threadsPerBlock>>> (
       points,
@@ -347,7 +373,7 @@ void kInsertParticles(unsigned int numOfBlocks, unsigned int threadsPerBlock, Gr
         d_TempSortIndices
         );
   } else {
-    kInsertParticles_Raster<<<numOfBlocks, threadsPerBlock>>> (
+    kInsertParticles_Raster <<<numOfBlocks, threadsPerBlock>>> (
         gridInfo,
         points,
         d_ParticleCellIndices,
@@ -373,7 +399,7 @@ void kCountingSortIndices(unsigned int numOfBlocks, unsigned int threadsPerBlock
       );
 }
 
-void kCountingSortIndices_genMask(unsigned int numOfBlocks, unsigned int threadsPerBlock,
+void kCountingSortIndices_setMask(unsigned int numOfBlocks, unsigned int threadsPerBlock,
       GridInfo gridInfo,
       unsigned int* d_ParticleCellIndices,
       unsigned int* d_CellOffsets,
@@ -382,7 +408,7 @@ void kCountingSortIndices_genMask(unsigned int numOfBlocks, unsigned int threads
       char* cellMask,
       char* rayMask
       ) {
-  kCountingSortIndices_genMask <<<numOfBlocks, threadsPerBlock>>> (
+  kCountingSortIndices_setMask <<<numOfBlocks, threadsPerBlock>>> (
       gridInfo,
       d_ParticleCellIndices,
       d_CellOffsets,
@@ -397,30 +423,34 @@ uint kToCellIndex_MortonMetaGrid(const GridInfo& gridInfo, int3 cell) {
   return ToCellIndex_MortonMetaGrid(gridInfo, cell);
 }
 
-void kCalcSearchSize(int3 gridCell,
+void kCalcSearchSize(unsigned int numOfBlocks,
+                     unsigned int threadsPerBlock,
                      GridInfo gridInfo,
                      bool morton, 
-                     unsigned int* h_CellParticleCounts,
+                     unsigned int* cellParticleCounts,
+                     unsigned int* repQueries,
+                     float3* particles,
                      float cellSize,
                      float maxWidth,
                      unsigned int knn,
-                     //unsigned int* cellSearchSize,
                      unsigned int* searchSizeHist,
                      char* cellMask
                     ) {
-  return calcSearchSize(gridCell,
-                        gridInfo,
-                        morton,
-                        h_CellParticleCounts,
-                        cellSize,
-                        maxWidth,
-                        knn,
-                        //cellSearchSize,
-                        searchSizeHist,
-                        cellMask
-                       );
+  kGenCellMask <<<numOfBlocks, threadsPerBlock>>> (
+             gridInfo,
+             morton,
+             cellParticleCounts,
+             repQueries,
+             particles,
+             cellSize,
+             maxWidth,
+             knn,
+             searchSizeHist,
+             cellMask
+            );
 }
 
 float kGetWidthFromIter(int iter, float cellSize) {
   return getWidthFromIter(iter, cellSize);
 }
+
