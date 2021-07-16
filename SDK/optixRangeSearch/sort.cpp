@@ -134,190 +134,62 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   return numberOfCells;
 }
 
-float getWidthFromIter(int iter, float cellSize) {
-  // to be absolutely certain, we add 2 (not 1) to iter to accommodate points
-  // at the edges of the central cell. width means there are K points within
-  // the width^3 AABB, whose center is the center point of the current cell.
-  // for corner points in the cell, its width^3 AABB might have less than count
-  // # of points if the point distrition becomes dramatically sparse outside of
-  // the current AABB. we empirically observe no issue with >1M points, but
-  // with about ~100K points this could be an issue.
-
-  return (iter * 2 + 2) * cellSize;
-}
-
 uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
-
-unsigned int getCellIdx(GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
-  if (morton) // z-order sort
-    return kToCellIndex_MortonMetaGrid(gridInfo, make_int3(ix, iy, iz));
-  else // raster order
-    return (ix * gridInfo.GridDimension.y + iy) * gridInfo.GridDimension.z + iz;
-}
-
-bool oob(GridInfo gridInfo, int ix, int iy, int iz) {
-  if (ix < 0 || ix >= gridInfo.GridDimension.x
-   || iy < 0 || iy >= gridInfo.GridDimension.y
-   || iz < 0 || iz >= gridInfo.GridDimension.z)
-    return true;
-  else return false;
-}
-
-void addCount(int& count, unsigned int* h_CellParticleCounts, GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
-    if (oob(gridInfo, ix, iy, iz)) return;
-
-    unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
-    count += h_CellParticleCounts[iCellIdx];
-    //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
-}
+void kCalcSearchSize(int3,
+                     GridInfo,
+                     bool, 
+                     unsigned int*,
+                     float,
+                     float,
+                     unsigned int,
+                     //unsigned int*,
+                     unsigned int*,
+                     char*
+                    );
+float kGetWidthFromIter(int, float);
 
 void genMask (WhittedState& state, thrust::device_ptr<unsigned int> d_part_seq, unsigned int* h_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N, unsigned int numUniqQs, bool morton) {
-  // TODO: this whole thing needs to be done in CUDA.
 
-  std::vector<unsigned int> cellSearchSize(numberOfCells, 0);
   float cellSize = state.radius / state.crRatio;
-
   // this it the max width of a square that can be enclosed by the sphere. if
   // beyond this, knn will fall back to the original radius and radius search
   // can't be approximated.
   float maxWidth = state.radius / sqrt(2) * 2;
-
   int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
+
   int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
-
-  //printf("%d, %f\n", maxIter, maxWidth);
-
   unsigned int* searchSizeHist = new unsigned int[histCount];
   memset(searchSizeHist, 0, sizeof (unsigned int) * histCount);
 
-  //for (int x = 0; x < gridInfo.GridDimension.x; x++) {
-  //  for (int y = 0; y < gridInfo.GridDimension.y; y++) {
-  //    for (int z = 0; z < gridInfo.GridDimension.z; z++) {
+  //thrust::device_ptr<unsigned int> d_cellSearchSize(numberOfCells);
+  //// TODO: do this in a stream.
+  //CUDA_CHECK( cudaMemset ( thrust::raw_pointer_cast(d_cellSearchSize), 0x0,
+  //                              numberOfCells * sizeof(unsigned int) ) );
 
   thrust::host_vector<unsigned int> h_part_seq(numUniqQs);
   thrust::copy(d_part_seq, d_part_seq + numUniqQs, h_part_seq.begin());
 
+  state.cellMask = new char[numberOfCells];
+  //std::vector<unsigned int> cellSearchSize(numberOfCells, 0);
+
   for (unsigned int i = 0; i < numUniqQs; i++) {
+    unsigned int qId = h_part_seq[i];
+    float3 point = state.h_points[qId];
+    float3 gridCellF = (point - gridInfo.GridMin) * gridInfo.GridDelta;
+    int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
 
-        unsigned int qId = h_part_seq[i];
-        float3 point = state.h_points[qId];
-        float3 gridCellF = (point - gridInfo.GridMin) * gridInfo.GridDelta;
-        int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
-        int x = gridCell.x;
-        int y = gridCell.y;
-        int z = gridCell.z;
-
-
-        // now let's check;
-        int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
-        //if (x == 87 && y == 22 && z == 358) printf("cell %d has %d particles\n", cellIndex, h_CellParticleCounts[cellIndex]);
-        assert(cellIndex <= numberOfCells);
-        if (h_CellParticleCounts[cellIndex] == 0) continue;
-
-        int iter = 0;
-        int count = 0;
-        addCount(count, h_CellParticleCounts, gridInfo, x, y, z, morton);
-
-	    // in radius search we want to completely skip dist calc and sphere
-	    // check in GPU (bottleneck) so we constrain the maxWidth such that the
-	    // AABB is completely enclosed by the sphere. in knn search dist calc
-	    // can't be skipped and is not the bottleneck anyway (invoking IS
-	    // programs is) so we relax the maxWidth to give points more
-	    // opportunity to find a smaller search radius.
-        int xmin = x;
-        int xmax = x;
-        int ymin = y;
-        int ymax = y;
-        int zmin = z;
-        int zmax = z;
-
-        while(1) {
-	      // TODO: there could be corner cases here, e.g., maxWidth is very
-	      // small, cellSize will be 0 (same as uninitialized).
-          float width = getWidthFromIter(iter, cellSize);
-
-          if (width > maxWidth) { //if (iter > maxIter) {
-            cellSearchSize[cellIndex] = iter + 1; // if width > maxWidth, we need to do a full search.
-            searchSizeHist[iter + 1]++;
-            break;
-          }
-          else if (count >= (state.knn + 1)) {
-            // + 1 because the count in h_CellParticleCounts includes the point
-            // itself whereas our KNN search isn't going to return itself!
-            cellSearchSize[cellIndex] = iter + 1; // + 1 so that iter being 0 doesn't become full search.
-            searchSizeHist[iter + 1]++;
-            break;
-          }
-          else {
-            iter++;
-            //count = 0;
-          }
-          //if (x == 87 && y == 22 && z == 358) printf("%d, %d\n", iter, count);
-
-          int ix, iy, iz;
-
-          iz = zmin - 1;
-          for (ix = xmin; ix <= xmax; ix++) {
-            for (iy = ymin; iy <= ymax; iy++) {
-              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
-            }
-          }
-
-          iz = zmax + 1;
-          for (ix = xmin; ix <= xmax; ix++) {
-            for (iy = ymin; iy <= ymax; iy++) {
-              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
-            }
-          }
-
-          ix = xmin - 1;
-          for (iy = ymin; iy <= ymax; iy++) {
-            for (iz = zmin; iz <= zmax; iz++) {
-              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
-            }
-          }
-
-          ix = xmax + 1;
-          for (iy = ymin; iy <= ymax; iy++) {
-            for (iz = zmin; iz <= zmax; iz++) {
-              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
-            }
-          }
-
-          iy = ymin - 1;
-          for (ix = xmin; ix <= xmax; ix++) {
-            for (iz = zmin; iz <= zmax; iz++) {
-              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
-            }
-          }
-
-          iy = ymax + 1;
-          for (ix = xmin; ix <= xmax; ix++) {
-            for (iz = zmin; iz <= zmax; iz++) {
-              addCount(count, h_CellParticleCounts, gridInfo, ix, iy, iz, morton);
-            }
-          }
-
-          xmin--;
-          xmax++;
-          ymin--;
-          ymax++;
-          zmin--;
-          zmax++;
-
-          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymin, zmin, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymin, zmax, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymax, zmin, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmin, ymax, zmax, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymin, zmin, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymin, zmax, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmin, morton);
-          addCount(count, h_CellParticleCounts, gridInfo, xmax, ymax, zmax, morton);
-        }
-    }
-  //    }
-  //  }
-  //}
+    kCalcSearchSize(gridCell,
+                    gridInfo,
+                    morton,
+                    h_CellParticleCounts,
+                    cellSize,
+                    maxWidth,
+                    state.knn,
+                    //cellSearchSize.data(),
+                    searchSizeHist,
+                    state.cellMask
+                   );
+  }
 
   // setup the batches
   state.numOfBatches = histCount - 1;
@@ -325,24 +197,19 @@ void genMask (WhittedState& state, thrust::device_ptr<unsigned int> d_part_seq, 
 
   // the last partThd won't be used -- radius will be state.radius for the last batch.
   for (unsigned int i = 0; i < state.numOfBatches; i++) {
-    state.partThd[i] = getWidthFromIter(i, cellSize); 
-
+    state.partThd[i] = kGetWidthFromIter(i, cellSize); 
     //fprintf(stdout, "%u, %u, %f\n", i, searchSizeHist[i + 1], state.partThd[i]);
   }
 
-  state.cellMask = new char[numberOfCells];
-  for (unsigned int i = 0; i < numberOfCells; i++) {
-    //if (cellSearchSize[i] != 0) fprintf(stdout, "%u, %u\n",
-    //                                    cellSearchSize[i],
-    //                                    h_CellParticleCounts[i]
-    //                                   );
+  //for (unsigned int i = 0; i < numberOfCells; i++) {
+  //  //if (cellSearchSize[i] != 0) fprintf(stdout, "%u, %u\n", cellSearchSize[i], h_CellParticleCounts[i]);
 
-    // TODO: need a better decision logic, e.g., through a histogram and some sort of cost model.
-    if (cellSearchSize[i] != 0) {
-      //if (i == 6054598) printf("search size for cell 6054598: %d\n", cellSearchSize[i]);
-      state.cellMask[i] = cellSearchSize[i] - 1;
-    }
-  }
+  //  // TODO: need a better decision logic, e.g., through a histogram and some sort of cost model.
+  //  if (cellSearchSize[i] != 0) {
+  //    //if (i == 6054598) printf("search size for cell 6054598: %d\n", cellSearchSize[i]);
+  //    state.cellMask[i] = cellSearchSize[i] - 1;
+  //  }
+  //}
 }
 
 void sortGenPartInfo(WhittedState& state,
