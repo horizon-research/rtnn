@@ -105,16 +105,14 @@ void calcSearchSize(int3 gridCell,
   
     if (width > maxWidth) { //if (iter > maxIter) {
       cellMask[cellIndex] = iter;
-      //searchSizeHist[iter + 1]++; // this is the cell hist. we might want to get ray hist. atomic.
-      atomicAdd(&searchSizeHist[iter + 1], 1);
+      //atomicAdd(&searchSizeHist[iter + 1], 1);
       break;
     }
     else if (count >= (knn + 1)) {
       // + 1 because the count in CellParticleCounts includes the point
       // itself whereas our KNN search isn't going to return itself!
       cellMask[cellIndex] = iter;
-      //searchSizeHist[iter + 1]++;
-      atomicAdd(&searchSizeHist[iter + 1], 1);
+      //atomicAdd(&searchSizeHist[iter + 1], 1);
       break;
     }
     else {

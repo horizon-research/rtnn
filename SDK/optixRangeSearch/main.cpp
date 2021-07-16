@@ -59,9 +59,13 @@ int main( int argc, char* argv[] )
 
     Timing::reset();
 
-    uploadData(state);
-
     initBatches(state); // call this after set device.
+
+    setupOptiX(state);
+
+    Timing::startTiming("total search time");
+
+    uploadData(state);
 
     // if partition is enabled, we do it here too, where state.numOfBatches is
     // set and batch related data structures are allocated.
@@ -70,10 +74,6 @@ int main( int argc, char* argv[] )
     if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
 
     setupSearch(state);
-
-    setupOptiX(state);
-
-    Timing::startTiming("total search time");
 
     bool interleave = false;
     if (interleave) {
