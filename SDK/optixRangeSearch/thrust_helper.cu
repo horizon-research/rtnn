@@ -143,3 +143,13 @@ unsigned int uniqueByKey(thrust::device_ptr<unsigned int> key, unsigned int N, t
   auto end = thrust::unique_by_key(key, key + N, dest);
   return thrust::get<0>(end) - key;
 }
+
+void thrustCopyD2D(thrust::device_ptr<unsigned int> d_dst, thrust::device_ptr<unsigned int> d_src, unsigned int N) {
+    cudaMemcpy(
+                reinterpret_cast<void*>( thrust::raw_pointer_cast(d_dst) ),
+                thrust::raw_pointer_cast(d_src),
+                N * sizeof( unsigned int ),
+                cudaMemcpyDeviceToDevice
+    );
+}
+

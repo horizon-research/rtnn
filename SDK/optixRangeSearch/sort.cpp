@@ -203,13 +203,7 @@ void sortGenPartInfo(WhittedState& state,
                     )
 {
     thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_copy = getThrustDevicePtr(N);
-    //thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, d_ParticleCellIndices_ptr_copy);
-    CUDA_CHECK( cudaMemcpy(
-                reinterpret_cast<void*>( thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_copy ) ),
-                thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
-                N * sizeof( unsigned int ),
-                cudaMemcpyDeviceToDevice
-    ) );
+    thrustCopyD2D(d_ParticleCellIndices_ptr_copy, d_ParticleCellIndices_ptr, N);
     // pick one particle from each cell, and store all their indices in |d_repQueries|
     thrust::device_ptr<unsigned int> d_repQueries = getThrustDevicePtr(N);
     genSeqDevice(d_repQueries, N);
@@ -247,18 +241,10 @@ void sortGenPartInfo(WhittedState& state,
     // queries are gauranteed to be sorted in exactly the same way.
     // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
     thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy = getThrustDevicePtr(N);
-    //thrust::copy(d_posInSortedPoints_ptr, d_posInSortedPoints_ptr + N, d_posInSortedPoints_ptr_copy); // not sure why this doesn't link.
-    CUDA_CHECK( cudaMemcpy(
-                reinterpret_cast<void*>( thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ),
-                thrust::raw_pointer_cast(d_posInSortedPoints_ptr),
-                N * sizeof( unsigned int ),
-                cudaMemcpyDeviceToDevice
-    ) );
+    thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);
 
-
-    thrust::host_vector<char> h_rayMask(N);
-    thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
-
+    //thrust::host_vector<char> h_rayMask(N);
+    //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
     //thrust::host_vector<unsigned int> h_ParticleCellIndices(N);
     //thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, h_ParticleCellIndices.begin());
     //for (unsigned int i = 0; i < N; i++) {
