@@ -3,6 +3,8 @@
 #include <thrust/copy.h>
 #include <thrust/sequence.h>
 #include <thrust/gather.h>
+#include <thrust/binary_search.h>
+#include <thrust/adjacent_difference.h>
 
 // this can't be in the main cpp file since the file containing cuda kernels to
 // be compiled by nvcc needs to have .cu extensions. See here:
@@ -153,3 +155,33 @@ void thrustCopyD2D(thrust::device_ptr<unsigned int> d_dst, thrust::device_ptr<un
     );
 }
 
+void thrustCopyD2DChar(thrust::device_ptr<char> d_dst, thrust::device_ptr<char> d_src, unsigned int N) {
+    cudaMemcpy(
+                reinterpret_cast<void*>( thrust::raw_pointer_cast(d_dst) ),
+                thrust::raw_pointer_cast(d_src),
+                N * sizeof( char ),
+                cudaMemcpyDeviceToDevice
+    );
+}
+
+unsigned int thrustGenHist(const thrust::device_ptr<char> d_value_ptr, thrust::device_vector<unsigned int>& d_histogram, unsigned int N) {
+    // first make a copy of d_value since we are going to sort it.
+    thrust::device_vector<char> d_value(N);
+    thrust::copy(d_value_ptr, d_value_ptr + N, d_value.begin());
+    //thrustCopyD2DChar(&d_value_copy[0], d_rayMask, N);
+
+    thrust::sort(d_value.begin(), d_value.end());
+    unsigned int num_bins = d_value.back() + 1;
+
+    d_histogram.resize(num_bins);
+
+    thrust::counting_iterator<char> search_begin(0);
+    thrust::upper_bound(d_value.begin(), d_value.end(),
+            search_begin, search_begin + num_bins,
+            d_histogram.begin());
+
+    thrust::adjacent_difference(d_histogram.begin(), d_histogram.end(),
+            d_histogram.begin());
+
+    return num_bins;
+}

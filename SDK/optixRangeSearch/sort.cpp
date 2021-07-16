@@ -256,12 +256,18 @@ void sortGenPartInfo(WhittedState& state,
     //}
     //exit(1);
 
+    // get a histogram of d_rayMask, which won't be mutated.
+    thrust::device_vector<unsigned int> d_rayHist;
+    unsigned int num_bins = thrustGenHist(d_rayMask, d_rayHist, N);
+    thrust::host_vector<unsigned int> h_rayHist(num_bins);
+    thrust::copy(d_rayHist.begin(), d_rayHist.end(), h_rayHist.begin());
+
     // sort the ray masks the same way as query sorting.
     sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
 
     // this MUST happen right after sorting the masks and before copy so that the queries and the masks are consistent!!!
-    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(state.params.queries), N);
+    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
 
     for (int i = 0; i < state.numOfBatches; i++) {
       state.numActQueries[i] = countById(d_rayMask, N, i);

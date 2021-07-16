@@ -42,6 +42,8 @@ void copyIfNonZero(float3*, unsigned int, thrust::device_ptr<bool>, thrust::devi
 unsigned int countById(thrust::device_ptr<char>, unsigned int, char);
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrust::device_ptr<unsigned int> dest);
 void thrustCopyD2D(thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int N);
+void thrustCopyD2DChar(thrust::device_ptr<char>, thrust::device_ptr<char>, unsigned int);
+unsigned int thrustGenHist(const thrust::device_ptr<char>, thrust::device_vector<unsigned int>&, unsigned int);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
