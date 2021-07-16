@@ -18,13 +18,13 @@ class Compare
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
 void sanityCheckKNN( WhittedState& state, int batch_id ) {
-  bool printRes = false;
+  bool printRes = true;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  //std::vector<unsigned int> randQ {10};
+  //std::vector<unsigned int> randQ {80210};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
-    //if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
+    if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
     float3 query = state.h_queries[q];
 
     // generate ground truth res
@@ -76,9 +76,10 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
     }
     if (printRes) std::cout << std::endl;
 
-    // TODO: there are cases where there are multiple points that overlap and
-    // depending on the order different ones will enter the topKQ.
-    //if (gt_idxs != gpu_idxs) {std::cout << "Incorrect!" << std::endl;}
+    // TODO: there are cases where there are multiple points are very close and
+    // so depending on the order they are searched the result would be
+    // different, although both CPU and GPU should both have implemented the
+    // same FP standard. need to revisit this.
     // https://www.techiedelight.com/print-set-unordered_set-cpp/
     if (gt_dists != gpu_dists) {
       fprintf(stdout, "Incorrect query [%u] %f, %f, %f\n", q, query.x, query.y, query.z);
@@ -132,7 +133,7 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
 
 void sanityCheck(WhittedState& state) {
   for (int i = 0; i < state.numOfBatches; i++) {
-  //for (int i = 1; i < 2; i++) {
+  //for (int i = 0; i < 1; i++) {
     state.numQueries = state.numActQueries[i];
     state.h_queries = state.h_actQs[i];
 
