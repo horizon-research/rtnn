@@ -12,7 +12,8 @@ void search(WhittedState& state, int batch_id) {
       unsigned int numQueries = state.numActQueries[batch_id];
 
       state.params.limit = state.knn;
-      thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(numQueries * state.params.limit);
+      thrust::device_ptr<unsigned int> output_buffer;
+      allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit);
 
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map[batch_id];
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
@@ -59,7 +60,8 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch
     unsigned int numQueries = state.numActQueries[batch_id];
 
     state.params.limit = 1;
-    thrust::device_ptr<unsigned int> output_buffer = getThrustDevicePtr(numQueries * state.params.limit);
+    thrust::device_ptr<unsigned int> output_buffer;
+    allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit);
 
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
     state.params.isApprox = true;
