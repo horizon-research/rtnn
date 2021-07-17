@@ -152,8 +152,9 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   // we still save time.
   float maxWidth = state.radius / sqrt(2) * 2;
 
-  thrust::device_ptr<int> d_cellMask = getThrustDeviceIntPtr(numberOfCells);
-  CUDA_CHECK( cudaMemset ( thrust::raw_pointer_cast(d_cellMask), 0xFF, numberOfCells * sizeof(int) ) );
+  thrust::device_ptr<int> d_cellMask;
+  allocThrustDevicePtr(&d_cellMask, numberOfCells); // no need to memset this since every single cell will be updated.
+  //CUDA_CHECK( cudaMemset ( thrust::raw_pointer_cast(d_cellMask), 0xFF, numberOfCells * sizeof(int) ) );
 
   //test(gridInfo); // to demonstrate the weird parameter passing bug.
 
@@ -304,7 +305,8 @@ void sortGenBatch(WhittedState& state,
             morton
            );
 
-    thrust::device_ptr<int> d_rayMask = getThrustDeviceIntPtr(N);
+    thrust::device_ptr<int> d_rayMask;
+    allocThrustDevicePtr(&d_rayMask, N);
 
     // generate the sorted indices, and also set the rayMask according to cellMask.
     kCountingSortIndices_setRayMask(numOfBlocks,
