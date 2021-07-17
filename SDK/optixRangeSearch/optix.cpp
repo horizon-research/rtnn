@@ -71,7 +71,7 @@ void uploadData ( WhittedState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
     thrust::device_ptr<float3> d_points_ptr;
-    allocThrustDevicePtr<float3> (&d_points_ptr, state.numPoints);
+    allocThrustDevicePtr(&d_points_ptr, state.numPoints);
     state.params.points = thrust::raw_pointer_cast(d_points_ptr);
     //CUDA_CHECK( cudaMalloc(
     //    reinterpret_cast<void**>( &state.params.points ),
@@ -93,7 +93,7 @@ void uploadData ( WhittedState& state ) {
       state.params.queries = state.params.points;
     } else {
       thrust::device_ptr<float3> d_queries_ptr;
-      allocThrustDevicePtr<float3> (&d_queries_ptr, state.numPoints);
+      allocThrustDevicePtr(&d_queries_ptr, state.numPoints);
       state.params.queries = thrust::raw_pointer_cast(d_queries_ptr);
       //CUDA_CHECK( cudaMalloc(
       //    reinterpret_cast<void**>( &state.params.queries),

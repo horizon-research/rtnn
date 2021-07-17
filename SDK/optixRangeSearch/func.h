@@ -29,13 +29,17 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
 thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
-thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int);
-thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int);
-template <typename T> void allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N) {
+//thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int);
+//thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int);
+// take an unallocated thrust device pointer, allocate device memory and set the thrust pointer and return the raw pointer.
+template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N) {
   T* d_memory_raw;
   CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
              N * sizeof(T) ) );
   *d_memory = thrust::device_pointer_cast(d_memory_raw);
+  fprintf(stdout, "\t%f MB\n", (float)N * sizeof(T) / 1024 / 1024);
+
+  return d_memory_raw;
 }
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int);
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int, cudaStream_t);

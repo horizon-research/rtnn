@@ -14,23 +14,23 @@
 
 #include "state.h"
 
-thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int N) {
-  int* d_memory;
-  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(int) ) );
-  thrust::device_ptr<int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+//thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int N) {
+//  int* d_memory;
+//  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
+//             N * sizeof(int) ) );
+//  thrust::device_ptr<int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+//
+//  return d_memory_ptr;
+//}
 
-  return d_memory_ptr;
-}
-
-thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int N) {
-  float* d_memory;
-  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(unsigned int) ) );
-  thrust::device_ptr<float> d_memory_ptr = thrust::device_pointer_cast(d_memory);
-
-  return d_memory_ptr;
-}
+//thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int N) {
+//  float* d_memory;
+//  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
+//             N * sizeof(unsigned int) ) );
+//  thrust::device_ptr<float> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+//
+//  return d_memory_ptr;
+//}
 
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
   unsigned int* d_memory;
