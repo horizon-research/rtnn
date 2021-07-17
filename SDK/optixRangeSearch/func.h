@@ -31,6 +31,12 @@ thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
 thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
 thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int);
 thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int);
+template <typename T> void allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N) {
+  T* d_memory_raw;
+  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
+             N * sizeof(T) ) );
+  *d_memory = thrust::device_pointer_cast(d_memory_raw);
+}
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int);
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int, cudaStream_t);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>, cudaStream_t);

@@ -23,6 +23,14 @@ thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int N) {
   return d_memory_ptr;
 }
 
+//template <typename T>
+//void allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N) {
+//  T* d_memory_raw;
+//  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
+//             N * sizeof(T) ) );
+//  *d_memory = thrust::device_pointer_cast(d_memory_raw);
+//}
+
 thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int N) {
   float* d_memory;
   CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),

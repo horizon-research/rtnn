@@ -54,8 +54,6 @@
 #include "func.h"
 #include "grid.h"
 
-const int max_trace = 12;
-
 template <typename T>
 struct Record
 {
@@ -72,16 +70,20 @@ typedef Record<HitGroupData>    HitGroupRecord;
 void uploadData ( WhittedState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
-    CUDA_CHECK( cudaMalloc(
-        reinterpret_cast<void**>( &state.params.points ),
-        state.numPoints * sizeof(float3) ) );
-    
-    CUDA_CHECK( cudaMemcpy(
-        reinterpret_cast<void*>( state.params.points ),
-        state.h_points,
-        state.numPoints * sizeof(float3),
-        cudaMemcpyHostToDevice
-    ) );
+    thrust::device_ptr<float3> d_points_ptr;
+    allocThrustDevicePtr<float3> (&d_points_ptr, state.numPoints);
+    state.params.points = thrust::raw_pointer_cast(d_points_ptr);
+    //CUDA_CHECK( cudaMalloc(
+    //    reinterpret_cast<void**>( &state.params.points ),
+    //    state.numPoints * sizeof(float3) ) );
+
+    thrust::copy(state.h_points, state.h_points + state.numPoints, d_points_ptr);
+    //CUDA_CHECK( cudaMemcpy(
+    //    reinterpret_cast<void*>( state.params.points ),
+    //    state.h_points,
+    //    state.numPoints * sizeof(float3),
+    //    cudaMemcpyHostToDevice
+    //) );
 
     if (state.samepq) {
       // by default, params.queries and params.points point to the same device
@@ -90,16 +92,20 @@ void uploadData ( WhittedState& state ) {
       // lazy query allocation.
       state.params.queries = state.params.points;
     } else {
-      CUDA_CHECK( cudaMalloc(
-          reinterpret_cast<void**>( &state.params.queries),
-          state.numQueries * sizeof(float3) ) );
+      thrust::device_ptr<float3> d_queries_ptr;
+      allocThrustDevicePtr<float3> (&d_queries_ptr, state.numPoints);
+      state.params.queries = thrust::raw_pointer_cast(d_queries_ptr);
+      //CUDA_CHECK( cudaMalloc(
+      //    reinterpret_cast<void**>( &state.params.queries),
+      //    state.numQueries * sizeof(float3) ) );
       
-      CUDA_CHECK( cudaMemcpy(
-          reinterpret_cast<void*>( state.params.queries ),
-          state.h_queries,
-          state.numQueries * sizeof(float3),
-          cudaMemcpyHostToDevice
-      ) );
+      thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
+      //CUDA_CHECK( cudaMemcpy(
+      //    reinterpret_cast<void*>( state.params.queries ),
+      //    state.h_queries,
+      //    state.numQueries * sizeof(float3),
+      //    cudaMemcpyHostToDevice
+      //) );
     }
     //CUDA_CHECK( cudaStreamSynchronize( state.stream[0] ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
@@ -367,6 +373,8 @@ static void createMissProgram( WhittedState &state, std::vector<OptixProgramGrou
 
 void createPipeline( WhittedState &state )
 {
+    const int max_trace = 2;
+
     std::vector<OptixProgramGroup> program_groups;
 
     state.pipeline_compile_options = {
