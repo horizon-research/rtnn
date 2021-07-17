@@ -287,9 +287,11 @@ void sortGenBatch(WhittedState& state,
                  )
 {
     // pick one particle from each cell, and store all their indices in |d_repQueries|
-    thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_copy = getThrustDevicePtr(N);
+    thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_copy;
+    allocThrustDevicePtr(&d_ParticleCellIndices_ptr_copy, N);
     thrustCopyD2D(d_ParticleCellIndices_ptr_copy, d_ParticleCellIndices_ptr, N);
-    thrust::device_ptr<unsigned int> d_repQueries = getThrustDevicePtr(N);
+    thrust::device_ptr<unsigned int> d_repQueries;
+    allocThrustDevicePtr(&d_repQueries, N);
     genSeqDevice(d_repQueries, N);
     sortByKey(d_ParticleCellIndices_ptr_copy, d_repQueries, N);
     unsigned int numUniqQs = uniqueByKey(d_ParticleCellIndices_ptr_copy, N, d_repQueries);
@@ -325,7 +327,8 @@ void sortGenBatch(WhittedState& state,
     // need to use stable sort since the keys are unique, so masks and the
     // queries are gauranteed to be sorted in exactly the same way.
     // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
-    thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy = getThrustDevicePtr(N);
+    thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy;
+    allocThrustDevicePtr(&d_posInSortedPoints_ptr_copy, N);
     thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);
 
     //thrust::host_vector<int> h_rayMask(N);
@@ -414,10 +417,13 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
   GridInfo gridInfo;
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
-  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = getThrustDevicePtr(N);
-  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = getThrustDevicePtr(numberOfCells); // this takes a lot of memory
+  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr;
+  allocThrustDevicePtr(&d_ParticleCellIndices_ptr, N);
+  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr;
+  allocThrustDevicePtr(&d_CellParticleCounts_ptr, numberOfCells); // this takes a lot of memory
   fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
-  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr = getThrustDevicePtr(N);
+  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr;
+  allocThrustDevicePtr(&d_LocalSortedIndices_ptr, N);
 
   unsigned int threadsPerBlock = 64;
   unsigned int numOfBlocks = N / threadsPerBlock + 1;
@@ -431,11 +437,13 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
                    morton
                   );
 
-  thrust::device_ptr<unsigned int> d_CellOffsets_ptr = getThrustDevicePtr(numberOfCells);
+  thrust::device_ptr<unsigned int> d_CellOffsets_ptr;
+  allocThrustDevicePtr(&d_CellOffsets_ptr, numberOfCells);
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
   exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
 
-  thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr = getThrustDevicePtr(N);
+  thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
+  allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
   // if samepq and partition is enabled, do it here. we are partitioning points, but it's the same as queries.
   if (state.partition) {
     // normal particle sorting is done here too.
@@ -559,7 +567,8 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     thrust::device_vector<float> d_orig_points_1d = h_orig_points_1d;
 
     // initialize a sequence to be sorted, which will become the r2q map.
-    thrust::device_ptr<unsigned int> d_r2q_map_ptr = getThrustDevicePtr(numQueries);
+    thrust::device_ptr<unsigned int> d_r2q_map_ptr;
+    allocThrustDevicePtr(&d_r2q_map_ptr, numQueries);
     genSeqDevice(d_r2q_map_ptr, numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
   
@@ -600,7 +609,8 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
 
   // initialize a sequence to be sorted, which will become the r2q map
   Timing::startTiming("gas-sort queries init");
-    thrust::device_ptr<unsigned int> d_r2q_map_ptr = getThrustDevicePtr(numQueries);
+    thrust::device_ptr<unsigned int> d_r2q_map_ptr;
+    allocThrustDevicePtr(&d_r2q_map_ptr, numQueries);
     genSeqDevice(d_r2q_map_ptr, numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
 

@@ -14,15 +14,6 @@
 
 #include "state.h"
 
-thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int N) {
-  unsigned int* d_memory;
-  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(unsigned int) ) );
-  thrust::device_ptr<unsigned int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
-
-  return d_memory_ptr;
-}
-
 int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lineId)
 {
   int start = 0;
