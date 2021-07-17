@@ -27,16 +27,6 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>,
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float>*, thrust::device_ptr<float>, unsigned int, cudaStream_t );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float>*, thrust::device_ptr<float>, unsigned int );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
-// take an unallocated thrust device pointer, allocate device memory and set the thrust pointer and return the raw pointer.
-template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N) {
-  T* d_memory_raw;
-  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
-             N * sizeof(T) ) );
-  *d_memory = thrust::device_pointer_cast(d_memory_raw);
-  fprintf(stdout, "\t%f MB\n", (float)N * sizeof(T) / 1024 / 1024);
-
-  return d_memory_raw;
-}
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int);
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int, cudaStream_t);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>, cudaStream_t);
@@ -50,6 +40,19 @@ unsigned int countById(thrust::device_ptr<int>, unsigned int, int);
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrust::device_ptr<unsigned int> dest);
 void thrustCopyD2D(thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int N);
 unsigned int thrustGenHist(const thrust::device_ptr<int>, thrust::device_vector<unsigned int>&, unsigned int);
+
+// take an unallocated thrust device pointer, allocate device memory and set the thrust pointer and return the raw pointer.
+// https://stackoverflow.com/questions/353180/how-do-i-find-the-name-of-the-calling-function/378165
+// https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
+template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N, const char* str = __builtin_FUNCTION()) {
+  T* d_memory_raw;
+  CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
+             N * sizeof(T) ) );
+  *d_memory = thrust::device_pointer_cast(d_memory_raw);
+  fprintf(stdout, "\t%s: %f MB\n", str, (float)N * sizeof(T) / 1024 / 1024);
+
+  return d_memory_raw;
+}
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
