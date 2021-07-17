@@ -71,19 +71,9 @@ void uploadData ( WhittedState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
     thrust::device_ptr<float3> d_points_ptr;
-    allocThrustDevicePtr(&d_points_ptr, state.numPoints);
-    state.params.points = thrust::raw_pointer_cast(d_points_ptr);
-    //CUDA_CHECK( cudaMalloc(
-    //    reinterpret_cast<void**>( &state.params.points ),
-    //    state.numPoints * sizeof(float3) ) );
+    state.params.points = allocThrustDevicePtr(&d_points_ptr, state.numPoints);
 
     thrust::copy(state.h_points, state.h_points + state.numPoints, d_points_ptr);
-    //CUDA_CHECK( cudaMemcpy(
-    //    reinterpret_cast<void*>( state.params.points ),
-    //    state.h_points,
-    //    state.numPoints * sizeof(float3),
-    //    cudaMemcpyHostToDevice
-    //) );
 
     if (state.samepq) {
       // by default, params.queries and params.points point to the same device
@@ -93,19 +83,9 @@ void uploadData ( WhittedState& state ) {
       state.params.queries = state.params.points;
     } else {
       thrust::device_ptr<float3> d_queries_ptr;
-      allocThrustDevicePtr(&d_queries_ptr, state.numPoints);
-      state.params.queries = thrust::raw_pointer_cast(d_queries_ptr);
-      //CUDA_CHECK( cudaMalloc(
-      //    reinterpret_cast<void**>( &state.params.queries),
-      //    state.numQueries * sizeof(float3) ) );
+      state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numPoints);
       
       thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
-      //CUDA_CHECK( cudaMemcpy(
-      //    reinterpret_cast<void*>( state.params.queries ),
-      //    state.h_queries,
-      //    state.numQueries * sizeof(float3),
-      //    cudaMemcpyHostToDevice
-      //) );
     }
     //CUDA_CHECK( cudaStreamSynchronize( state.stream[0] ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
