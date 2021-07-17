@@ -5,7 +5,7 @@ __global__ void kGenAABB_t (
       const float3* points,
       float radius,
       unsigned int N,
-      CUdeviceptr d_aabb
+      OptixAabb* aabb
 )
 {
   unsigned int particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -16,8 +16,6 @@ __global__ void kGenAABB_t (
   float3 m_min = center - radius;
   float3 m_max = center + radius;
 
-  OptixAabb *aabb = reinterpret_cast<OptixAabb*>(d_aabb);
-
   aabb[particleIndex] =
   {
     m_min.x, m_min.y, m_min.z,
@@ -25,7 +23,7 @@ __global__ void kGenAABB_t (
   };
 }
 
-void kGenAABB(float3* points, float radius, unsigned int numPrims, CUdeviceptr d_aabb, cudaStream_t stream) {
+void kGenAABB(float3* points, float radius, unsigned int numPrims, OptixAabb* d_aabb, cudaStream_t stream) {
   unsigned int threadsPerBlock = 64;
   unsigned int numOfBlocks = numPrims / threadsPerBlock + 1;
 

@@ -168,7 +168,6 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
 {
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
-  CUdeviceptr d_aabb;
 
   float radius;
   if (state.partition) {
@@ -176,12 +175,11 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
   } else {
     radius = state.radius / state.sortingGAS;
   }
-  //state.params.radius = radius; // TODO: this needs to be fixed
   //std::cout << "\tAABB radius: " << radius << std::endl;
   //std::cout << "\tnum of points in GAS: " << numPrims << std::endl;
 
-  CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_aabb
-      ), numPrims * sizeof( OptixAabb ) ) );
+  thrust::device_ptr<OptixAabb> d_aabb_ptr;
+  OptixAabb* d_aabb = allocThrustDevicePtr(&d_aabb_ptr, numPrims);
 
   kGenAABB(state.params.points,
            radius,
@@ -190,7 +188,7 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
            state.stream[batch_id]
           );
 
-  return d_aabb;
+  return reinterpret_cast<CUdeviceptr>(d_aabb);
 }
 
 void createGeometry( WhittedState& state, int batch_id )
@@ -526,7 +524,8 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
                                   numQueries * state.params.limit * sizeof(unsigned int),
                                   state.stream[batch_id] ) );
 
-    CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &state.d_params ), sizeof( Params ) ) );
+    thrust::device_ptr<Params> d_params_ptr;
+    state.d_params = allocThrustDevicePtr(&d_params_ptr, 1);
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,
                                  sizeof( Params ),
