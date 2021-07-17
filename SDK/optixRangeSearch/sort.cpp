@@ -134,7 +134,9 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   return numberOfCells;
 }
 
-thrust::device_ptr<char> genCellMask (WhittedState& state, unsigned int* d_repQueries, float3* particles, unsigned int* d_CellParticleCounts, unsigned int numberOfCells, GridInfo& gridInfo, unsigned int N, unsigned int numUniqQs, bool morton) {
+void test(GridInfo);
+
+thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQueries, float3* particles, unsigned int* d_CellParticleCounts, unsigned int numberOfCells, GridInfo gridInfo, unsigned int N, unsigned int numUniqQs, bool morton) {
   float cellSize = state.radius / state.crRatio;
 
   // |maxWidth| is the max width of a cube that can be enclosed by the sphere.
@@ -150,28 +152,70 @@ thrust::device_ptr<char> genCellMask (WhittedState& state, unsigned int* d_repQu
   // we still save time.
   float maxWidth = state.radius / sqrt(2) * 2;
 
-  thrust::device_ptr<char> d_cellMask = getThrustDeviceCharPtr(numberOfCells);
+  thrust::device_ptr<int> d_cellMask = getThrustDeviceIntPtr(numberOfCells);
+  CUDA_CHECK( cudaMemset ( thrust::raw_pointer_cast(d_cellMask), 0xFF, numberOfCells * sizeof(int) ) );
 
-  unsigned int threadsPerBlock = 64;
-  unsigned int numOfBlocks = numUniqQs / threadsPerBlock + 1;
+  //test(gridInfo); // to demonstrate the weird parameter passing bug.
 
-  kCalcSearchSize(numOfBlocks,
-                  threadsPerBlock,
-                  gridInfo,
-                  morton, 
-                  d_CellParticleCounts,
-                  d_repQueries,
-                  particles,
-                  cellSize,
-                  maxWidth,
-                  state.knn,
-                  thrust::raw_pointer_cast(d_cellMask)
-                 );
+  bool gpu = true;
+  if (gpu) {
+    //thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
+    //thrust::copy(thrust::device_pointer_cast(d_CellParticleCounts), thrust::device_pointer_cast(d_CellParticleCounts) + numberOfCells, h_CellParticleCounts.begin());
+
+    unsigned int threadsPerBlock = 64;
+    unsigned int numOfBlocks = numUniqQs / threadsPerBlock + 1;
+    kCalcSearchSize(numOfBlocks,
+                    threadsPerBlock,
+                    gridInfo,
+                    morton, 
+                    d_CellParticleCounts,
+                    d_repQueries,
+                    particles,
+                    cellSize,
+                    maxWidth,
+                    state.knn,
+                    thrust::raw_pointer_cast(d_cellMask)
+                   );
+
+    //thrust::host_vector<int> h_cellMask_t(numberOfCells);
+    //thrust::copy(d_cellMask, d_cellMask + numberOfCells, h_cellMask_t.begin());
+  } else {
+    thrust::host_vector<unsigned int> h_part_seq(numUniqQs);
+    thrust::copy(thrust::device_pointer_cast(d_repQueries), thrust::device_pointer_cast(d_repQueries) + numUniqQs, h_part_seq.begin());
+
+    thrust::host_vector<unsigned int> h_CellParticleCounts(numberOfCells);
+    thrust::copy(thrust::device_pointer_cast(d_CellParticleCounts), thrust::device_pointer_cast(d_CellParticleCounts) + numberOfCells, h_CellParticleCounts.begin());
+
+    thrust::host_vector<int> h_cellMask(numberOfCells);
+
+    for (unsigned int i = 0; i < numUniqQs; i++) {
+      unsigned int qId = h_part_seq[i];
+      float3 point = state.h_points[qId];
+      float3 gridCellF = (point - gridInfo.GridMin) * gridInfo.GridDelta;
+      int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
+
+      calcSearchSize(gridCell,
+                     gridInfo,
+                     morton,
+                     h_CellParticleCounts.data(),
+                     cellSize,
+                     maxWidth,
+                     state.knn,
+                     h_cellMask.data()
+                    );
+    }
+    thrust::copy(h_cellMask.begin(), h_cellMask.end(), d_cellMask);
+  }
+
+  //for (unsigned int i = 0; i < numberOfCells; i++) {
+  //  if (h_cellMask[i] == 2)
+  //    printf("%u, %u, %x\n", i, h_cellMask[i], h_cellMask_t[i]);
+  //}
 
   return d_cellMask;
 }
 
-void prepBatches(std::vector<char>& batches, const thrust::host_vector<unsigned int> h_rayHist) {
+void prepBatches(std::vector<int>& batches, const thrust::host_vector<unsigned int> h_rayHist) {
   for (unsigned int i = 0; i < h_rayHist.size(); i++) {
     batches.push_back(i);
   }
@@ -182,23 +226,23 @@ void prepBatches(std::vector<char>& batches, const thrust::host_vector<unsigned 
 }
 
 void genBatches(WhittedState& state,
-                std::vector<char>& batches,
+                std::vector<int>& batches,
                 thrust::host_vector<unsigned int> h_rayHist,
                 float3* particles,
                 unsigned int N,
-                thrust::device_ptr<char> d_rayMask)
+                thrust::device_ptr<int> d_rayMask)
 {
   float cellSize = state.radius / state.crRatio;
 
-  char lastMask = -1;
+  int lastMask = -1;
   for (int batchId = 0; batchId < state.numOfBatches; batchId++) {
-    char maxMask = batches[batchId];
+    int maxMask = batches[batchId];
     unsigned int numActQs = 0;
-    for (char j = lastMask + 1; j <= maxMask; j++) {
+    for (int j = lastMask + 1; j <= maxMask; j++) {
       numActQs += h_rayHist[j];
     }
     state.numActQueries[batchId] = numActQs;
-    printf("[%d, %d]: %u\n", lastMask + 1, maxMask, numActQs);
+    //printf("[%d, %d]: %u\n", lastMask + 1, maxMask, numActQs);
 
     // see comments in how maxWidth is calculated in |genCellMask|.
     float partThd = kGetWidthFromIter(maxMask, cellSize); // partThd depends on the max mask.
@@ -207,7 +251,7 @@ void genBatches(WhittedState& state,
     else
       state.launchRadius[batchId] = partThd / 2;
     if (batchId == (state.numOfBatches - 1)) state.launchRadius[batchId] = state.radius;
-    printf("%u, %f\n", maxMask, state.launchRadius[batchId]);
+    //printf("%u, %f\n", maxMask, state.launchRadius[batchId]);
 
     // can't free |particles|, because it points to the points too.
     // same applies to state.h_queries. |particles| from this point
@@ -249,7 +293,7 @@ void sortGenBatch(WhittedState& state,
     unsigned int numUniqQs = uniqueByKey(d_ParticleCellIndices_ptr_copy, N, d_repQueries);
     fprintf(stdout, "\tNum of Rep queries: %u\n", numUniqQs);
 
-    thrust::device_ptr<char> d_cellMask = genCellMask(state,
+    thrust::device_ptr<int> d_cellMask = genCellMask(state,
             thrust::raw_pointer_cast(d_repQueries),
             particles,
             thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
@@ -260,7 +304,7 @@ void sortGenBatch(WhittedState& state,
             morton
            );
 
-    thrust::device_ptr<char> d_rayMask = getThrustDeviceCharPtr(N);
+    thrust::device_ptr<int> d_rayMask = getThrustDeviceIntPtr(N);
 
     // generate the sorted indices, and also set the rayMask according to cellMask.
     kCountingSortIndices_setRayMask(numOfBlocks,
@@ -281,7 +325,7 @@ void sortGenBatch(WhittedState& state,
     thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy = getThrustDevicePtr(N);
     thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);
 
-    //thrust::host_vector<char> h_rayMask(N);
+    //thrust::host_vector<int> h_rayMask(N);
     //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
     //thrust::host_vector<unsigned int> h_ParticleCellIndices(N);
     //thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, h_ParticleCellIndices.begin());
@@ -309,7 +353,7 @@ void sortGenBatch(WhittedState& state,
 
     // TODO: does it make sense to do non-consecutive batches?
     // |batches| will contain the last mask of each batch.
-    std::vector<char> batches;
+    std::vector<int> batches;
     prepBatches(batches, h_rayHist);
     state.numOfBatches = batches.size();
     fprintf(stdout, "\tNumber of batches: %d\n", state.numOfBatches);

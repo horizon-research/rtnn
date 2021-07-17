@@ -38,7 +38,7 @@ void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<f
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
-void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<char> d_val_ptr, unsigned int N ) {
+void sortByKey( thrust::device_ptr<unsigned int> d_key_ptr, thrust::device_ptr<int> d_val_ptr, unsigned int N ) {
   thrust::sort_by_key(d_key_ptr, d_key_ptr + N, d_val_ptr);
 }
 
@@ -111,11 +111,11 @@ struct is_nonzero
 // https://www.bu.edu/pasi/files/2011/01/NathanBell3-12-1000.pdf#page=18
 struct isSameID
 {
-    char kID;
-    isSameID(char id) {kID = id;}
+    int kID;
+    isSameID(int id) {kID = id;}
 
   __host__ __device__
-    bool operator()(const char x)
+    bool operator()(const int x)
     {
         return (x == kID);
     }
@@ -123,23 +123,23 @@ struct isSameID
 
 struct isInRange
 {
-    char kmin, kmax;
-    isInRange(char min, char max) {kmin = min; kmax = max;}
+    int kmin, kmax;
+    isInRange(int min, int max) {kmin = min; kmax = max;}
 
   __host__ __device__
-    bool operator()(const char x)
+    bool operator()(const int x)
     {
         return ((x >= kmin) && (x <= kmax));
     }
 };
 
-void copyIfIdMatch(float3* source, unsigned int N, thrust::device_ptr<char> mask, thrust::device_ptr<float3> dest, char id) {
+void copyIfIdMatch(float3* source, unsigned int N, thrust::device_ptr<int> mask, thrust::device_ptr<float3> dest, int id) {
     thrust::copy_if(thrust::device_pointer_cast(source),
                     thrust::device_pointer_cast(source) + N,
                     mask, dest, isSameID(id));
 }
 
-void copyIfIdInRange(float3* source, unsigned int N, thrust::device_ptr<char> mask, thrust::device_ptr<float3> dest, char min, char max) {
+void copyIfIdInRange(float3* source, unsigned int N, thrust::device_ptr<int> mask, thrust::device_ptr<float3> dest, int min, int max) {
     thrust::copy_if(thrust::device_pointer_cast(source),
                     thrust::device_pointer_cast(source) + N,
                     mask, dest, isInRange(min, max));
@@ -151,7 +151,7 @@ void copyIfNonZero(float3* source, unsigned int N, thrust::device_ptr<bool> mask
                     mask, dest, is_nonzero());
 }
 
-unsigned int countById(thrust::device_ptr<char> val, unsigned int N, char id) {
+unsigned int countById(thrust::device_ptr<int> val, unsigned int N, int id) {
   unsigned int numOfActiveQueries = thrust::count(val, val + N, id);
   return numOfActiveQueries;
 }
@@ -173,9 +173,9 @@ void thrustCopyD2D(thrust::device_ptr<unsigned int> d_dst, thrust::device_ptr<un
 }
 
 // https://github.com/NVIDIA/thrust/blob/master/examples/histogram.cu
-unsigned int thrustGenHist(const thrust::device_ptr<char> d_value_ptr, thrust::device_vector<unsigned int>& d_histogram, unsigned int N) {
+unsigned int thrustGenHist(const thrust::device_ptr<int> d_value_ptr, thrust::device_vector<unsigned int>& d_histogram, unsigned int N) {
     // first make a copy of d_value since we are going to sort it.
-    thrust::device_vector<char> d_value(N);
+    thrust::device_vector<int> d_value(N);
     thrust::copy(d_value_ptr, d_value_ptr + N, d_value.begin());
 
     thrust::sort(d_value.begin(), d_value.end());
@@ -183,7 +183,7 @@ unsigned int thrustGenHist(const thrust::device_ptr<char> d_value_ptr, thrust::d
 
     d_histogram.resize(num_bins);
 
-    thrust::counting_iterator<char> search_begin(0);
+    thrust::counting_iterator<int> search_begin(0);
     thrust::upper_bound(d_value.begin(), d_value.end(),
             search_begin, search_begin + num_bins,
             d_histogram.begin());

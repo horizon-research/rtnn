@@ -19,7 +19,7 @@ void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned in
 void sortByKey( thrust::device_vector<float>*, thrust::device_ptr<float3> );
 void sortByKey( thrust::device_ptr<float>, thrust::device_ptr<float3>, unsigned int );
 void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, unsigned int );
-void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<char>, unsigned int );
+void sortByKey( thrust::device_ptr<unsigned int>, thrust::device_ptr<int>, unsigned int );
 void gatherByKey ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3> );
 void gatherByKey ( thrust::device_vector<unsigned int>*, thrust::device_ptr<float3>, thrust::device_ptr<float3>, cudaStream_t );
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float3>, thrust::device_ptr<float3>, unsigned int, cudaStream_t );
@@ -30,26 +30,25 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, 
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
 thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
 thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int);
-thrust::device_ptr<char> getThrustDeviceCharPtr(unsigned int);
+thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int);
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int);
 void genSeqDevice(thrust::device_ptr<unsigned int>, unsigned int, cudaStream_t);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>, cudaStream_t);
 void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::device_ptr<unsigned int>);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int, cudaStream_t);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
-void copyIfIdMatch(float3*, unsigned int, thrust::device_ptr<char>, thrust::device_ptr<float3>, char);
-void copyIfIdInRange(float3*, unsigned int, thrust::device_ptr<char>, thrust::device_ptr<float3>, char, char);
+void copyIfIdMatch(float3*, unsigned int, thrust::device_ptr<int>, thrust::device_ptr<float3>, int);
+void copyIfIdInRange(float3*, unsigned int, thrust::device_ptr<int>, thrust::device_ptr<float3>, int, int);
 void copyIfNonZero(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
-unsigned int countById(thrust::device_ptr<char>, unsigned int, char);
+unsigned int countById(thrust::device_ptr<int>, unsigned int, int);
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrust::device_ptr<unsigned int> dest);
 void thrustCopyD2D(thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int N);
-unsigned int thrustGenHist(const thrust::device_ptr<char>, thrust::device_vector<unsigned int>&, unsigned int);
+unsigned int thrustGenHist(const thrust::device_ptr<int>, thrust::device_vector<unsigned int>&, unsigned int);
 
 void kComputeMinMax (unsigned int, unsigned int, float3*, unsigned int, int3*, int3*);
 void kInsertParticles(unsigned int, unsigned int, GridInfo, float3*, unsigned int*, unsigned int*, unsigned int*, bool);
 void kCountingSortIndices(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*);
-void kCountingSortIndices_setRayMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, char*, char*);
-uint kToCellIndex_MortonMetaGrid(const GridInfo&, int3);
+void kCountingSortIndices_setRayMask(unsigned int, unsigned int, GridInfo, unsigned int*, unsigned int*, unsigned int*, unsigned int*, int*, int*);
 void kCalcSearchSize(unsigned int,
                      unsigned int,
                      GridInfo,
@@ -60,8 +59,17 @@ void kCalcSearchSize(unsigned int,
                      float,
                      float,
                      unsigned int,
-                     char*
+                     int*
                     );
+void calcSearchSize(int3,
+                    GridInfo,
+                    bool, 
+                    unsigned int*,
+                    float,
+                    float,
+                    unsigned int,
+                    int*
+                   );
 float kGetWidthFromIter(int, float);
 
 void sanityCheck(WhittedState&);

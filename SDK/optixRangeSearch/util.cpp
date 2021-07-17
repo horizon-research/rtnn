@@ -14,11 +14,11 @@
 
 #include "state.h"
 
-thrust::device_ptr<char> getThrustDeviceCharPtr(unsigned int N) {
-  char* d_memory;
+thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int N) {
+  int* d_memory;
   CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory),
-             N * sizeof(char) ) );
-  thrust::device_ptr<char> d_memory_ptr = thrust::device_pointer_cast(d_memory);
+             N * sizeof(int) ) );
+  thrust::device_ptr<int> d_memory_ptr = thrust::device_pointer_cast(d_memory);
 
   return d_memory_ptr;
 }

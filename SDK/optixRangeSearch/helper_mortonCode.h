@@ -1,6 +1,8 @@
 #pragma once
 #include <cuda_runtime.h>
 
+#include <stdio.h>
+
 //https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
 // "Insert" a 0 bit after each of the 16 low bits of x
 __host__ __device__ inline uint Part1By1(uint x)
@@ -26,6 +28,8 @@ __host__ __device__ inline uint Part1By2(uint x)
 
 __host__ __device__ inline uint MortonCode3(uint x, uint y, uint z)
 {
+  //if (x == 11 && y == 10 && z == 2)
+  //  printf("%u, %u, %u, %u\n", Part1By2(z) << 2, Part1By2(y) << 1, Part1By2(x), (Part1By2(z) << 2) + (Part1By2(y) << 1) + Part1By2(x));
 	return (Part1By2(z) << 2) + (Part1By2(y) << 1) + Part1By2(x);
 }
 

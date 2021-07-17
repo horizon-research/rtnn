@@ -21,7 +21,7 @@ inline __host__ __device__ uint ToCellIndex_MortonMetaGrid(const GridInfo &GridI
   gridCell.z %= GridInfo.meta_grid_dim;
   uint metaGridIndex = CellIndicesToLinearIndex(GridInfo.MetaGridDimension, metaGridCell);
 
-  //if (temp.x == 503 && temp.y == 33 && temp.z == 645)
+  //if (temp.x == 283 && temp.y == 10 && temp.z == 418)
   //  printf("(%d, %d, %d), (%d, %d, %d), %u, %u, %u\n", metaGridCell.x, metaGridCell.y, metaGridCell.z, gridCell.x, gridCell.y, gridCell.z, metaGridIndex, metaGridIndex * GridInfo.meta_grid_size, MortonCode3(gridCell.x, gridCell.y, gridCell.z));
 
   return metaGridIndex * GridInfo.meta_grid_size + MortonCode3(gridCell.x, gridCell.y, gridCell.z);
@@ -61,12 +61,23 @@ inline __host__ __device__
 void addCount(unsigned int& count, unsigned int* CellParticleCounts, GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
     if (oob(gridInfo, ix, iy, iz)) return;
 
-    unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
+    // TODO: weird bug on RTX 2080Ti GPU, nvcc V10.0.130, Driver Version: 470.42.01, and CUDA Version: 11.4
+    // (https://forums.developer.nvidia.com/t/weird-bug-involving-the-way-to-pass-parameters-to-kernels/183890)
+    // that the returned result from getCellIdx is incorrect.
+
+    //unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
+    int3 cell = make_int3(ix, iy, iz);
+    unsigned int iCellIdx;
+    if (morton)
+      iCellIdx = ToCellIndex_MortonMetaGrid(gridInfo, cell);
+    else
+      iCellIdx = (cell.x * gridInfo.GridDimension.y + cell.y) * gridInfo.GridDimension.z + cell.z;
+
     count += CellParticleCounts[iCellIdx];
     //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
 }
 
-__device__
+__host__ __device__
 void calcSearchSize(int3 gridCell,
                     GridInfo gridInfo,
                     bool morton, 
@@ -74,15 +85,26 @@ void calcSearchSize(int3 gridCell,
                     float cellSize,
                     float maxWidth,
                     unsigned int knn,
-                    char* cellMask
+                    int* cellMask
                    ) {
   // important that x/y/z are ints not units, as we check oob when they become negative.
   int x = gridCell.x;
   int y = gridCell.y;
   int z = gridCell.z;
 
-  int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
-  //if (x == 87 && y == 22 && z == 358) printf("cell %d has %d particles\n", cellIndex, CellParticleCounts[cellIndex]);
+  // TODO: weird bug on RTX 2080Ti GPU, nvcc V10.0.130, Driver Version: 470.42.01, and CUDA Version: 11.4
+  // (https://forums.developer.nvidia.com/t/weird-bug-involving-the-way-to-pass-parameters-to-kernels/183890)
+  // that the returned result from getCellIdx is incorrect.
+
+  //unsigned int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
+  unsigned int cellIndex;
+  if (morton)
+    cellIndex = ToCellIndex_MortonMetaGrid(gridInfo, gridCell);
+  else
+    cellIndex = (gridCell.x * gridInfo.GridDimension.y + gridCell.y) * gridInfo.GridDimension.z + gridCell.z;
+
+
+  //if (x == 283 && y == 10 && z == 418) printf("cell %d has %d particles. morton? %d\n", cellIndex, CellParticleCounts[cellIndex], morton);
   //assert(cellIndex <= numberOfCells);
   //if (CellParticleCounts[cellIndex] == 0) return; // should never hit this.
   
@@ -115,7 +137,6 @@ void calcSearchSize(int3 gridCell,
     else {
       iter++;
     }
-    //if (x == 87 && y == 22 && z == 358) printf("%d, %d\n", iter, count);
   
     int ix, iy, iz;
   
@@ -267,6 +288,9 @@ __global__ void kInsertParticles_Morton(
   // this stores the within-cell sorted indices of particles
   localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
 
+  if (cellIndex == 936119)
+    printf("cell %d [%d, %d, %d] has %d particles\n", cellIndex, gridCell.x, gridCell.y, gridCell.z, cellParticleCounts[cellIndex]);
+
   //printf("%u, %u, (%d, %d, %d)\n", particleIndex, cellIndex, gridCell.x, gridCell.y, gridCell.z);
 }
 
@@ -295,8 +319,8 @@ __global__ void kCountingSortIndices_setRayMask(
   const uint* cellOffsets,
   const uint* localSortedIndices,
   uint* posInSortedPoints,
-  char* cellMask,
-  char* rayMask
+  int* cellMask,
+  int* rayMask
 )
 {
   uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -320,7 +344,7 @@ __global__ void kGenCellMask(GridInfo gridInfo,
                              float cellSize,
                              float maxWidth,
                              unsigned int knn,
-                             char* cellMask
+                             int* cellMask
                             )
 {
   uint particleIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -400,8 +424,8 @@ void kCountingSortIndices_setRayMask(unsigned int numOfBlocks, unsigned int thre
       unsigned int* d_CellOffsets,
       unsigned int* d_LocalSortedIndices,
       unsigned int* d_posInSortedPoints,
-      char* cellMask,
-      char* rayMask
+      int* cellMask,
+      int* rayMask
       ) {
   kCountingSortIndices_setRayMask <<<numOfBlocks, threadsPerBlock>>> (
       gridInfo,
@@ -414,10 +438,6 @@ void kCountingSortIndices_setRayMask(unsigned int numOfBlocks, unsigned int thre
       );
 }
 
-uint kToCellIndex_MortonMetaGrid(const GridInfo& gridInfo, int3 cell) {
-  return ToCellIndex_MortonMetaGrid(gridInfo, cell);
-}
-
 void kCalcSearchSize(unsigned int numOfBlocks,
                      unsigned int threadsPerBlock,
                      GridInfo gridInfo,
@@ -428,7 +448,7 @@ void kCalcSearchSize(unsigned int numOfBlocks,
                      float cellSize,
                      float maxWidth,
                      unsigned int knn,
-                     char* cellMask
+                     int* cellMask
                     ) {
   kGenCellMask <<<numOfBlocks, threadsPerBlock>>> (
              gridInfo,
@@ -447,3 +467,26 @@ float kGetWidthFromIter(int iter, float cellSize) {
   return getWidthFromIter(iter, cellSize);
 }
 
+__global__ void kTest(GridInfo gridInfo, int3 test, unsigned int* res, bool morton) {
+  *res = getCellIdx(gridInfo, test.x, test.y, test.z, true);
+}
+
+void test(GridInfo gridInfo) {
+  int3 test = make_int3(283, 10, 418);
+  //unsigned int h_res_cpu = getCellIdx(gridInfo, test.x, test.y, test.z, true);
+  //printf("%d\n", h_res_cpu);
+
+  unsigned int* d_res;
+  cudaMalloc(reinterpret_cast<void**>(&d_res),
+               sizeof(unsigned int) );
+  
+  kTest<<<1, 1>>> (gridInfo, test, d_res, true);
+  unsigned int h_res;
+  cudaMemcpy(
+              reinterpret_cast<void*>( &h_res ),
+              d_res,
+              sizeof( unsigned int ),
+              cudaMemcpyDeviceToHost
+  );
+  printf("%d\n", h_res);
+}
