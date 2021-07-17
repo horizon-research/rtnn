@@ -258,7 +258,8 @@ void genBatches(WhittedState& state,
     // same applies to state.h_queries. |particles| from this point
     // on will only be used to point to device queries used in kernels, and
     // will be set right before launch using d_actQs.
-    thrust::device_ptr<float3> d_actQs = getThrustDeviceF3Ptr(numActQs);
+    thrust::device_ptr<float3> d_actQs;
+    allocThrustDevicePtr(&d_actQs, numActQs);
     copyIfIdInRange(particles, N, d_rayMask, d_actQs, lastMask + 1, maxMask);
     state.d_actQs[batchId] = thrust::raw_pointer_cast(d_actQs);
 
@@ -382,7 +383,8 @@ void sortGenBatch(WhittedState& state,
     //  // same applies to state.h_queries. |particles| from this point
     //  // on will only be used to point to device queries used in kernels, and
     //  // will be set right before launch using d_actQs.
-    //  thrust::device_ptr<float3> d_actQs = getThrustDeviceF3Ptr(state.numActQueries[i]);
+    //  thrust::device_ptr<float3> d_actQs;
+    //  allocThrustDevicePtr(&d_actQs, state.numActQueries[i]);
     //  copyIfIdMatch(particles, N, d_rayMask, d_actQs, i);
     //  state.d_actQs[i] = thrust::raw_pointer_cast(d_actQs);
 
@@ -661,7 +663,8 @@ void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indi
     unsigned int numQueries = state.numActQueries[batch_id];
 
     // allocate device memory for reordered/gathered queries
-    thrust::device_ptr<float3> d_reord_queries_ptr = getThrustDeviceF3Ptr(numQueries);
+    thrust::device_ptr<float3> d_reord_queries_ptr;
+    allocThrustDevicePtr(&d_reord_queries_ptr, numQueries);
 
     // get pointer to original queries in device memory
     thrust::device_ptr<float3> d_orig_queries_ptr = thrust::device_pointer_cast(state.d_actQs[batch_id]);

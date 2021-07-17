@@ -29,8 +29,6 @@ void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_vector<float
 void gatherByKey ( thrust::device_ptr<unsigned int>, thrust::device_ptr<float>, thrust::device_ptr<float>, unsigned int );
 thrust::device_ptr<unsigned int> getThrustDevicePtr(unsigned int);
 thrust::device_ptr<float3> getThrustDeviceF3Ptr(unsigned int);
-//thrust::device_ptr<float> getThrustDeviceF1Ptr(unsigned int);
-//thrust::device_ptr<int> getThrustDeviceIntPtr(unsigned int);
 // take an unallocated thrust device pointer, allocate device memory and set the thrust pointer and return the raw pointer.
 template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N) {
   T* d_memory_raw;
