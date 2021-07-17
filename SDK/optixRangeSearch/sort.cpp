@@ -366,36 +366,6 @@ void sortGenBatch(WhittedState& state,
 
     genBatches(state, batches, h_rayHist, particles, N, d_rayMask);
 
-    //state.numOfBatches = numMasks;
-    //for (int i = 0; i < state.numOfBatches; i++) {
-    //  state.partThd[i] = kGetWidthFromIter(i, cellSize);
-    //}
-
-    //for (int i = 0; i < state.numOfBatches; i++) {
-    //  state.numActQueries[i] = countById(d_rayMask, N, i);
-
-    //  // see comments in how maxWidth is calculated in |genCellMask|.
-    //  if (state.searchMode == "knn")
-    //    state.launchRadius[i] = (float)(state.partThd[i] / 2 * sqrt(2));
-    //  else
-    //    state.launchRadius[i] = state.partThd[i] / 2;
-    //  //printf("%f, %f\n", state.partThd[i], state.launchRadius[i]);
-    //  if (i == (state.numOfBatches - 1)) state.launchRadius[i] = state.radius;
-
-    //  // can't free |particles|, because it points to the points too.
-    //  // same applies to state.h_queries. |particles| from this point
-    //  // on will only be used to point to device queries used in kernels, and
-    //  // will be set right before launch using d_actQs.
-    //  thrust::device_ptr<float3> d_actQs;
-    //  allocThrustDevicePtr(&d_actQs, state.numActQueries[i]);
-    //  copyIfIdMatch(particles, N, d_rayMask, d_actQs, i);
-    //  state.d_actQs[i] = thrust::raw_pointer_cast(d_actQs);
-
-    //  // Copy the active queries to host (for sanity check).
-    //  state.h_actQs[i] = new float3[state.numActQueries[i]];
-    //  thrust::copy(d_actQs, d_actQs + state.numActQueries[i], state.h_actQs[i]);
-    //}
-
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_rayMask) ) );
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );
 }

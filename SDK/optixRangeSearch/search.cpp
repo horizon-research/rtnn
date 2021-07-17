@@ -24,7 +24,8 @@ void search(WhittedState& state, int batch_id) {
       // we choose to approximate the early batches in radius earch, the result
       // might be incorrect. see:
       // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
-      //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) state.params.isApprox = true;
+      // TODO: put this in a cli switch?
+      if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) state.params.isApprox = true;
 
       state.params.radius = state.launchRadius[batch_id];
 
@@ -32,13 +33,11 @@ void search(WhittedState& state, int batch_id) {
       OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
     Timing::stopTiming(true);
 
-    // cudaMallocHost is time consuming; must be hidden behind async launch
     Timing::startTiming("result copy D2H");
       void* data;
       cudaMallocHost(reinterpret_cast<void**>(&data), numQueries * state.params.limit * sizeof(unsigned int));
       state.h_res[batch_id] = data;
 
-      // TODO: do a thrust copy?
       CUDA_CHECK( cudaMemcpyAsync(
                       static_cast<void*>( data ),
                       thrust::raw_pointer_cast(output_buffer),
