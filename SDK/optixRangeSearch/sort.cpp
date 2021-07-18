@@ -220,7 +220,8 @@ void prepBatches(std::vector<int>& batches, const thrust::host_vector<unsigned i
   unsigned int numMasks = h_rayHist.size();
   for (unsigned int i = 0; i < h_rayHist.size(); i++) {
     //batches.push_back(i);
-    if (i == 0 || i == numMasks - 1) batches.push_back(i);
+    //if (i == 0 || i == numMasks - 1) batches.push_back(i);
+    if (i <= 1 || i == numMasks - 1) batches.push_back(i);
   }
   assert(batches.size() <= numMasks);
 

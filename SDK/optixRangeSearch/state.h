@@ -69,7 +69,7 @@ struct WhittedState
     int                         dim;
     bool                        msr                       = true;
 
-    int32_t                     device_id                 = 1;
+    int32_t                     device_id                 = 0;
     std::string                 searchMode                = "radius";
     std::string                 pfile;
     std::string                 qfile;

@@ -344,4 +344,3 @@ bool isClose(float3 a, float3 b) {
   if (fabs(a.x - b.x) < 0.001 && fabs(a.y - b.y) < 0.001 && fabs(a.z - b.z) < 0.001) return true;
   else return false;
 }
-
