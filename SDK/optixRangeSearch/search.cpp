@@ -15,11 +15,6 @@ void search(WhittedState& state, int batch_id) {
       thrust::device_ptr<unsigned int> output_buffer;
       allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit);
 
-      // unused slots will become UINT_MAX
-      CUDA_CHECK( cudaMemsetAsync ( thrust::raw_pointer_cast(output_buffer), 0xFF,
-                                    numQueries * state.params.limit * sizeof(unsigned int),
-                                    state.stream[batch_id] ) );
-
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map[batch_id];
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
 
