@@ -161,7 +161,7 @@ static void buildGas(
         // original size is smaller, so point d_gas_output_buffer directly to the original device GAS memory.
         d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
     }
-    fprintf(stdout, "\tGAS size: %lu MB\n", compacted_gas_size/(1024 * 1024));
+    fprintf(stdout, "\tGAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
 }
 
 CUdeviceptr createAABB( WhittedState& state, int batch_id )
@@ -512,17 +512,12 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
     unsigned int numQueries = state.numActQueries[batch_id];
     state.params.handle = state.gas_handle[batch_id];
     state.params.queries = state.d_actQs[batch_id];
+    state.params.frame_buffer = output_buffer;
 
     fprintf(stdout, "\tLaunch %u (%f) queries\n", numQueries, (float)numQueries/(float)state.numQueries);
     fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
     fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
     fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
-
-    state.params.frame_buffer = output_buffer;
-    // unused slots will become UINT_MAX
-    CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,
-                                  numQueries * state.params.limit * sizeof(unsigned int),
-                                  state.stream[batch_id] ) );
 
     thrust::device_ptr<Params> d_params_ptr;
     state.d_params = allocThrustDevicePtr(&d_params_ptr, 1);
