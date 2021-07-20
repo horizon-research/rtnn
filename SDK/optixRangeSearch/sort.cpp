@@ -216,12 +216,15 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   return d_cellMask;
 }
 
-void prepBatches(std::vector<int>& batches, const thrust::host_vector<unsigned int> h_rayHist) {
+void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int> h_rayHist) {
   unsigned int numMasks = h_rayHist.size();
-  for (unsigned int i = 0; i < h_rayHist.size(); i++) {
+  state.numOfBatches = 6;
+  unsigned int numBatches = std::min(state.numOfBatches, (int)numMasks);
+
+  for (unsigned int i = 0; i < numMasks; i++) {
     //batches.push_back(i);
     //if (i == 0 || i == numMasks - 1) batches.push_back(i);
-    if (i <= 1 || i == numMasks - 1) batches.push_back(i);
+    if (i <= numBatches - 2 || i == numMasks - 1) batches.push_back(i);
   }
   assert(batches.size() <= numMasks);
 
@@ -364,7 +367,7 @@ void sortGenBatch(WhittedState& state,
     // TODO: does it make sense to do non-consecutive batches?
     // |batches| will contain the last mask of each batch.
     std::vector<int> batches;
-    prepBatches(batches, h_rayHist);
+    prepBatches(state, batches, h_rayHist);
     state.numOfBatches = batches.size();
     fprintf(stdout, "\tNumber of batches: %d\n", state.numOfBatches);
 

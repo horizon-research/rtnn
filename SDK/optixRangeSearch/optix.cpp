@@ -110,6 +110,7 @@ static void buildGas(
         1,
         &gas_buffer_sizes));
 
+printf("tempSizeInBytes: %f MB\n", (float)gas_buffer_sizes.tempSizeInBytes/1024/1024);
     CUDA_CHECK( cudaMalloc(
         reinterpret_cast<void**>( &d_temp_buffer_gas ),
         gas_buffer_sizes.tempSizeInBytes));
@@ -117,6 +118,7 @@ static void buildGas(
     // non-compacted output and size of compacted GAS
     CUdeviceptr d_buffer_temp_output_gas_and_compacted_size;
     size_t compactedSizeOffset = roundUp<size_t>( gas_buffer_sizes.outputSizeInBytes, 8ull );
+printf("alloc size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
     CUDA_CHECK( cudaMalloc(
                 reinterpret_cast<void**>( &d_buffer_temp_output_gas_and_compacted_size ),
                 compactedSizeOffset + 8
@@ -141,6 +143,7 @@ static void buildGas(
         1) );
 
     state.d_temp_buffer_gas[batch_id] = reinterpret_cast<void*>(d_temp_buffer_gas);
+    CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[batch_id] ) );
 
     size_t compacted_gas_size;
     CUDA_CHECK( cudaMemcpyAsync( &compacted_gas_size, (void*)emitProperty.result, sizeof(size_t), cudaMemcpyDeviceToHost, state.stream[batch_id] ) );
@@ -153,8 +156,8 @@ static void buildGas(
         // use handle as input and output
         OPTIX_CHECK( optixAccelCompact( state.context, state.stream[batch_id], gas_handle, d_gas_output_buffer, compacted_gas_size, &gas_handle ) );
 
-        state.d_buffer_temp_output_gas_and_compacted_size[batch_id] = (void*)d_buffer_temp_output_gas_and_compacted_size;
-        //CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
+        //state.d_buffer_temp_output_gas_and_compacted_size[batch_id] = (void*)d_buffer_temp_output_gas_and_compacted_size;
+        CUDA_CHECK( cudaFree( (void*)d_buffer_temp_output_gas_and_compacted_size ) );
     }
     else
     {
@@ -570,13 +573,13 @@ void cleanupState( WhittedState& state )
       delete state.h_actQs[i];
 
       CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
-      CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
+      //CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
       if (state.d_r2q_map[i])
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map[i]     ) ) );
 
       // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
-      if (reinterpret_cast<void*>(state.d_gas_output_buffer[i]) != state.d_buffer_temp_output_gas_and_compacted_size[i] )
-        CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
+      //if (reinterpret_cast<void*>(state.d_gas_output_buffer[i]) != state.d_buffer_temp_output_gas_and_compacted_size[i] )
+      //  CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[i] ) ) );
     }
 

@@ -61,17 +61,18 @@ inline __host__ __device__
 void addCount(unsigned int& count, unsigned int* CellParticleCounts, GridInfo gridInfo, int ix, int iy, int iz, bool morton) {
     if (oob(gridInfo, ix, iy, iz)) return;
 
-    // TODO: weird bug on RTX 2080Ti GPU, nvcc V10.0.130, Driver Version: 470.42.01, and CUDA Version: 11.4
+    // TODO: weird bug using nvcc V10.0.130, Driver Version: 470.42.01, and CUDA Version: 11.4
     // (https://forums.developer.nvidia.com/t/weird-bug-involving-the-way-to-pass-parameters-to-kernels/183890)
     // that the returned result from getCellIdx is incorrect.
+    // Fixed when using nvcc 11.3/.4, which, however, doesn't compile with thrust v101201. manually downgrading thrust.
 
-    //unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
-    int3 cell = make_int3(ix, iy, iz);
-    unsigned int iCellIdx;
-    if (morton)
-      iCellIdx = ToCellIndex_MortonMetaGrid(gridInfo, cell);
-    else
-      iCellIdx = (cell.x * gridInfo.GridDimension.y + cell.y) * gridInfo.GridDimension.z + cell.z;
+    unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
+    //int3 cell = make_int3(ix, iy, iz);
+    //unsigned int iCellIdx;
+    //if (morton)
+    //  iCellIdx = ToCellIndex_MortonMetaGrid(gridInfo, cell);
+    //else
+    //  iCellIdx = (cell.x * gridInfo.GridDimension.y + cell.y) * gridInfo.GridDimension.z + cell.z;
 
     count += CellParticleCounts[iCellIdx];
     //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
@@ -92,16 +93,17 @@ void calcSearchSize(int3 gridCell,
   int y = gridCell.y;
   int z = gridCell.z;
 
-  // TODO: weird bug on RTX 2080Ti GPU, nvcc V10.0.130, Driver Version: 470.42.01, and CUDA Version: 11.4
+  // TODO: weird bug using nvcc V10.0.130, Driver Version: 470.42.01, and CUDA Version: 11.4
   // (https://forums.developer.nvidia.com/t/weird-bug-involving-the-way-to-pass-parameters-to-kernels/183890)
   // that the returned result from getCellIdx is incorrect.
+  // Fixed when using nvcc 11.3/.4, which, however, doesn't compile with thrust v101201. manually downgrading thrust.
 
-  //unsigned int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
-  unsigned int cellIndex;
-  if (morton)
-    cellIndex = ToCellIndex_MortonMetaGrid(gridInfo, gridCell);
-  else
-    cellIndex = (gridCell.x * gridInfo.GridDimension.y + gridCell.y) * gridInfo.GridDimension.z + gridCell.z;
+  unsigned int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
+  //unsigned int cellIndex;
+  //if (morton)
+  //  cellIndex = ToCellIndex_MortonMetaGrid(gridInfo, gridCell);
+  //else
+  //  cellIndex = (gridCell.x * gridInfo.GridDimension.y + gridCell.y) * gridInfo.GridDimension.z + gridCell.z;
 
 
   //if (x == 283 && y == 10 && z == 418) printf("cell %d has %d particles. morton? %d\n", cellIndex, CellParticleCounts[cellIndex], morton);
