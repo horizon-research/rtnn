@@ -203,6 +203,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.msr = (bool)(atoi(argv[++i]));
       }
+      else if( arg == "--numbatch" || arg == "-nb" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.numOfBatches = atoi(argv[++i]);
+      }
       else if( arg == "--partition" || arg == "-p" )
       {
           if( i >= argc - 1 )

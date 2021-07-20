@@ -217,16 +217,15 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
 }
 
 void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int> h_rayHist) {
-  unsigned int numMasks = h_rayHist.size();
-  state.numOfBatches = 6;
-  unsigned int numBatches = std::min(state.numOfBatches, (int)numMasks);
+  int numMasks = (int)h_rayHist.size();
+  int numBatches = std::min(state.numOfBatches, (int)numMasks);
 
-  for (unsigned int i = 0; i < numMasks; i++) {
+  for (int i = 0; i < numMasks; i++) {
     //batches.push_back(i);
     //if (i == 0 || i == numMasks - 1) batches.push_back(i);
     if (i <= numBatches - 2 || i == numMasks - 1) batches.push_back(i);
   }
-  assert(batches.size() <= numMasks);
+  assert(batches.size() <= (unsigned int)numBatches);
 
   //int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
   //int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
