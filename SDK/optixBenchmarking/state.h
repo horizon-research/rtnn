@@ -71,7 +71,7 @@ struct WhittedState
 
     int32_t                     device_id                 = 0;
     std::string                 searchMode                = "radius";
-    std::string                 isType                    = "emptyIS";
+    std::string                 isType                    = "approx";
     std::string                 pfile;
     std::string                 qfile;
     unsigned int                knn                       = 50;

@@ -67,21 +67,22 @@ int main( int argc, char* argv[] )
     uploadData(state);
 
     /* GAS creation benchmarking */
-    //{
-    //  setupSearch(state);
-    //  state.numOfBatches = 1;
-    //  unsigned int numPoints = state.numPoints;
-    //  for (int i = 1; i <= 200; i++) {
-    //    float frac = (float)i/200;
-    //    state.numPoints = numPoints * frac;
-    //    createGeometry (state, 0); // batch_id ignored if not partition.
-    //    CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
-    //    CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
-    //    if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
-    //      CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
-    //    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
-    //  }
-    //}
+    if (state.ubenchID == 3)
+    {
+      setupSearch(state);
+      state.numOfBatches = 1;
+      unsigned int numPoints = state.numPoints;
+      for (int i = 1; i <= 100; i++) {
+        float frac = (float)i/100;
+        state.numPoints = numPoints * frac;
+        createGeometry (state, 0); // batch_id ignored if not partition.
+        CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
+        CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
+        if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
+          CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
+        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
+      }
+    }
 
     // how knn/radius search time varies with the number of queries under different IS programs
     /* searchType: radius; isType: approx*/
@@ -116,7 +117,8 @@ int main( int argc, char* argv[] )
     // fix total points and get the average statistics for all queries
     // rebuild the gas with every new R
     /* searchType: knn; isType: countIS */
-    else if (state.ubenchID == 1)
+    // TODO: check searchType and isType with ubenchID
+    if (state.ubenchID == 1)
     {
       sortParticles(state, POINT, 1);
       setupSearch(state);
@@ -153,7 +155,7 @@ int main( int argc, char* argv[] )
 
     // same as above, but we now get the data for queries at different density fields
     /* searchType: knn; isType: countIS */
-    else if (state.ubenchID == 2)
+    if (state.ubenchID == 2)
     {
       state.partition = 1;
       sortParticles(state, POINT, 1);
