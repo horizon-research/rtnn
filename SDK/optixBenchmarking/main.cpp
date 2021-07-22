@@ -162,8 +162,8 @@ int main( int argc, char* argv[] )
       fprintf(stdout, "Scene size: %f, %f, %f\n", sceneSize.x, sceneSize.y, sceneSize.z);
       state.radius = std::min(sceneSize.x / 10, 15.0f);
       float radius = state.radius;
-      for (int b = 0; b < state.numOfBatches; b++) {
-      //for (int b = 0; b < 1; b++) {
+      //for (int b = 0; b < state.numOfBatches; b++) {
+      for (int b = state.numOfBatches - 1; b < state.numOfBatches; b++) {
         fprintf(stdout, "\tBatch %d\n", b);
         //unsigned int numActQs = state.numActQueries[b]; // uncomment this to sweep the # of queries in a batch
         //for (int j = 1; j <= 4; j++) {

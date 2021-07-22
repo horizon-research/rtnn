@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <queue>
 #include <unordered_set>
+#include <float.h>
 
 #include "optixRangeSearch.h"
 #include "func.h"
@@ -216,20 +217,86 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   return d_cellMask;
 }
 
-void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int> h_rayHist) {
-  int numMasks = (int)h_rayHist.size();
-  int numBatches = std::min(state.numOfBatches, (int)numMasks);
+void expPrepBatchesKNN(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
+  // The logic is: given CR (which has been decided beforehand), we know that max # of available batches (|numAvailBatches|). launching as many batches as available minimizes the work, but also introduces gas building overhead.
+  // so we build a cost model = gas building time + searching time.
+  // GAS building time is linear w.r.t. to the # of AABBs, which is the total amount of points.
+  // Searching time = max(memcpy time, compute time).
+  // The memcpy time is empirically observed to be linear w.r.t., to the # of queries
+  // The compute time, without considering CKE, is the lump sum of the compute time of each batch, which is linear w.r.t. the # of queries in the batch and cubic w.r.t., to the radius in the batch.
 
-  for (int i = 0; i < numMasks; i++) {
-    //batches.push_back(i);
-    //if (i == 0 || i == numMasks - 1) batches.push_back(i);
-    if (i <= numBatches - 2 || i == numMasks - 1) batches.push_back(i);
+  // empirical coefficients on 2080Ti
+  const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte
+  const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
+  const float kSearch_PerN_PerR2 = 7.5e-4; // knn search time in *ms* per # of queries per R^2 (in KITTI # of IS calls is quadratic to R^2, but should be R^3 of points are randomly distributed)
+
+  float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB;
+  float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
+  float cellSize = state.radius / state.crRatio;
+
+  // calculate the total work if every available batch is an independent launch
+  float maxWidth = kGetWidthFromIter(numAvailBatches - 1, cellSize);
+  float maxRadius = std::min(state.radius, (float)(maxWidth / 2 * sqrt(2)));
+  float totalWork = 0;
+  float minTime = FLT_MAX;
+  int minId = numAvailBatches - 1;
+  for (int i = 0; i < numAvailBatches - 1; i++) {
+    float curWidth = kGetWidthFromIter(i, cellSize);
+    float curRadius = (float)(curWidth / 2 * sqrt(2));
+    totalWork += h_rayHist[i] * curRadius * curRadius;
   }
-  assert(batches.size() <= (unsigned int)numBatches);
+  totalWork += h_rayHist[numAvailBatches - 1] * maxRadius * maxRadius;
+printf("numAvailBatches: %d\n", numAvailBatches);
+printf("totalWork: %f\n", totalWork);
 
-  //int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
-  //int histCount = maxIter + 3; // 0: empty cell counts; 1 -- maxIter+1: real counts; maxIter+2: full search counts.
-  //state.numOfBatches = histCount - 1;
+  // incrementally combine batch i with the last batch (assuming all other
+  // batches are independent) and calculate the cost. choose the min cost.
+  float curWork = 0;
+  for (int i = numAvailBatches - 1; i >= 0; i--) {
+    float curWidth = kGetWidthFromIter(i, cellSize);
+    float curRadius = std::min(state.radius, (float)(curWidth / 2 * sqrt(2)));
+
+    // TODO: cubic later.
+    float deltaWork = h_rayHist[i] * (maxRadius * maxRadius - curRadius * curRadius);
+    curWork += (totalWork + deltaWork);
+    float curSearchTime = std::max(curWork * kSearch_PerN_PerR2, tMemcpy);
+    float curTime = curSearchTime + tBuildGAS * (i + 1);
+printf("curWork: %f, memcpy: %f, curSearchTime: %f, gas time: %f, curTime: %f\n", curWork, tMemcpy, curSearchTime, tBuildGAS * (i + 1), curTime);
+    if (curTime < minTime) {
+      minTime = curTime;
+      minId = i;
+    }
+    //if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
+  }
+
+  for (int i = 0; i <= minId - 1; i++) {
+    batches.push_back(i);
+  }
+  batches.push_back(numAvailBatches - 1);
+printf("%lu\n", batches.size());
+}
+
+void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int>& h_rayHist) {
+  int numAvailBatches = (int)h_rayHist.size();
+  bool exp = true;
+
+  if (state.searchMode == "radius") {
+    // if we choose not to approx the earlier batches (in |search|) to gaurantee correctness, then batching only introduces overhead.
+    // TODO: revisit this if we come up with a more robost approx logic, potentially when nvidia provides some error bounds.
+    batches.push_back(numAvailBatches - 1);
+  } else {
+    if (exp) expPrepBatchesKNN(state, h_rayHist, batches, numAvailBatches);
+    else {
+      int numBatches;
+      if (state.numOfBatches == -1) numBatches = (int)numAvailBatches;
+      else numBatches = std::min(state.numOfBatches, (int)numAvailBatches);
+
+      for (int i = 0; i < numAvailBatches; i++) {
+        if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
+      }
+      assert(batches.size() <= (unsigned int)numBatches);
+    }
+  }
 }
 
 void genBatches(WhittedState& state,
@@ -270,6 +337,7 @@ void genBatches(WhittedState& state,
     state.d_actQs[batchId] = thrust::raw_pointer_cast(d_actQs);
 
     // Copy the active queries to host (for sanity check).
+    // TODO: is this redundant give the copy at the end of |gridSort|?
     state.h_actQs[batchId] = new float3[numActQs];
     thrust::copy(d_actQs, d_actQs + numActQs, state.h_actQs[batchId]);
 
@@ -351,7 +419,7 @@ void sortGenBatch(WhittedState& state,
     //exit(1);
 
     // get a histogram of d_rayMask, which won't be mutated. this needs to happen before sorting |d_rayMask|.
-    // the last mask in the histogram indicates full search.
+    // the last mask in the histogram indicates the number of rays that need full search.
     thrust::device_vector<unsigned int> d_rayHist;
     unsigned int numMasks = thrustGenHist(d_rayMask, d_rayHist, N);
     thrust::host_vector<unsigned int> h_rayHist(numMasks);

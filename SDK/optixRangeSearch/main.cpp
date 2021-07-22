@@ -69,6 +69,7 @@ int main( int argc, char* argv[] )
     uploadData(state);
 
     // if partition is enabled, we do it here too, which generate batches.
+    // TODO: enable partition when !samepq.
     sortParticles(state, POINT, state.pointSortMode);
     // when samepq, queries have been are sorted using the point sort mode so
     // no need to sort queries again.
@@ -79,6 +80,9 @@ int main( int argc, char* argv[] )
     if (state.interleave) {
       for (int i = 0; i < state.numOfBatches; i++) {
         if (state.numActQueries[i] == 0) continue;
+	// TODO: group buildGas together to allow overlapping; this would allow
+	// us to batch-free temp storages and non-compacted gas storages. right
+	// now free storage serializes gas building.
         createGeometry (state, i); // batch_id ignored if not partition.
       }
 
@@ -89,6 +93,7 @@ int main( int argc, char* argv[] )
 
       for (int i = 0; i < state.numOfBatches; i++) {
         if (state.numActQueries[i] == 0) continue;
+        // TODO: when K is too big, we can't launch all rays together. split rays.
         search(state, i);
       }
     } else {

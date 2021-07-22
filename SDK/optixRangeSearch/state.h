@@ -101,7 +101,7 @@ struct WhittedState
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
 
     int*                        d_cellMask                = nullptr;
-    int                         numOfBatches              = 1;
+    int                         numOfBatches              = -1;
     int                         maxBatchCount             = 1;
 
     float3                      Min;

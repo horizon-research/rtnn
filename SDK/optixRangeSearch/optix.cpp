@@ -110,15 +110,16 @@ static void buildGas(
         1,
         &gas_buffer_sizes));
 
-printf("tempSizeInBytes: %f MB\n", (float)gas_buffer_sizes.tempSizeInBytes/1024/1024);
+    fprintf(stdout, "\tTemp storage for initial building: %f MB\n", (float)gas_buffer_sizes.tempSizeInBytes/1024/1024);
+    // temporary storage for building the initial, non-compacted tree
     CUDA_CHECK( cudaMalloc(
         reinterpret_cast<void**>( &d_temp_buffer_gas ),
         gas_buffer_sizes.tempSizeInBytes));
 
-    // non-compacted output and size of compacted GAS
+    // non-compacted output and size of compacted GAS.
     CUdeviceptr d_buffer_temp_output_gas_and_compacted_size;
     size_t compactedSizeOffset = roundUp<size_t>( gas_buffer_sizes.outputSizeInBytes, 8ull );
-printf("alloc size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
+    fprintf(stdout, "\tNon-compacted GAS size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
     CUDA_CHECK( cudaMalloc(
                 reinterpret_cast<void**>( &d_buffer_temp_output_gas_and_compacted_size ),
                 compactedSizeOffset + 8
@@ -142,6 +143,7 @@ printf("alloc size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
         &emitProperty,
         1) );
 
+    // once the initial tree is built, the temporary storage used for building the tree could be freed/
     state.d_temp_buffer_gas[batch_id] = reinterpret_cast<void*>(d_temp_buffer_gas);
     CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[batch_id] ) );
 
@@ -150,7 +152,7 @@ printf("alloc size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
 
     if( compacted_gas_size < gas_buffer_sizes.outputSizeInBytes )
     {
-        // compacted size is smaller, so store the compacted GAS in new device memory and free the original GAS memory (delayed to to the end).
+        // compacted size is smaller, so store the compacted GAS in new device memory and free the original GAS memory/
         CUDA_CHECK( cudaMalloc( reinterpret_cast<void**>( &d_gas_output_buffer ), compacted_gas_size ) );
 
         // use handle as input and output
@@ -164,7 +166,7 @@ printf("alloc size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
         // original size is smaller, so point d_gas_output_buffer directly to the original device GAS memory.
         d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
     }
-    fprintf(stdout, "\tGAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
+    fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
 }
 
 CUdeviceptr createAABB( WhittedState& state, int batch_id )
