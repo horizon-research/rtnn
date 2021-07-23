@@ -84,6 +84,7 @@ struct WhittedState
     bool                        samepq                    = false;
     bool                        interleave                = true;
     bool                        partition                 = false;
+    bool                        autoNB                    = false;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;

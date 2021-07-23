@@ -217,7 +217,7 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   return d_cellMask;
 }
 
-void expPrepBatchesKNN(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
+void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
   // The logic is: given CR (which has been decided beforehand), we know that max # of available batches (|numAvailBatches|). launching as many batches as available minimizes the work, but also introduces gas building overhead.
   // so we build a cost model = gas building time + searching time.
   // GAS building time is linear w.r.t. to the # of AABBs, which is the total amount of points.
@@ -226,67 +226,63 @@ void expPrepBatchesKNN(WhittedState& state, const thrust::host_vector<unsigned i
   // The compute time, without considering CKE, is the lump sum of the compute time of each batch, which is linear w.r.t. the # of queries in the batch and cubic w.r.t., to the radius in the batch.
 
   // empirical coefficients on 2080Ti
-  const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte
+  //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
   const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
-  const float kSearch_PerN_PerR2 = 7.5e-4; // knn search time in *ms* per # of queries per R^2 (in KITTI # of IS calls is quadratic to R^2, but should be R^3 of points are randomly distributed)
+  const float kSearch_PerIS = 6e-6; // knn search time in *ms* per IS call
 
-  float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB;
+  //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
+  //float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 2; // 2 is the empirical intercept (TODO)
   float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
   float cellSize = state.radius / state.crRatio;
+  fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
   // calculate the total work if every available batch is an independent launch
   float maxWidth = kGetWidthFromIter(numAvailBatches - 1, cellSize);
   float maxRadius = std::min(state.radius, (float)(maxWidth / 2 * sqrt(2)));
-  float totalWork = 0;
-  float minTime = FLT_MAX;
-  int minId = numAvailBatches - 1;
-  for (int i = 0; i < numAvailBatches - 1; i++) {
-    float curWidth = kGetWidthFromIter(i, cellSize);
-    float curRadius = (float)(curWidth / 2 * sqrt(2));
-    totalWork += h_rayHist[i] * curRadius * curRadius;
-  }
-  totalWork += h_rayHist[numAvailBatches - 1] * maxRadius * maxRadius;
-printf("numAvailBatches: %d\n", numAvailBatches);
-printf("totalWork: %f\n", totalWork);
-
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
-  float curWork = 0;
-  for (int i = numAvailBatches - 1; i >= 0; i--) {
+  float overhead = 0;
+  float maxOverhead = FLT_MAX;
+  int splitId = numAvailBatches - 2;
+  for (int i = numAvailBatches - 2; i >= 0; i--) {
     float curWidth = kGetWidthFromIter(i, cellSize);
     float curRadius = std::min(state.radius, (float)(curWidth / 2 * sqrt(2)));
+    float density = state.knn / ((curWidth - cellSize) * (curWidth - cellSize) * (curWidth - cellSize));
 
-    // TODO: cubic later.
-    float deltaWork = h_rayHist[i] * (maxRadius * maxRadius - curRadius * curRadius);
-    curWork += (totalWork + deltaWork);
-    float curSearchTime = std::max(curWork * kSearch_PerN_PerR2, tMemcpy);
-    float curTime = curSearchTime + tBuildGAS * (i + 1);
-printf("curWork: %f, memcpy: %f, curSearchTime: %f, gas time: %f, curTime: %f\n", curWork, tMemcpy, curSearchTime, tBuildGAS * (i + 1), curTime);
-    if (curTime < minTime) {
-      minTime = curTime;
-      minId = i;
+    float extraWork = h_rayHist[i] * (maxRadius * maxRadius - curRadius * curRadius) * density; // TODO: assuming density doesn't change dramatically; consider non-uniform density?
+    float extraTime = extraWork * kSearch_PerIS;
+    overhead += extraTime - tBuildGAS;
+    fprintf(stdout, "i: %d, density: %f, extraWork: %f, extraTime: %f, overhead: %f\n", i, density, extraWork, extraTime, overhead);
+    if (overhead < maxOverhead) {
+      maxOverhead = overhead;
+      splitId = i;
     }
+
     //if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
   }
 
-  for (int i = 0; i <= minId - 1; i++) {
+  for (int i = 0; i <= splitId - 1; i++) {
     batches.push_back(i);
   }
   batches.push_back(numAvailBatches - 1);
-printf("%lu\n", batches.size());
 }
 
 void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int>& h_rayHist) {
   int numAvailBatches = (int)h_rayHist.size();
-  bool exp = true;
+  fprintf(stdout, "\tnumAvailBatches: %d\n", numAvailBatches);
 
   if (state.searchMode == "radius") {
     // if we choose not to approx the earlier batches (in |search|) to gaurantee correctness, then batching only introduces overhead.
     // TODO: revisit this if we come up with a more robost approx logic, potentially when nvidia provides some error bounds.
     batches.push_back(numAvailBatches - 1);
   } else {
-    if (exp) expPrepBatchesKNN(state, h_rayHist, batches, numAvailBatches);
+    if (state.autoNB) autoBatchingKNN(state, h_rayHist, batches, numAvailBatches);
     else {
+      if (numAvailBatches == 1) {
+        batches.push_back(0);
+        return;
+      }
+
       int numBatches;
       if (state.numOfBatches == -1) numBatches = (int)numAvailBatches;
       else numBatches = std::min(state.numOfBatches, (int)numAvailBatches);

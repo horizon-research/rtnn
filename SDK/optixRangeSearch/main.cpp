@@ -45,6 +45,7 @@ int main( int argc, char* argv[] )
   std::cout << "K: " << state.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
   std::cout << "Partition? " << std::boolalpha << state.partition << std::endl;
+  std::cout << "Auto batching? " << std::boolalpha << state.autoNB << std::endl;
   std::cout << "Interleave? " << std::boolalpha << state.interleave << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;

@@ -144,6 +144,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --partition     | -p              Allow query partition?\n";
     std::cerr << "         --partthd       | -pt             The threshold between query partitions\n";
     std::cerr << "         --samepq        | -spq            Same points and queries?\n";
+    std::cerr << "         --autobatch     | -ab             Automatically determining batches?\n";
     std::cerr << "         --device        | -d              Which GPU to use?\n";
     std::cerr << "         --gassort       | -s              GAS-based query sort mode\n";
     std::cerr << "         --pointsort     | -ps             Point sort mode\n";
@@ -151,7 +152,6 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --crratio       | -cr             cell/radius ratio\n";
     std::cerr << "         --sortingGAS    | -sg             Param for SortingGAS\n";
     std::cerr << "         --gather        | -g              Whether to gather queries after sort \n";
-    std::cerr << "         --reorderpoints | -rp             Whether to reorder points after query sort \n";
     std::cerr << "         --help          | -h              Print this usage message\n";
     exit( 0 );
 }
@@ -182,7 +182,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.knn = atoi(argv[++i]);
       }
-      else if( arg == "--searchmode" || arg == "-sm" ) // need to be after --knn so that we can overwrite state.knn if needed
+      else if( arg == "--searchmode" || arg == "-sm" )
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
@@ -207,7 +207,13 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.numOfBatches = atoi(argv[++i]);
+          state.numOfBatches = atoi(argv[++i]); // only used if ab is not enabled; nb==-1 means using the max available batch, otherwise the # of batches to launch = min(avail batches, nb)
+      }
+      else if( arg == "--autobatch" || arg == "-ab" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.autoNB = (bool)(atoi(argv[++i])); // if enabled, ignore nb
       }
       else if( arg == "--partition" || arg == "-p" )
       {
@@ -280,7 +286,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
       }
   }
 
-  // do a round of sanity check here
+  // if search mode is knn, overwrite knn
   if (state.searchMode == "knn")
     state.knn = K; // a macro
 

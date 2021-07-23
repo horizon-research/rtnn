@@ -110,7 +110,7 @@ static void buildGas(
         1,
         &gas_buffer_sizes));
 
-    fprintf(stdout, "\tTemp storage for initial building: %f MB\n", (float)gas_buffer_sizes.tempSizeInBytes/1024/1024);
+    //fprintf(stdout, "\tTemp storage for initial building: %f MB\n", (float)gas_buffer_sizes.tempSizeInBytes/1024/1024);
     // temporary storage for building the initial, non-compacted tree
     CUDA_CHECK( cudaMalloc(
         reinterpret_cast<void**>( &d_temp_buffer_gas ),
@@ -119,7 +119,7 @@ static void buildGas(
     // non-compacted output and size of compacted GAS.
     CUdeviceptr d_buffer_temp_output_gas_and_compacted_size;
     size_t compactedSizeOffset = roundUp<size_t>( gas_buffer_sizes.outputSizeInBytes, 8ull );
-    fprintf(stdout, "\tNon-compacted GAS size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
+    //fprintf(stdout, "\tNon-compacted GAS size: %f MB\n", (float)(compactedSizeOffset + 8)/1024/1024);
     CUDA_CHECK( cudaMalloc(
                 reinterpret_cast<void**>( &d_buffer_temp_output_gas_and_compacted_size ),
                 compactedSizeOffset + 8
@@ -166,7 +166,7 @@ static void buildGas(
         // original size is smaller, so point d_gas_output_buffer directly to the original device GAS memory.
         d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
     }
-    fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
+    //fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
 }
 
 CUdeviceptr createAABB( WhittedState& state, int batch_id )
