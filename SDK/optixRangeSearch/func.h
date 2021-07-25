@@ -94,7 +94,7 @@ void gatherQueries(WhittedState&, thrust::device_ptr<unsigned int>, int);
 
 void kGenAABB(float3*, float, unsigned int, OptixAabb*, cudaStream_t);
 void uploadData(WhittedState&);
-void createGeometry(WhittedState&, int);
+void createGeometry(WhittedState&, int, float);
 void launchSubframe(unsigned int*, WhittedState&, int);
 void initLaunchParams(WhittedState&);
 void setupOptiX(WhittedState&);

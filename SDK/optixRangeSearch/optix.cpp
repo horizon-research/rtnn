@@ -169,17 +169,25 @@ static void buildGas(
     //fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
 }
 
-CUdeviceptr createAABB( WhittedState& state, int batch_id )
+CUdeviceptr createAABB( WhittedState& state, int batch_id, float radius )
 {
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
 
-  float radius = state.launchRadius[batch_id] / state.sortingGAS;
+  //float radius = state.launchRadius[batch_id] / state.gsrRatio;
   //std::cout << "\tAABB radius: " << radius << std::endl;
   //std::cout << "\tnum of points in GAS: " << numPrims << std::endl;
 
-  thrust::device_ptr<OptixAabb> d_aabb_ptr;
-  OptixAabb* d_aabb = allocThrustDevicePtr(&d_aabb_ptr, numPrims);
+  OptixAabb* d_aabb;
+  if (state.d_aabb[batch_id] == nullptr) {
+    thrust::device_ptr<OptixAabb> d_aabb_ptr;
+    d_aabb = allocThrustDevicePtr(&d_aabb_ptr, numPrims);
+  } else {
+    // if pointers are not null, simply reuse the previously allocated device
+    // memory to save memory consumption and/or free overhead. this can happen
+    // when |gsrRatio| isn't 1.
+    d_aabb = reinterpret_cast<OptixAabb*>(state.d_aabb[batch_id]);
+  }
 
   kGenAABB(state.params.points,
            radius,
@@ -191,10 +199,10 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
   return reinterpret_cast<CUdeviceptr>(d_aabb);
 }
 
-void createGeometry( WhittedState& state, int batch_id )
+void createGeometry( WhittedState& state, int batch_id, float radius )
 {
   Timing::startTiming("create and upload geometry");
-    CUdeviceptr d_aabb = createAABB(state, batch_id);
+    CUdeviceptr d_aabb = createAABB(state, batch_id, radius);
 
     unsigned int numPrims = state.numPoints;
 

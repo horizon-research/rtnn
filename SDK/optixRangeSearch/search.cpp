@@ -64,7 +64,7 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch
 
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
     state.params.isApprox = true;
-    state.params.radius = state.launchRadius[batch_id];
+    state.params.radius = state.launchRadius[batch_id]; // doesn't quite matter since we never check radius in approx mode
 
     launchSubframe( thrust::raw_pointer_cast(output_buffer), state, batch_id );
     // TODO: could delay this until sort, but initial traversal is lightweight anyways

@@ -137,22 +137,22 @@ void printUsageAndExit( const char* argv0 )
 {
     std::cerr << "Usage  : " << argv0 << " [options]\n";
     std::cerr << "Usage  : " << argv0 << " [options]\n";
-    std::cerr << "Options: --file          | -f <filename>   File for point cloud input\n";
-    std::cerr << "         --searchmode    | -sm             Search mode; can only be \"knn\" or \"radius\" \n";
-    std::cerr << "         --radius        | -r              Search radius\n";
-    std::cerr << "         --knn           | -k              Max K returned\n";
-    std::cerr << "         --partition     | -p              Allow query partition?\n";
-    std::cerr << "         --partthd       | -pt             The threshold between query partitions\n";
-    std::cerr << "         --samepq        | -spq            Same points and queries?\n";
-    std::cerr << "         --autobatch     | -ab             Automatically determining batches?\n";
-    std::cerr << "         --device        | -d              Which GPU to use?\n";
-    std::cerr << "         --gassort       | -s              GAS-based query sort mode\n";
-    std::cerr << "         --pointsort     | -ps             Point sort mode\n";
-    std::cerr << "         --querysort     | -qs             Query sort mode\n";
-    std::cerr << "         --crratio       | -cr             cell/radius ratio\n";
-    std::cerr << "         --sortingGAS    | -sg             Param for SortingGAS\n";
-    std::cerr << "         --gather        | -g              Whether to gather queries after sort \n";
-    std::cerr << "         --help          | -h              Print this usage message\n";
+    std::cerr << "Options: --file            | -f <filename>   File for point cloud input\n";
+    std::cerr << "         --searchmode      | -sm             Search mode; can only be \"knn\" or \"radius\" \n";
+    std::cerr << "         --radius          | -r              Search radius\n";
+    std::cerr << "         --knn             | -k              Max K returned\n";
+    std::cerr << "         --partition       | -p              Allow query partition?\n";
+    std::cerr << "         --partthd         | -pt             The threshold between query partitions\n";
+    std::cerr << "         --samepq          | -spq            Same points and queries?\n";
+    std::cerr << "         --autobatch       | -ab             Automatically determining batches?\n";
+    std::cerr << "         --device          | -d              Which GPU to use?\n";
+    std::cerr << "         --gassort         | -s              GAS-based query sort mode\n";
+    std::cerr << "         --pointsort       | -ps             Point sort mode\n";
+    std::cerr << "         --querysort       | -qs             Query sort mode\n";
+    std::cerr << "         --crratio         | -cr             cell/radius ratio\n";
+    std::cerr << "         --gsrRatio        | -sg             Radius ratio used in gas sort\n";
+    std::cerr << "         --gather          | -g              Whether to gather queries after sort \n";
+    std::cerr << "         --help            | -h              Print this usage message\n";
     exit( 0 );
 }
 
@@ -271,12 +271,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
       }
-      else if( arg == "--sortingGAS" || arg == "-sg" )
+      else if( arg == "--gsrRatio" || arg == "-sg" )
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.sortingGAS = std::stof(argv[++i]);
-          if (state.sortingGAS <= 0)
+          state.gsrRatio = std::stof(argv[++i]);
+          if (state.gsrRatio <= 0)
               printUsageAndExit( argv[0] );
       }
       else

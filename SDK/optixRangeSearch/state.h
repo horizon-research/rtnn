@@ -79,7 +79,7 @@ struct WhittedState
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     float                       crRatio                   = 8; // celSize = radius / crRatio
-    float                       sortingGAS                = 1;
+    float                       gsrRatio                  = 1;
     bool                        toGather                  = false;
     bool                        samepq                    = false;
     bool                        interleave                = true;

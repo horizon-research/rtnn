@@ -52,7 +52,7 @@ int main( int argc, char* argv[] )
   std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
   std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
   std::cout << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2
-  std::cout << "sortingGAS: " << state.sortingGAS << std::endl; // only useful when qGasSortMode != 0
+  std::cout << "gsrRatio: " << state.gsrRatio << std::endl; // only useful when qGasSortMode != 0
   std::cout << "Gather? " << std::boolalpha << state.toGather << std::endl;
   std::cout << "========================================" << std::endl << std::endl;
 
@@ -83,16 +83,23 @@ int main( int argc, char* argv[] )
 
     if (state.interleave) {
       for (int i = 0; i < state.numOfBatches; i++) {
+        // it's possible that certain batches have 0 query (e.g., state.partThd too low).
         if (state.numActQueries[i] == 0) continue;
-	// TODO: group buildGas together to allow overlapping; this would allow
-	// us to batch-free temp storages and non-compacted gas storages. right
-	// now free storage serializes gas building.
-        createGeometry (state, i); // batch_id ignored if not partition.
+	    // TODO: group buildGas together to allow overlapping; this would allow
+	    // us to batch-free temp storages and non-compacted gas storages. right
+	    // now free storage serializes gas building.
+        createGeometry (state, i, state.launchRadius[i]/state.gsrRatio); // batch_id ignored if not partition.
       }
 
       for (int i = 0; i < state.numOfBatches; i++) {
         if (state.numActQueries[i] == 0) continue;
         if (state.qGasSortMode) gasSortSearch(state, i);
+      }
+
+      for (int i = 0; i < state.numOfBatches; i++) {
+        if (state.numActQueries[i] == 0) continue;
+        if (state.qGasSortMode && state.gsrRatio != 1)
+          createGeometry (state, i, state.launchRadius[i]);
       }
 
       for (int i = 0; i < state.numOfBatches; i++) {
@@ -102,15 +109,17 @@ int main( int argc, char* argv[] )
       }
     } else {
       for (int i = 0; i < state.numOfBatches; i++) {
-      //for (int i = 0; i < 1; i++) {
-        fprintf(stdout, "\n************** Batch %u **************\n", i);
-        // it's possible that certain batches have 0 query (e.g., state.partThd too low).
         if (state.numActQueries[i] == 0) continue;
 
         // create the GAS using the current order of points and the launchRadius of the current batch.
-        createGeometry (state, i); // batch_id ignored if not partition.
+        // TODO: does it make sense to have per-batch |gsrRatio|?
+        createGeometry (state, i, state.launchRadius[i]/state.gsrRatio); // batch_id ignored if not partition.
 
-        if (state.qGasSortMode) gasSortSearch(state, i);
+        if (state.qGasSortMode) {
+          gasSortSearch(state, i);
+          if (state.gsrRatio != 1)
+            createGeometry (state, i, state.launchRadius[i]);
+        }
 
         search(state, i);
       }
