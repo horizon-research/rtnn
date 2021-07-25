@@ -66,13 +66,13 @@ void addCount(unsigned int& count, unsigned int* CellParticleCounts, GridInfo gr
     // that the returned result from getCellIdx is incorrect.
     // Fixed when using nvcc 11.3/.4, which, however, doesn't compile with thrust v101201. manually downgrading thrust.
 
-    unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
-    //int3 cell = make_int3(ix, iy, iz);
-    //unsigned int iCellIdx;
-    //if (morton)
-    //  iCellIdx = ToCellIndex_MortonMetaGrid(gridInfo, cell);
-    //else
-    //  iCellIdx = (cell.x * gridInfo.GridDimension.y + cell.y) * gridInfo.GridDimension.z + cell.z;
+    //unsigned int iCellIdx = getCellIdx(gridInfo, ix, iy, iz, morton);
+    int3 cell = make_int3(ix, iy, iz);
+    unsigned int iCellIdx;
+    if (morton)
+      iCellIdx = ToCellIndex_MortonMetaGrid(gridInfo, cell);
+    else
+      iCellIdx = (cell.x * gridInfo.GridDimension.y + cell.y) * gridInfo.GridDimension.z + cell.z;
 
     count += CellParticleCounts[iCellIdx];
     //if (ix == 87 && iy == 22 && iz == 358) printf("[%d, %d, %d]\n", ix, iy, iz, iCellIdx);
@@ -98,12 +98,12 @@ void calcSearchSize(int3 gridCell,
   // that the returned result from getCellIdx is incorrect.
   // Fixed when using nvcc 11.3/.4, which, however, doesn't compile with thrust v101201. manually downgrading thrust.
 
-  unsigned int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
-  //unsigned int cellIndex;
-  //if (morton)
-  //  cellIndex = ToCellIndex_MortonMetaGrid(gridInfo, gridCell);
-  //else
-  //  cellIndex = (gridCell.x * gridInfo.GridDimension.y + gridCell.y) * gridInfo.GridDimension.z + gridCell.z;
+  //unsigned int cellIndex = getCellIdx(gridInfo, x, y, z, morton);
+  unsigned int cellIndex;
+  if (morton)
+    cellIndex = ToCellIndex_MortonMetaGrid(gridInfo, gridCell);
+  else
+    cellIndex = (gridCell.x * gridInfo.GridDimension.y + gridCell.y) * gridInfo.GridDimension.z + gridCell.z;
 
 
   //if (x == 283 && y == 10 && z == 418) printf("cell %d has %d particles. morton? %d\n", cellIndex, CellParticleCounts[cellIndex], morton);
