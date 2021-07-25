@@ -85,8 +85,8 @@ float kGetWidthFromIter(int, float);
 
 void sanityCheck(WhittedState&);
 
-void computeMinMax(WhittedState&, ParticleType);
-void gridSort(WhittedState&, ParticleType, bool);
+void computeMinMax(WhittedState&, unsigned, float3*);
+void gridSort(WhittedState&, unsigned int, float3*, float3*, bool);
 void sortParticles(WhittedState&, ParticleType, int);
 thrust::device_ptr<unsigned int> sortQueriesByFHCoord(WhittedState&, thrust::device_ptr<unsigned int>, int);
 thrust::device_ptr<unsigned int> sortQueriesByFHIdx(WhittedState&, thrust::device_ptr<unsigned int>, int);

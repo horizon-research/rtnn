@@ -26,18 +26,8 @@
 #include "state.h"
 #include "grid.h"
 
-void computeMinMax(WhittedState& state, ParticleType type)
+void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
 {
-  unsigned int N;
-  float3* particles;
-  if (type == POINT) {
-    N = state.numPoints;
-    particles = state.params.points;
-  } else {
-    N = state.numQueries;
-    particles = state.params.queries;
-  }
-
   // TODO: maybe use long since we are going to convert a float to its floor value?
   thrust::host_vector<int3> h_MinMax(2);
   h_MinMax[0] = make_int3(std::numeric_limits<int>().max(), std::numeric_limits<int>().max(), std::numeric_limits<int>().max());
@@ -430,20 +420,7 @@ void sortGenBatch(WhittedState& state,
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );
 }
 
-void gridSort(WhittedState& state, ParticleType type, bool morton) {
-  unsigned int N;
-  float3* particles;
-  float3* h_particles;
-  if (type == POINT) {
-    N = state.numPoints;
-    particles = state.params.points;
-    h_particles = state.h_points;
-  } else {
-    N = state.numQueries;
-    particles = state.params.queries;
-    h_particles = state.h_queries;
-  }
-
+void gridSort(WhittedState& state, unsigned int N, float3* particles, float3* h_particles, bool morton) {
   GridInfo gridInfo;
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
@@ -517,20 +494,8 @@ void gridSort(WhittedState& state, ParticleType type, bool morton) {
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr) ) );
 }
 
-void oneDSort ( WhittedState& state, ParticleType type ) {
+void oneDSort ( WhittedState& state, unsigned int N, float3* particles, float3* h_particles ) {
   // sort points/queries based on coordinates (x/y/z)
-  unsigned int N;
-  float3* particles;
-  float3* h_particles;
-  if (type == POINT) {
-    N = state.numPoints;
-    particles = state.params.points;
-    h_particles = state.h_points;
-  } else {
-    N = state.numQueries;
-    particles = state.params.queries;
-    h_particles = state.h_queries;
-  }
 
   // TODO: do this whole thing on GPU.
   // create 1d points as the sorting key and upload it to device memory
@@ -559,21 +524,34 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
   // 2: raster sort
   // 3: 1D sort
 
-  // even if sortMode == 0, but if partition is enabled, go ahead
+  // even if sortMode == 0, but if partition is enabled, go ahead.
   if (!sortMode && !state.partition) return;
+
+  unsigned int N;
+  float3* particles;
+  float3* h_particles;
+  if (type == POINT) {
+    N = state.numPoints;
+    particles = state.params.points;
+    h_particles = state.h_points;
+  } else {
+    N = state.numQueries;
+    particles = state.params.queries;
+    h_particles = state.h_queries;
+  }
 
   // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.
   std::string typeName = ((type == POINT) ? "points" : "queries");
   Timing::startTiming("sort " + typeName);
     if (sortMode == 3) {
-      oneDSort(state, type);
+      oneDSort(state, N, particles, h_particles);
     } else {
-      computeMinMax(state, type);
+      computeMinMax(state, N, particles);
 
       bool morton; // false for raster order
       if (sortMode == 1) morton = true;
       else morton = false;
-      gridSort(state, type, morton);
+      gridSort(state, N, particles, h_particles, morton);
     }
   Timing::stopTiming(true);
 }
