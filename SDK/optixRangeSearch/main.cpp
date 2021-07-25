@@ -19,7 +19,8 @@ void setDevice ( WhittedState& state ) {
 
 void setupSearch( WhittedState& state ) {
   if (!state.partition) {
-    assert(state.numOfBatches == 1);
+    //assert(state.numOfBatches == 1);
+    state.numOfBatches = 1;
 
     state.numActQueries[0] = state.numQueries;
     state.d_actQs[0] = state.params.queries;

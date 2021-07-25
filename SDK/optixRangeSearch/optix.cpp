@@ -570,15 +570,15 @@ void cleanupState( WhittedState& state )
 
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_res[i] ) );
-      CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
+      if (state.d_firsthit_idx[i]) // cuda is happy to free nullptr, but check anyways
+        CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
       CUDA_CHECK( cudaFree( state.d_actQs[i] ) );
       delete state.h_actQs[i];
-
       CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
-      //CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
       if (state.d_r2q_map[i])
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map[i]     ) ) );
 
+      //CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
       // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
       //if (reinterpret_cast<void*>(state.d_gas_output_buffer[i]) != state.d_buffer_temp_output_gas_and_compacted_size[i] )
       //  CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[i] ) );

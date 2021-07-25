@@ -59,6 +59,8 @@ target_link_libraries( ${target_name}
   ${CUDA_LIBRARIES}
   )
 
+#set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
+
 message(STATUS ${KNN})
 if(KNN)
   #https://stackoverflow.com/questions/9017573/define-preprocessor-macro-through-cmake
