@@ -559,14 +559,15 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
   // 2: raster sort
   // 3: 1D sort
 
+  // even if sortMode == 0, but if partition is enabled, go ahead
+  if (!sortMode && !state.partition) return;
+
   // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.
   std::string typeName = ((type == POINT) ? "points" : "queries");
   Timing::startTiming("sort " + typeName);
     if (sortMode == 3) {
       oneDSort(state, type);
     } else {
-      if (!state.partition) return;
-
       computeMinMax(state, type);
 
       bool morton; // false for raster order
