@@ -174,12 +174,7 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id )
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
 
-  float radius;
-  if (state.partition) {
-    radius = state.launchRadius[batch_id];
-  } else {
-    radius = state.radius / state.sortingGAS;
-  }
+  float radius = state.launchRadius[batch_id] / state.sortingGAS;
   //std::cout << "\tAABB radius: " << radius << std::endl;
   //std::cout << "\tnum of points in GAS: " << numPrims << std::endl;
 
@@ -605,7 +600,7 @@ void cleanupState( WhittedState& state )
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
     // device queries and host queries have been freed before.
-    if (state.partition || !state.samepq) {
+    if ((state.partition && state.pointSortMode) || !state.samepq) {
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points        ) ) );
       delete state.h_points;
     }
