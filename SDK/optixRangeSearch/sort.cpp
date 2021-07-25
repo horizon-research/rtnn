@@ -367,6 +367,7 @@ void sortGenBatch(WhittedState& state,
     unsigned int numUniqQs = uniqueByKey(d_ParticleCellIndices_ptr_copy, N, d_repQueries);
     fprintf(stdout, "\tNum of Rep queries: %u\n", numUniqQs);
 
+    // generate the cell mask
     thrust::device_ptr<int> d_cellMask = genCellMask(state,
             thrust::raw_pointer_cast(d_repQueries),
             particles,
@@ -393,27 +394,6 @@ void sortGenBatch(WhittedState& state,
                                     thrust::raw_pointer_cast(d_rayMask)
                                    );
 
-    // make a copy of the keys since they are useless after the first sort. no
-    // need to use stable sort since the keys are unique, so masks and the
-    // queries are gauranteed to be sorted in exactly the same way.
-    // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
-    thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy;
-    allocThrustDevicePtr(&d_posInSortedPoints_ptr_copy, N);
-    thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);
-
-    //thrust::host_vector<int> h_rayMask(N);
-    //thrust::copy(d_rayMask, d_rayMask + N, h_rayMask.begin());
-    //thrust::host_vector<unsigned int> h_ParticleCellIndices(N);
-    //thrust::copy(d_ParticleCellIndices_ptr, d_ParticleCellIndices_ptr + N, h_ParticleCellIndices.begin());
-    //for (unsigned int i = 0; i < N; i++) {
-    //  float3 query = state.h_queries[i];
-    //  if (isClose(query, make_float3(-57.230999, 2.710000, 9.608000))) {
-    //    printf("particle [%f, %f, %f], %d, in cell %u\n", query.x, query.y, query.z, h_rayMask[i], h_ParticleCellIndices[i]);
-    //    break;
-    //  }
-    //}
-    //exit(1);
-
     // get a histogram of d_rayMask, which won't be mutated. this needs to happen before sorting |d_rayMask|.
     // the last mask in the histogram indicates the number of rays that need full search.
     thrust::device_vector<unsigned int> d_rayHist;
@@ -422,12 +402,22 @@ void sortGenBatch(WhittedState& state,
     thrust::copy(d_rayHist.begin(), d_rayHist.end(), h_rayHist.begin());
 
     // sort the ray masks the same way as query sorting.
-    sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
-    // this MUST happen right after sorting the masks and before copy so that the queries and the masks are consistent!!!
-    sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
-    CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
+    // sorting particles MUST happen right after sorting the masks so that the queries and the masks are consistent!!!
+    // TODO: comment the follow two if we want to partition without sorting points
+    if (state.pointSortMode) {
+      // make a copy of the keys since they are useless after the first sort. no
+      // need to use stable sort since the keys are unique, so masks and the
+      // queries are gauranteed to be sorted in exactly the same way.
+      // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
+      thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy;
+      allocThrustDevicePtr(&d_posInSortedPoints_ptr_copy, N);
+      thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);
 
-    // TODO: does it make sense to do non-consecutive batches?
+      sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
+      sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
+      CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
+    }
+
     // |batches| will contain the last mask of each batch.
     std::vector<int> batches;
     prepBatches(state, batches, h_rayHist);
@@ -568,7 +558,6 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
   // 1: z-order sort
   // 2: raster sort
   // 3: 1D sort
-  if (!sortMode) return;
 
   // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.
   std::string typeName = ((type == POINT) ? "points" : "queries");
@@ -576,14 +565,13 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
     if (sortMode == 3) {
       oneDSort(state, type);
     } else {
+      if (!state.partition) return;
+
       computeMinMax(state, type);
 
       bool morton; // false for raster order
       if (sortMode == 1) morton = true;
-      else {
-        assert(sortMode == 2);
-        morton = false;
-      }
+      else morton = false;
       gridSort(state, type, morton);
     }
   Timing::stopTiming(true);
