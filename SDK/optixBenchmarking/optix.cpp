@@ -242,7 +242,11 @@ void createModules( WhittedState &state )
     size_t sizeof_log = sizeof(log);
 
     {
-        std::string isProgName = "geometry-" + state.searchMode + "-" + state.isType + ".cu";
+        std::string isProgName;
+        if (state.isType == "noIS")
+          isProgName = "geometry.cu";
+        else
+          isProgName = "geometry-" + state.searchMode + "-" + state.isType + ".cu";
         //const std::string ptx = sutil::getPtxString( OPTIX_SAMPLE_NAME, OPTIX_SAMPLE_DIR, "geometry.cu" );
         const std::string ptx = sutil::getPtxString( OPTIX_SAMPLE_NAME, OPTIX_SAMPLE_DIR, isProgName.c_str() );
         OPTIX_CHECK_LOG( optixModuleCreateFromPTX(
@@ -311,16 +315,24 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     OptixProgramGroup           radiance_sphere_prog_group;
     OptixProgramGroupOptions    radiance_sphere_prog_group_options = {};
     OptixProgramGroupDesc       radiance_sphere_prog_group_desc = {};
-    radiance_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
-    radiance_sphere_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
-    if (state.searchMode == "knn")
-      radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_knn";
-    else
-      radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_radius";
+    radiance_sphere_prog_group_desc.kind   = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+
+    if (state.isType == "noIS") {
+      radiance_sphere_prog_group_desc.hitgroup.moduleIS               = nullptr;
+      radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = nullptr;
+    } else {
+      radiance_sphere_prog_group_desc.hitgroup.moduleIS               = state.geometry_module;
+      if (state.searchMode == "knn")
+        radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_knn";
+      else
+        radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameIS    = "__intersection__sphere_radius";
+    }
+
     radiance_sphere_prog_group_desc.hitgroup.moduleCH               = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameCH    = nullptr;
     radiance_sphere_prog_group_desc.hitgroup.moduleAH               = state.geometry_module;
     radiance_sphere_prog_group_desc.hitgroup.entryFunctionNameAH    = "__anyhit__terminateRay";
+
 
     OPTIX_CHECK_LOG( optixProgramGroupCreate(
         state.context,

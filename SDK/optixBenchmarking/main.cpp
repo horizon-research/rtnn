@@ -66,27 +66,15 @@ int main( int argc, char* argv[] )
 
     uploadData(state);
 
-    /* GAS creation benchmarking */
-    if (state.ubenchID == 3)
-    {
-      setupSearch(state);
-      state.numOfBatches = 1;
-      unsigned int numPoints = state.numPoints;
-      for (int i = 1; i <= 100; i++) {
-        float frac = (float)i/100;
-        state.numPoints = numPoints * frac;
-        createGeometry (state, 0); // batch_id ignored if not partition.
-        CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
-        CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
-        if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
-          CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
-        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
-      }
-    }
+    // TODO: check searchType and isType with ubenchID
 
     // how knn/radius search time varies with the number of queries under different IS programs
-    /* searchType: radius; isType: approx*/
-    /* searchType: radius; isType: sphereTest*/
+    /* searchType: radius; isType: approx */
+    /* searchType: radius; isType: sphereTest */
+    /* searchType: knn; isType: emptyIS */
+    /* searchType: knn; isType: calcDistIS */
+    /* searchType: knn; isType: countIS */
+    /* searchType: knn; isType: topKQIS */
     if (state.ubenchID == 0)
     {
       sortParticles(state, POINT, 1);
@@ -199,29 +187,86 @@ int main( int argc, char* argv[] )
       }
     }
 
+    /* GAS creation benchmarking */
+    if (state.ubenchID == 3)
+    {
+      setupSearch(state);
+      state.numOfBatches = 1;
+      unsigned int numPoints = state.numPoints;
+      for (int i = 1; i <= 100; i++) {
+        float frac = (float)i/100;
+        state.numPoints = numPoints * frac;
+        createGeometry (state, 0); // batch_id ignored if not partition.
+        CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
+        CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
+        if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
+          CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
+        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
+      }
+    }
+
     // how radius search time varies with K
     // fix the GAS and the point cloud; change only params.limit. returns when the limit is met.
     // the radius is intentionally set to be large so that the limit is roughly the same as IS calls
     /* searchType: radius; isType: retOnLimit */
-    //{
-    //  sortParticles(state, POINT, 1);
-    //  setupSearch(state);
-    //  state.numOfBatches = 1;
-    //  state.launchRadius[0] = 10; // an intentionally large radius.
-    //  createGeometry (state, 0); // batch_id ignored if not partition.
-    //  state.qGasSortMode = 2;
-    //  gasSortSearch(state, 0);
-    //  for (unsigned int i = 1; i <= state.numPoints; i+=100) {
-    //    state.knn = i;
-    //    search(state, 0, 1); // overloaded version where the res devive buffer is set to minimal size
-    //    CUDA_CHECK( cudaFree( state.d_res[0] ) );
-    //  }
-    //  CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
-    //  CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
-    //  if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
-    //    CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
-    //  CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
-    //}
+    if (state.ubenchID == 4)
+    {
+      sortParticles(state, POINT, 1);
+      setupSearch(state);
+      state.numOfBatches = 1;
+      state.launchRadius[0] = 10; // an intentionally large radius.
+      createGeometry (state, 0); // batch_id ignored if not partition.
+      state.qGasSortMode = 2;
+      gasSortSearch(state, 0);
+      for (unsigned int i = 1; i <= state.numPoints; i+=100) {
+        state.knn = i;
+        search(state, 0, 1); // overloaded version where the res devive buffer is set to minimal size
+        CUDA_CHECK( cudaFree( state.d_res[0] ) );
+      }
+      CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
+      CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
+      if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
+        CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
+    }
+
+    // diff between noIS (TL only) vs. calling IS doing nothing (emptyIS) vs. doing a bit work in IS (calcDistIS)
+    // the same as uID == 0, but sweep different GAS size.
+    // the hope is that the difference between emptyIS and calcDistIS will be more significant when GAS is small (i.e., TL time is small).
+    /* searchType: knn; isType: noIS */
+    /* searchType: knn; isType: emptyIS */
+    /* searchType: knn; isType: calcDistIS */
+    if (state.ubenchID == 5)
+    {
+      sortParticles(state, POINT, 1);
+      setupSearch(state);
+      state.numOfBatches = 1;
+      unsigned int numPoints = state.numPoints;
+
+      for (int j = 1; j <= 5; j++) {
+        float frac1 = (float)j/5;
+        state.numPoints = numPoints * frac1;
+        createGeometry (state, 0); // batch_id ignored if not partition.
+
+        unsigned int numActQs = state.numActQueries[0];
+        for (int i = 1; i <= 5; i++) {
+          float frac2 = (float)i/5;
+          state.numActQueries[0] = numActQs * frac2;
+          state.qGasSortMode = 2;
+          gasSortSearch(state, 0);
+          search(state, 0);
+          CUDA_CHECK( cudaFreeHost(state.h_res[0] ) );
+          CUDA_CHECK( cudaFree( state.d_res[0] ) );
+          CUDA_CHECK( cudaFree( reinterpret_cast<void*>(state.d_r2q_map[0] )) );
+          CUDA_CHECK( cudaFree( state.d_firsthit_idx[0] ) );
+        }
+        CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
+        CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
+        if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
+          CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
+        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
+      }
+    }
 
     CUDA_SYNC_CHECK();
     //Timing::stopTiming(true);

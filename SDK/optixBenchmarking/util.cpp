@@ -199,7 +199,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.searchMode = argv[++i];
-          if ((state.searchMode != "knn") && (state.searchMode != "radius"))
+          if ((state.searchMode != "knn") && (state.searchMode != "radius") && (state.searchMode != "nois"))
               printUsageAndExit( argv[0] );
       }
       else if( arg == "--radius" || arg == "-r" )
