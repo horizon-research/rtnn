@@ -401,14 +401,14 @@ void sortGenBatch(WhittedState& state,
     thrust::host_vector<unsigned int> h_rayHist(numMasks);
     thrust::copy(d_rayHist.begin(), d_rayHist.end(), h_rayHist.begin());
 
-    // sort the ray masks the same way as query sorting.
-    // sorting particles MUST happen right after sorting the masks so that the queries and the masks are consistent!!!
-    // TODO: comment the follow two if we want to partition without sorting points
+    // Sort the queries if sorting is enabled, in which case sort the ray masks
+    // the same way as query sorting. Sorting particles MUST happen right after
+    // sorting the masks so that queries and masks are consistent!!!
     if (state.pointSortMode) {
       // make a copy of the keys since they are useless after the first sort. no
       // need to use stable sort since the keys are unique, so masks and the
       // queries are gauranteed to be sorted in exactly the same way.
-      // TODO: Can we do away with th extra copy by replacing sort by key with scatter? That'll need new space too...
+      // TODO: Can we do away with the extra copy by replacing sort by key with scatter? That'll need new space too...
       thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy;
       allocThrustDevicePtr(&d_posInSortedPoints_ptr_copy, N);
       thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);

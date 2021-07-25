@@ -75,6 +75,11 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch
 }
 
 void gasSortSearch(WhittedState& state, int batch_id) {
+  // TODO: maybe we should have a third mode where we sort FH primitives in
+  // z-order or raster order. This would improve the performance when no
+  // pre-sorting is done, and might even out-perform it since we are sorting
+  // fewer points.
+
   // Initial traversal to aggregate the queries
   thrust::device_ptr<unsigned int> d_firsthit_idx_ptr = initialTraversal(state, batch_id);
 
