@@ -586,10 +586,14 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     thrust::device_ptr<float> d_key_ptr;
     state.d_fhsort_key = allocThrustDevicePtr(&d_key_ptr, numQueries);
   
-    // create indices for gather and upload to device
-    thrust::host_vector<float> h_orig_points_1d(numQueries);
+    // create keys (1d coordinate), which will become the source of gather, the
+    // result of which will be the keys for sort; the size must be
+    // state.numPoints rather than numQueries. without point/query sorting,
+    // Coord-sort can be better than ID-sort since the IDs of the FH primitives
+    // will be arbitrary.
+    thrust::host_vector<float> h_orig_points_1d(state.numPoints);
     // TODO: do this in CUDA
-    for (unsigned int i = 0; i < numQueries; i++) {
+    for (unsigned int i = 0; i < state.numPoints; i++) {
       h_orig_points_1d[i] = state.h_points[i].z; // could be other dimensions
     }
     thrust::device_vector<float> d_orig_points_1d = h_orig_points_1d;
@@ -599,7 +603,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     allocThrustDevicePtr(&d_r2q_map_ptr, numQueries);
     genSeqDevice(d_r2q_map_ptr, numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
-  
+ 
   Timing::startTiming("gas-sort queries");
     // TODO: do thrust work in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
     // first use a gather to generate the keys, then sort by keys
@@ -607,7 +611,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
     sortByKey( d_key_ptr, d_r2q_map_ptr, numQueries, state.stream[batch_id] );
     state.d_r2q_map[batch_id] = thrust::raw_pointer_cast(d_r2q_map_ptr);
   Timing::stopTiming(true);
-  
+ 
   // if debug, copy the sorted keys and values back to host
   bool debug = false;
   if (debug) {
@@ -616,7 +620,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
 
     thrust::host_vector<float> h_vec_key(numQueries);
     thrust::copy(d_key_ptr, d_key_ptr+numQueries, h_vec_key.begin());
-    
+
     float3* h_queries = state.h_actQs[batch_id];
     for (unsigned int i = 0; i < h_vec_val.size(); i++) {
       std::cout << h_vec_key[i] << "\t" 
