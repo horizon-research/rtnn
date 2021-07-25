@@ -178,7 +178,7 @@ int main(int argc, char* argv[])
         CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
         std::cout << "Total GPUs visible: " << device_count << std::endl;
 
-        int32_t device_id = 1;
+        int32_t device_id = 0;
         cudaDeviceProp prop;
         CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
         CUDA_CHECK( cudaSetDevice( device_id ) );
