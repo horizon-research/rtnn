@@ -324,10 +324,17 @@ void readData(WhittedState& state) {
   }
 }
 
+// this function returns the width of the largest inscribed cube of a sphere
+float maxInscribedWidth(float radius, int dim) {
+  if (dim == 2) return radius/sqrt(2)*2;
+  else if (dim == 3) return radius/sqrt(3)*2;
+  else assert(0);
+}
+
 void initBatches(WhittedState& state) {
   // see |genMask| for the logic behind this.
   float cellSize = state.radius / state.crRatio;
-  float maxWidth = state.radius / sqrt(2) * 2;
+  float maxWidth = maxInscribedWidth(state.radius, 3); // for 3D
   int maxIter = (int)floorf(maxWidth / (2 * cellSize) - 1);
   int maxBatchCount = maxIter + 2; // could be fewer than this.
   //int maxBatchCount = 1;

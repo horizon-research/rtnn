@@ -214,6 +214,7 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   // Searching time = max(memcpy time, compute time).
   // The memcpy time is empirically observed to be linear w.r.t., to the # of queries
   // The compute time, without considering CKE, is the lump sum of the compute time of each batch, which is linear w.r.t. the # of queries in the batch and cubic w.r.t., to the radius in the batch.
+  // TODO: fit a better model for IS calls: N_tl * T_tl + N_is * T_is
 
   // empirical coefficients on 2080Ti
   //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
