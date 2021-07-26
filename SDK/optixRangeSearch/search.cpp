@@ -23,10 +23,9 @@ void search(WhittedState& state, int batch_id) {
       // approximately so if we want to guarantee correctness we still have to
       // test against the aabb. see:
       // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
-      // with AABBTEST we still save time since 1) the search radius is smaller
-      // so traversals are fewer, and 2) we do a bit less work in the IS
-      // program (no dot product and FP square).
-      // TODO: put this in a cli switch?
+      // with AABBTEST we still save time since 1) sphere test is much more
+      // costly then aabb test and 2) the search radius is smaller so
+      // traversals are slightly fewer.
       if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) {
         state.params.mode = AABBTEST;
       }

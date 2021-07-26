@@ -207,9 +207,50 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   return d_cellMask;
 }
 
+void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
+  // now that we allow AABBTEST in all but the last batch in radius search,
+  // batching could save time, since doing sphere test is much more costly than
+  // aabb test. build the cost model and find the optimal batching.
+
+  // empirical coefficients on 2080Ti
+  //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
+  const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
+  const float kAABBTest_PerIS = 6.5e-6/50; // IS call time in *ms* if doing aabb test (div by 50 because the data was ubenchmarked using K=50)
+  const float kSphereTest_PerIS = 2e-5/50; // IS call time in *ms* if doing sphere test
+
+  //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
+  float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 2; // 2 is the empirical intercept (TODO)
+  //float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
+  fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
+
+  // incrementally combine batch i with the last batch (assuming all other
+  // batches are independent) and calculate the cost. choose the min cost.
+  float overhead = 0;
+  float maxOverhead = FLT_MAX;
+  int splitId = numAvailBatches - 2;
+  for (int i = numAvailBatches - 2; i >= 0; i--) {
+    float extraTime = h_rayHist[i] * (kSphereTest_PerIS - kAABBTest_PerIS) * state.knn;
+    overhead += extraTime - tBuildGAS;
+    fprintf(stdout, "i: %d, extraTime: %f, overhead: %f\n", i, extraTime, overhead);
+    if (overhead < maxOverhead) {
+      maxOverhead = overhead;
+      splitId = i;
+    }
+
+    //if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
+  }
+
+  for (int i = 0; i <= splitId - 1; i++) {
+    batches.push_back(i);
+  }
+  batches.push_back(numAvailBatches - 1);
+}
+
 void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
-  // The logic is: given CR (which has been decided beforehand), we know that max # of available batches (|numAvailBatches|). launching as many batches as available minimizes the work, but also introduces gas building overhead.
-  // so we build a cost model = gas building time + searching time.
+  // Logic: given CR (which has been decided beforehand), we know that max # of
+  //   available batches (|numAvailBatches|). launching as many batches as
+  //   available minimizes the work, but also introduces gas building overhead.
+  // So we build a cost model = gas building time + searching time.
   // GAS building time is linear w.r.t. to the # of AABBs, which is the total amount of points.
   // Searching time = max(memcpy time, compute time).
   // The memcpy time is empirically observed to be linear w.r.t., to the # of queries
@@ -222,8 +263,8 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   const float kSearch_PerIS = 6e-6; // knn search time in *ms* per IS call
 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
-  //float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 2; // 2 is the empirical intercept (TODO)
-  float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
+  float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 2; // 2 is the empirical intercept (TODO)
+  //float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
   float cellSize = state.radius / state.crRatio;
   fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
@@ -264,11 +305,7 @@ void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::h
 
   if (state.autoNB) {
     if (state.searchMode == "knn") autoBatchingKNN(state, h_rayHist, batches, numAvailBatches);
-    // if we choose not to approx the earlier batches (in |search|) to
-    // gaurantee correctness, which is the default option, then batching only
-    // introduces overhead. TODO: revisit this if we come up with a more
-    // robost approx logic, potentially when nvidia provides some error bounds.
-    else batches.push_back(numAvailBatches - 1);
+    else autoBatchingRange(state, h_rayHist, batches, numAvailBatches);
   } else {
     if (numAvailBatches == 1) {
       batches.push_back(0);
