@@ -35,7 +35,7 @@ extern "C" {
 __constant__ Params params;
 }
 
-extern "C" __device__ void intersect_sphere()
+extern "C" __device__ void intersect_sphere(SearchType mode)
 {
     // This is called when a ray-bbox intersection is found, but we still can't
     // be sure that the point is within the sphere. It's possible that the
@@ -48,9 +48,29 @@ extern "C" __device__ void intersect_sphere()
 
     const float3  ray_orig = optixGetWorldRayOrigin();
 
-    float3 O = ray_orig - center;
+    bool intersect = false;
+    if (mode == AABBTEST) {
+      float3 topRight = center + params.radius;
+      float3 bottomLeft = center - params.radius;
+      if ((ray_orig > bottomLeft) && (ray_orig < topRight))
+        intersect = true;
 
-    if (dot(O, O) < params.radius * params.radius) {
+      //unsigned int queryIdx = optixGetPayload_0();
+      //if (primIdx == 1269439 && queryIdx == 16702) {
+      //  printf("ray: %f, %f, %f\n", ray_orig.x, ray_orig.y, ray_orig.z);
+      //  printf("point: %f, %f, %f\n", center.x, center.y, center.z);
+      //  printf("topRight: %f, %f, %f\n", topRight.x, topRight.y, topRight.z);
+      //  printf("bottomLeft: %f, %f, %f\n", bottomLeft.x, bottomLeft.y, bottomLeft.z);
+      //  printf("dist: %f\n", sqrt(dot(ray_orig - center, ray_orig - center)));
+      //}
+
+    } else {
+      float3 O = ray_orig - center;
+      if (dot(O, O) < params.radius * params.radius)
+        intersect = true;
+    }
+
+    if (intersect) {
       unsigned int id = optixGetPayload_1();
       if (id < params.limit) {
         unsigned int queryIdx = optixGetPayload_0();
@@ -68,9 +88,9 @@ extern "C" __global__ void __intersection__sphere_radius()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = params.isApprox;
+  SearchType mode = params.mode;
 
-  if (isApprox) {
+  if (mode == NOTEST) {
     unsigned int id = optixGetPayload_1();
     if (id < params.limit) {
       unsigned int queryIdx = optixGetPayload_0();
@@ -81,7 +101,7 @@ extern "C" __global__ void __intersection__sphere_radius()
       else optixSetPayload_1( id+1 );
     }
   } else {
-    intersect_sphere();
+    intersect_sphere(mode);
   }
 }
 
@@ -139,11 +159,11 @@ extern "C" __global__ void __intersection__sphere_knn()
   // The IS program will be called if the ray origin is within a primitive's
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
-  bool isApprox = params.isApprox;
+  SearchType mode = params.mode;
 
   unsigned int queryIdx = optixGetPayload_0();
   unsigned int primIdx = optixGetPrimitiveIndex();
-  if (isApprox) {
+  if (mode == NOTEST) {
     params.frame_buffer[queryIdx * params.limit] = primIdx;
     optixReportIntersection( 0, 0 );
   } else {

@@ -99,6 +99,7 @@ void launchSubframe(unsigned int*, WhittedState&, int);
 void initLaunchParams(WhittedState&);
 void setupOptiX(WhittedState&);
 void cleanupState(WhittedState&);
+float maxInscribedWidth(float, int);
 
 int tokenize(std::string, std::string, float3**, unsigned int);
 void parseArgs(WhittedState&, int, char**);

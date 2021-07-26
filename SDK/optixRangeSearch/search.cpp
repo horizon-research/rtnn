@@ -18,16 +18,18 @@ void search(WhittedState& state, int batch_id) {
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map[batch_id];
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
 
-      state.params.isApprox = false;
-      // approximate in the first batch of radius search. can't approximate in
-      // the knn search. note that AABB test is inherently approximately so if
-      // we choose to approximate the early batches in radius earch, the result
-      // might be incorrect. see:
+      state.params.mode = PRECISE;
+      // note that AABB test in current OptiX implementation is inherently
+      // approximately so if we want to guarantee correctness we still have to
+      // test against the aabb. see:
       // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
+      // with AABBTEST we still save time since 1) the search radius is smaller
+      // so traversals are fewer, and 2) we do a bit less work in the IS
+      // program (no dot product and FP square).
       // TODO: put this in a cli switch?
-
-      //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1))
-      //  state.params.isApprox = true;
+      if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) {
+        state.params.mode = AABBTEST;
+      }
 
       state.params.radius = state.launchRadius[batch_id];
 
@@ -65,7 +67,7 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch
     allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit);
 
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
-    state.params.isApprox = true;
+    state.params.mode = NOTEST;
     state.params.radius = state.launchRadius[batch_id]; // doesn't quite matter since we never check radius in approx mode
 
     launchSubframe( thrust::raw_pointer_cast(output_buffer), state, batch_id );

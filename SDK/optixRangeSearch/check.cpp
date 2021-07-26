@@ -115,7 +115,10 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
         float3 diff = state.h_points[p] - state.h_queries[q];
         float dists = dot(diff, diff);
         if (dists > state.radius * state.radius) {
-          //fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n", p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z, q, state.h_points[q].x, state.h_points[q].y, state.h_points[q].z, sqrt(dists));
+          fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n",
+            p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z,
+            q, state.h_queries[q].x, state.h_queries[q].y, state.h_queries[q].z,
+            sqrt(dists));
           totalWrongNeighbors++;
           totalWrongDist += sqrt(dists);
         }

@@ -32,6 +32,16 @@
 #include <optix_device.h>
 #include <vector_types.h>
 
+__forceinline__ __device__ bool operator>(const float3 a, const float3 b)
+{
+  return (a.x > b.x && a.y > b.y && a.z > b.z);
+}
+
+__forceinline__ __device__ bool operator<(const float3 a, const float3 b)
+{
+  return (a.x < b.x && a.y < b.y && a.z < b.z);
+}
+
 __forceinline__ __device__ void* unpackPointer( unsigned int i0, unsigned int i1 )
 {
     const unsigned long long uptr = static_cast<unsigned long long>( i0 ) << 32 | i1;

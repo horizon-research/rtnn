@@ -141,7 +141,7 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   // tightly encloses this cube, and given the way we calculate |maxWidth| we
   // know that the radius of that sphere won't be greater than state.radius, so
   // we still save time.
-  float maxWidth = state.radius / sqrt(2) * 2;
+  float maxWidth = maxInscribedWidth(state.radius, 3);
 
   thrust::device_ptr<int> d_cellMask;
   allocThrustDevicePtr(&d_cellMask, numberOfCells); // no need to memset this since every single cell will be updated.

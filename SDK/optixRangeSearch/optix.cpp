@@ -531,7 +531,7 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
     fprintf(stdout, "\tLaunch %u (%f) queries\n", numQueries, (float)numQueries/(float)state.numQueries);
     fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
     fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
-    fprintf(stdout, "\tApprox? %s\n", state.params.isApprox ? "Yes" : "No");
+    fprintf(stdout, "\tSearch mode: %d\n", state.params.mode);
 
     thrust::device_ptr<Params> d_params_ptr;
     state.d_params = allocThrustDevicePtr(&d_params_ptr, 1);

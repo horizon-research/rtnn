@@ -50,6 +50,12 @@ struct BasicLight
     float3  color;
 };
 
+enum SearchType
+{
+    PRECISE = 0, // i.e., test against the sphere
+    AABBTEST = 1,
+    NOTEST = 2
+};
 
 struct Params
 {
@@ -59,7 +65,7 @@ struct Params
     float            radius;
     unsigned int*    d_r2q_map;
     unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
-    bool             isApprox;
+    SearchType       mode;
 
     OptixTraversableHandle handle;
 };
