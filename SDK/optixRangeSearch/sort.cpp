@@ -261,27 +261,27 @@ void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::h
   int numAvailBatches = (int)h_rayHist.size();
   fprintf(stdout, "\tnumAvailBatches: %d\n", numAvailBatches);
 
-  if (state.searchMode == "radius") {
-    // if we choose not to approx the earlier batches (in |search|) to gaurantee correctness, then batching only introduces overhead.
-    // TODO: revisit this if we come up with a more robost approx logic, potentially when nvidia provides some error bounds.
-    batches.push_back(numAvailBatches - 1);
+  if (state.autoNB) {
+    if (state.searchMode == "knn") autoBatchingKNN(state, h_rayHist, batches, numAvailBatches);
+    // if we choose not to approx the earlier batches (in |search|) to
+    // gaurantee correctness, which is the default option, then batching only
+    // introduces overhead. TODO: revisit this if we come up with a more
+    // robost approx logic, potentially when nvidia provides some error bounds.
+    else batches.push_back(numAvailBatches - 1);
   } else {
-    if (state.autoNB) autoBatchingKNN(state, h_rayHist, batches, numAvailBatches);
-    else {
-      if (numAvailBatches == 1) {
-        batches.push_back(0);
-        return;
-      }
-
-      int numBatches;
-      if (state.numOfBatches == -1) numBatches = (int)numAvailBatches;
-      else numBatches = std::min(state.numOfBatches, (int)numAvailBatches);
-
-      for (int i = 0; i < numAvailBatches; i++) {
-        if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
-      }
-      assert(batches.size() <= (unsigned int)numBatches);
+    if (numAvailBatches == 1) {
+      batches.push_back(0);
+      return;
     }
+
+    int numBatches;
+    if (state.numOfBatches == -1) numBatches = (int)numAvailBatches;
+    else numBatches = std::min(state.numOfBatches, (int)numAvailBatches);
+
+    for (int i = 0; i < numAvailBatches; i++) {
+      if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
+    }
+    assert(batches.size() <= (unsigned int)numBatches);
   }
 }
 
@@ -584,7 +584,6 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
   Timing::stopTiming(true);
  
   Timing::startTiming("gas-sort queries");
-    // TODO: do thrust work in a stream: https://forums.developer.nvidia.com/t/thrust-and-streams/53199
     // first use a gather to generate the keys, then sort by keys
     gatherByKey(d_firsthit_idx_ptr, &d_orig_points_1d, d_key_ptr, numQueries, state.stream[batch_id]);
     sortByKey( d_key_ptr, d_r2q_map_ptr, numQueries, state.stream[batch_id] );

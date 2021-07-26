@@ -25,7 +25,9 @@ void search(WhittedState& state, int batch_id) {
       // might be incorrect. see:
       // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
       // TODO: put this in a cli switch?
-      //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) state.params.isApprox = true;
+
+      //if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1))
+      //  state.params.isApprox = true;
 
       state.params.radius = state.launchRadius[batch_id];
 
