@@ -214,7 +214,8 @@ int main( int argc, char* argv[] )
       sortParticles(state, POINT, 1);
       setupSearch(state);
       state.numOfBatches = 1;
-      state.launchRadius[0] = 10; // an intentionally large radius.
+      //state.launchRadius[0] = 10; // an intentionally large radius.
+      state.launchRadius[0] = 0.1;
       createGeometry (state, 0); // batch_id ignored if not partition.
       state.qGasSortMode = 2;
       gasSortSearch(state, 0);
@@ -266,6 +267,34 @@ int main( int argc, char* argv[] )
           CUDA_CHECK( cudaFree( state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
       }
+    }
+
+    // generate random queries vs. sorted queries
+    // run emptyIS, i.e., only traversal
+    if (state.ubenchID == 6) {
+      //sortParticles(state, POINT, 1);
+      setupSearch(state);
+      state.numOfBatches = 1;
+      state.launchRadius[0] = 2;
+      createGeometry (state, 0); // batch_id ignored if not partition.
+      //state.qGasSortMode = 2;
+      //gasSortSearch(state, 0);
+
+      unsigned int numActQs = state.numActQueries[0];
+      for (int i = 1; i <= 10; i++) {
+        float frac2 = (float)i/10;
+        state.numActQueries[0] = numActQs * frac2;
+        search(state, 0);
+        CUDA_CHECK( cudaFreeHost(state.h_res[0] ) );
+        CUDA_CHECK( cudaFree( state.d_res[0] ) );
+        //CUDA_CHECK( cudaFree( reinterpret_cast<void*>(state.d_r2q_map[0] )) );
+        //CUDA_CHECK( cudaFree( state.d_firsthit_idx[0] ) );
+      }
+      CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
+      CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );
+      if (reinterpret_cast<void*>(state.d_gas_output_buffer[0] ) != state.d_buffer_temp_output_gas_and_compacted_size[0])
+        CUDA_CHECK( cudaFree( (void*)state.d_buffer_temp_output_gas_and_compacted_size[0] ) );
+      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_gas_output_buffer[0] ) ) );
     }
 
     CUDA_SYNC_CHECK();
