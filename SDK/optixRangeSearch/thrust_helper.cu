@@ -163,6 +163,11 @@ unsigned int uniqueByKey(thrust::device_ptr<unsigned int> key, unsigned int N, t
   return thrust::get<0>(end) - key;
 }
 
+unsigned int countUniq(thrust::device_ptr<unsigned int> d_value_ptr, unsigned int N) {
+  auto end = thrust::unique(d_value_ptr, d_value_ptr + N);
+  return end - d_value_ptr;
+}
+
 void thrustCopyD2D(thrust::device_ptr<unsigned int> d_dst, thrust::device_ptr<unsigned int> d_src, unsigned int N) {
     cudaMemcpy(
                 reinterpret_cast<void*>( thrust::raw_pointer_cast(d_dst) ),

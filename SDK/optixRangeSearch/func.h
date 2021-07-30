@@ -38,6 +38,7 @@ void copyIfIdInRange(float3*, unsigned int, thrust::device_ptr<int>, thrust::dev
 void copyIfNonZero(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
 unsigned int countById(thrust::device_ptr<int>, unsigned int, int);
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrust::device_ptr<unsigned int> dest);
+unsigned int countUniq(thrust::device_ptr<unsigned int>, unsigned int);
 void thrustCopyD2D(thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int N);
 unsigned int thrustGenHist(const thrust::device_ptr<int>, thrust::device_vector<unsigned int>&, unsigned int);
 

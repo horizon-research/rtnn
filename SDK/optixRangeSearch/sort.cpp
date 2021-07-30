@@ -664,6 +664,9 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
 
   Timing::startTiming("gas-sort queries");
     sortByKey( d_firsthit_idx_ptr, d_r2q_map_ptr, numQueries, state.stream[batch_id] );
+    unsigned int uniqFHs = countUniq(d_firsthit_idx_ptr, numQueries);
+    fprintf(stdout, "\tUnique FH AABBs: %u\n", uniqFHs);
+
     // thrust can't be used in kernel code since NVRTC supports only a
     // limited subset of C++, so we would have to explicitly cast a
     // thrust device vector to its raw pointer. See the problem discussed
