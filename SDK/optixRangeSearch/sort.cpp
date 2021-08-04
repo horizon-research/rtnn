@@ -62,7 +62,7 @@ void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
   state.Max.z = maxCell.z;
 
   //fprintf(stdout, "\tcell boundary: (%d, %d, %d), (%d, %d, %d)\n", minCell.x, minCell.y, minCell.z, maxCell.x, maxCell.y, maxCell.z);
-  //fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
+  fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
 }
 
 unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo) {

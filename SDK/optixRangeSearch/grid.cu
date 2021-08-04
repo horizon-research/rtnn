@@ -290,9 +290,6 @@ __global__ void kInsertParticles_Morton(
   // this stores the within-cell sorted indices of particles
   localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
 
-  if (cellIndex == 936119)
-    printf("cell %d [%d, %d, %d] has %d particles\n", cellIndex, gridCell.x, gridCell.y, gridCell.z, cellParticleCounts[cellIndex]);
-
   //printf("%u, %u, (%d, %d, %d)\n", particleIndex, cellIndex, gridCell.x, gridCell.y, gridCell.z);
 }
 
