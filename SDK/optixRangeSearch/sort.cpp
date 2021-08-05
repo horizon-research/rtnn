@@ -27,8 +27,10 @@
 #include "state.h"
 #include "grid.h"
 
-extern std::map<void*, double> memmap;
-extern double tot_alloc_size;
+#ifdef MEM_STATS
+  extern std::map<void*, double> memmap;
+  extern double tot_alloc_size;
+#endif
 
 void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
 {
@@ -77,7 +79,9 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   gridInfo.GridMin = sceneMin;
 
   // TODO: maybe crRatio should be automatically determined based on memory?
+#ifdef MEM_STATS
   fprintf(stdout, "\tUsed memory: %lf (MB)\n", tot_alloc_size);
+#endif
   float cellSize = state.radius/state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));

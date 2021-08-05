@@ -50,9 +50,6 @@ template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, u
   CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
              N * sizeof(T) ) );
   *d_memory = thrust::device_pointer_cast(d_memory_raw);
-#ifdef MEM_STATS
-  fprintf(stdout, "\t%s: %f MB\n", str, (float)N * sizeof(T) / 1024 / 1024);
-#endif
 
   return d_memory_raw;
 }
