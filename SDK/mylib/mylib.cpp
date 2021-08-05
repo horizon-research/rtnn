@@ -12,9 +12,10 @@ cudaError_t cudaMalloc ( void** dst, size_t count )
     cudaError_t (*lcudaMalloc) ( void**, size_t ) = (cudaError_t (*) ( void**, size_t ))dlsym(RTLD_NEXT, "cudaMalloc");
     cudaError_t msg = lcudaMalloc( dst, count );
     double size = (double)count/1024/1024;
-    printf("cudaMalloc (%p): %lf MB\n", *dst, size);
+    printf("[MEM_STATS] cudaMalloc (%p): %lf MB\n", *dst, size);
     memmap[*dst] = size;
     tot_alloc_size += size;
+    printf("[MEM_STATS] %lf MB\n", tot_alloc_size);
     return msg;
 }
 
@@ -22,8 +23,9 @@ cudaError_t cudaFree ( void* dst )
 {
     cudaError_t (*lcudaFree) ( void* ) = (cudaError_t (*) ( void* ))dlsym(RTLD_NEXT, "cudaFree");
     cudaError_t msg = lcudaFree( dst );
-    printf("cudaFree (%p): %lf MB\n", dst, memmap[dst]);
+    printf("[MEM_STATS] cudaFree (%p): %lf MB\n", dst, memmap[dst]);
     tot_alloc_size -= memmap[dst];
+    printf("[MEM_STATS] %lf MB\n", tot_alloc_size);
     return msg;
 }
 
