@@ -146,6 +146,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "         --partthd         | -pt             The threshold between query partitions\n";
     std::cerr << "         --samepq          | -spq            Same points and queries?\n";
     std::cerr << "         --autobatch       | -ab             Automatically determining batches?\n";
+    std::cerr << "         --autocrtatio     | -ac             Automatically determining crRatio?\n";
     std::cerr << "         --device          | -d              Which GPU to use?\n";
     std::cerr << "         --gassort         | -s              GAS-based query sort mode\n";
     std::cerr << "         --pointsort       | -ps             Point sort mode\n";
@@ -346,9 +347,17 @@ float calcCRRatio(WhittedState& state) {
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize;
   float numOfCells = spaceAvail / 3 / sizeof(unsigned int);
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
-  float cellSize = cbrt(sceneVolume / numOfCells) * 1.2;
-  //printf("%f, %f, %f, %f\n", particleArraysSize/1024/1024/1024, numOfCells, sceneVolume, cellSize);
-  return state.radius / cellSize;
+  float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2;
+  float ratioLimitedBySort = state.radius / cellSizeLimitedBySort;
+
+  float returnDataSize = state.numQueries * state.knn * sizeof(unsigned int);
+  float gasSize = state.numPoints * 3 * sizeof(float) * 1.5; // TODO: conservatively estimate the gas size as twice the point size (better fit?)
+  spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - pointDataSize - returnDataSize;
+  float maxNumOfBatches = spaceAvail / gasSize;
+  float ratioLimitedByGAS = (maxNumOfBatches - 1) / sqrt(3); // TODO: sqrt(2) if 2D
+
+  fprintf(stdout, "\t%f, %f\n", ratioLimitedBySort, ratioLimitedByGAS);
+  return std::min(ratioLimitedBySort, ratioLimitedByGAS);
 }
 
 void initBatches(WhittedState& state) {
