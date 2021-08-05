@@ -339,31 +339,43 @@ float maxInscribedWidth(float radius, int dim) {
 }
 
 float calcCRRatio(WhittedState& state) {
+  //TODO: the crratio is determined from the points, not queries, for now. that
+  //is, when sorting queries we will use the same ratio. ideally points and
+  //queries should have different ratios if they are diferent. so we could
+  //still have an OOM when sorting queries. maybe we shouldn't have the notion
+  //of crRatio; we should determine individually for points and queries what
+  //the cell size is.
   unsigned int N = state.numPoints;
+  unsigned int Q = state.numQueries;
 
-  // will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
+  float pointDataSize = 2 * N * sizeof(float3); // conservatively include both points and queries
+  float returnDataSize = Q * state.knn * sizeof(unsigned int);
+
+  // for sorting and partitioning, we will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
   float particleArraysSize = 5 * N * sizeof(unsigned int);
-  float pointDataSize = 2 * N * 3 * sizeof(unsigned int); // conservatively include both points and queries
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize;
-  float numOfCells = spaceAvail / 3 / sizeof(unsigned int);
+  float numOfCells = spaceAvail / (3 * sizeof(unsigned int));
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
+  // TODO: |1.2| is to loose the aggressive estimation of the numOfCells here and
+  // the fact that the actual number of cells will be greater than here due to
+  // meta cell alignment.
   float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2;
   float ratioLimitedBySort = state.radius / cellSizeLimitedBySort;
 
-  float returnDataSize = state.numQueries * state.knn * sizeof(unsigned int);
-  float gasSize = state.numPoints * 3 * sizeof(float) * 1.5; // TODO: conservatively estimate the gas size as twice the point size (better fit?)
+  // TODO: conservatively estimate the gas size as twice the point size (better fit?)
+  float gasSize = state.numPoints * sizeof(float3) * 1.5;
   spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - pointDataSize - returnDataSize;
   float maxNumOfBatches = spaceAvail / gasSize;
   float ratioLimitedByGAS = (maxNumOfBatches - 1) / sqrt(3); // TODO: sqrt(2) if 2D
 
-  fprintf(stdout, "\t%f, %f\n", ratioLimitedBySort, ratioLimitedByGAS);
-  return std::min(ratioLimitedBySort, ratioLimitedByGAS);
+  float ratio = std::min(ratioLimitedBySort, ratioLimitedByGAS);
+  fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, ratioLimitedBySort, ratioLimitedByGAS);
+  return ratio;
 }
 
 void initBatches(WhittedState& state) {
   if (state.autoCR) {
     state.crRatio = calcCRRatio(state);
-    fprintf(stdout, "\tCalculated cellRadiusRatio: %f\n", state.crRatio);
   }
 
   // see |genCellMask| for the logic behind this.

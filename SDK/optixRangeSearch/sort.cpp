@@ -78,7 +78,6 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   gridInfo.ParticleCount = N;
   gridInfo.GridMin = sceneMin;
 
-  // TODO: maybe crRatio should be automatically determined based on memory?
 #ifdef MEM_STATS
   fprintf(stdout, "\tUsed memory: %lf (MB)\n", tot_alloc_size);
 #endif
