@@ -52,14 +52,11 @@ OPTIX_add_sample_executable( optixRangeSearch target_name
   #OPTIONS -rdc true
 )
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-#message(STATUS ${CMAKE_CXX_FLAGS})
+link_directories(${PCL_LIBRARY_DIRS})
 
 target_link_libraries( ${target_name}
   ${CUDA_LIBRARIES}
   )
-
-#set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
 message(STATUS ${KNN})
 if(KNN)

@@ -915,6 +915,12 @@ else()
   set(CUDA_CUDART_LIBRARY_VAR CUDA_CUDART_LIBRARY)
 endif()
 
+#YZ
+if(USE_SHARED_CUDA_LIBS)
+  set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE INTERNAL "")
+  set(CUDA_CUDART_LIBRARY_VAR CUDA_CUDART_LIBRARY)
+endif()
+
 if(NOT CUDA_VERSION VERSION_LESS "5.0")
   cuda_find_library_local_first(CUDA_cudadevrt_LIBRARY cudadevrt "\"cudadevrt\" library")
   mark_as_advanced(CUDA_cudadevrt_LIBRARY)

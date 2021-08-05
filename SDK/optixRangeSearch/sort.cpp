@@ -19,12 +19,16 @@
 #include <cstdlib>
 #include <queue>
 #include <unordered_set>
+#include <map>
 #include <float.h>
 
 #include "optixRangeSearch.h"
 #include "func.h"
 #include "state.h"
 #include "grid.h"
+
+extern std::map<void*, double> memmap;
+extern double tot_alloc_size;
 
 void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
 {
@@ -73,6 +77,7 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
   gridInfo.GridMin = sceneMin;
 
   // TODO: maybe crRatio should be automatically determined based on memory?
+  fprintf(stdout, "\tUsed memory: %lf (MB)\n", tot_alloc_size);
   float cellSize = state.radius/state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));

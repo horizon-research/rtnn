@@ -272,23 +272,18 @@ int main( int argc, char* argv[] )
     // generate random queries vs. sorted queries
     // run emptyIS, i.e., only traversal
     if (state.ubenchID == 6) {
-      //sortParticles(state, POINT, 1);
       setupSearch(state);
       state.numOfBatches = 1;
-      state.launchRadius[0] = 2;
+      state.launchRadius[0] = 50;
       createGeometry (state, 0); // batch_id ignored if not partition.
-      //state.qGasSortMode = 2;
-      //gasSortSearch(state, 0);
 
       unsigned int numActQs = state.numActQueries[0];
-      for (int i = 1; i <= 10; i++) {
-        float frac2 = (float)i/10;
+      for (int i = 1; i <= 1; i++) {
+        float frac2 = (float)i/1;
         state.numActQueries[0] = numActQs * frac2;
         search(state, 0);
         CUDA_CHECK( cudaFreeHost(state.h_res[0] ) );
         CUDA_CHECK( cudaFree( state.d_res[0] ) );
-        //CUDA_CHECK( cudaFree( reinterpret_cast<void*>(state.d_r2q_map[0] )) );
-        //CUDA_CHECK( cudaFree( state.d_firsthit_idx[0] ) );
       }
       CUDA_CHECK( cudaFree( state.d_aabb[0] ) );
       CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[0] ) );

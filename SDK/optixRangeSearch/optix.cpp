@@ -143,7 +143,7 @@ static void buildGas(
         &emitProperty,
         1) );
 
-    // once the initial tree is built, the temporary storage used for building the tree could be freed/
+    // once the initial tree is built, the temporary storage used for building the tree could be freed
     state.d_temp_buffer_gas[batch_id] = reinterpret_cast<void*>(d_temp_buffer_gas);
     CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[batch_id] ) );
 
@@ -233,8 +233,8 @@ void createGeometry( WhittedState& state, int batch_id, float radius )
         state.d_gas_output_buffer[batch_id],
         batch_id);
 
-    state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
-    //CUDA_CHECK( cudaFree( reinterpret_cast<void*>(d_aabb) ) );
+    //state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
+    CUDA_CHECK( cudaFree( reinterpret_cast<void*>(d_aabb) ) );
     OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
   Timing::stopTiming(true);
 }
@@ -577,7 +577,7 @@ void cleanupState( WhittedState& state )
         CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
       CUDA_CHECK( cudaFree( state.d_actQs[i] ) );
       delete state.h_actQs[i];
-      CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
+      //CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
       if (state.d_r2q_map[i])
         CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map[i]     ) ) );
 
