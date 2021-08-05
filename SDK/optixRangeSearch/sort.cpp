@@ -32,17 +32,7 @@
   extern double tot_alloc_size;
 #endif
 
-float calcCRRatio(WhittedState& state, unsigned int N) {
-  // will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
-  float particleArraysSize = 5 * N * sizeof(unsigned int);
-  float numOfCells = (state.totDRAMSize*1024*1024*1024 - particleArraysSize) / 3 / sizeof(unsigned int);
-  float sceneVolume = (state.Max.x - state.Min.x) * (state.Max.y - state.Min.y) * (state.Max.z - state.Min.z);
-  float cellSize = cbrt(sceneVolume / numOfCells) * 1.5;
-  //printf("%f, %f, %f, %f\n", particleArraysSize/1024/1024/1024, numOfCells, sceneVolume, cellSize);
-  return state.radius / cellSize;
-}
-
-void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
+void computeMinMax(unsigned int N, float3* particles, float3& min, float3& max)
 {
   // TODO: maybe use long since we are going to convert a float to its floor value?
   thrust::host_vector<int3> h_MinMax(2);
@@ -69,16 +59,16 @@ void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
   int3 minCell = h_MinMax[0];
   int3 maxCell = h_MinMax[1] + make_int3(1, 1, 1);
  
-  state.Min.x = minCell.x;
-  state.Min.y = minCell.y;
-  state.Min.z = minCell.z;
+  min.x = minCell.x;
+  min.y = minCell.y;
+  min.z = minCell.z;
  
-  state.Max.x = maxCell.x;
-  state.Max.y = maxCell.y;
-  state.Max.z = maxCell.z;
+  max.x = maxCell.x;
+  max.y = maxCell.y;
+  max.z = maxCell.z;
 
   //fprintf(stdout, "\tcell boundary: (%d, %d, %d), (%d, %d, %d)\n", minCell.x, minCell.y, minCell.z, maxCell.x, maxCell.y, maxCell.z);
-  fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", state.Min.x, state.Min.y, state.Min.z, state.Max.x, state.Max.y, state.Max.z);
+  fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", min.x, min.y, min.z, max.x, max.y, max.z);
 }
 
 unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo) {
@@ -92,8 +82,7 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
 #ifdef MEM_STATS
   fprintf(stdout, "\tUsed memory: %lf (MB)\n", tot_alloc_size);
 #endif
-  state.crRatio = calcCRRatio(state, N);
-  float cellSize = state.radius/state.crRatio;
+  float cellSize = state.radius / state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));
   gridInfo.GridDimension.y = static_cast<unsigned int>(ceilf(gridSize.y / cellSize));
@@ -592,10 +581,14 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
     N = state.numPoints;
     particles = state.params.points;
     h_particles = state.h_points;
+    state.Min = state.pMin;
+    state.Max = state.pMax;
   } else {
     N = state.numQueries;
     particles = state.params.queries;
     h_particles = state.h_queries;
+    state.Min = state.qMin;
+    state.Max = state.qMax;
   }
 
   // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.
@@ -604,8 +597,6 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
     if (sortMode == 3) {
       oneDSort(state, N, particles, h_particles);
     } else {
-      computeMinMax(state, N, particles);
-
       bool morton; // false for raster order
       if (sortMode == 1) morton = true;
       else morton = false;

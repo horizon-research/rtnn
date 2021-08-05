@@ -74,6 +74,7 @@ void uploadData ( WhittedState& state ) {
     state.params.points = allocThrustDevicePtr(&d_points_ptr, state.numPoints);
 
     thrust::copy(state.h_points, state.h_points + state.numPoints, d_points_ptr);
+    computeMinMax(state.numPoints, state.params.points, state.pMin, state.pMax);
 
     if (state.samepq) {
       // by default, params.queries and params.points point to the same device
@@ -81,13 +82,15 @@ void uploadData ( WhittedState& state ) {
       // space in device memory and point params.queries to that space. this is
       // lazy query allocation.
       state.params.queries = state.params.points;
+      state.qMin = state.pMin;
+      state.qMax = state.pMax;
     } else {
       thrust::device_ptr<float3> d_queries_ptr;
       state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numPoints);
       
       thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
+      computeMinMax(state.numQueries, state.params.queries, state.qMin, state.qMax);
     }
-    //CUDA_CHECK( cudaStreamSynchronize( state.stream[0] ) ); // TODO: just so we can measure time
   Timing::stopTiming(true);
 }
 
@@ -166,7 +169,7 @@ static void buildGas(
         // original size is smaller, so point d_gas_output_buffer directly to the original device GAS memory.
         d_gas_output_buffer = d_buffer_temp_output_gas_and_compacted_size;
     }
-    //fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
+    fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
 }
 
 CUdeviceptr createAABB( WhittedState& state, int batch_id, float radius )

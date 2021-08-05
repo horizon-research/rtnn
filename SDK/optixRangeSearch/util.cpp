@@ -12,6 +12,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/copy.h>
 
+#include "func.h"
 #include "state.h"
 
 int tokenize(std::string s, std::string del, float3** ndpoints, unsigned int lineId)
@@ -215,6 +216,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.autoNB = (bool)(atoi(argv[++i])); // if enabled, ignore nb
       }
+      else if( arg == "--autocrratio" || arg == "-ac" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.autoCR = (bool)(atoi(argv[++i])); // if enabled, ignore crRatio
+      }
       else if( arg == "--partition" || arg == "-p" )
       {
           if( i >= argc - 1 )
@@ -330,7 +337,26 @@ float maxInscribedWidth(float radius, int dim) {
   else assert(0);
 }
 
+float calcCRRatio(WhittedState& state) {
+  unsigned int N = state.numPoints;
+
+  // will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
+  float particleArraysSize = 5 * N * sizeof(unsigned int);
+  float pointDataSize = 2 * N * 3 * sizeof(unsigned int); // conservatively include both points and queries
+  float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize;
+  float numOfCells = spaceAvail / 3 / sizeof(unsigned int);
+  float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
+  float cellSize = cbrt(sceneVolume / numOfCells) * 1.2;
+  //printf("%f, %f, %f, %f\n", particleArraysSize/1024/1024/1024, numOfCells, sceneVolume, cellSize);
+  return state.radius / cellSize;
+}
+
 void initBatches(WhittedState& state) {
+  if (state.autoCR) {
+    state.crRatio = calcCRRatio(state);
+    fprintf(stdout, "\tCalculated cellRadiusRatio: %f\n", state.crRatio);
+  }
+
   // see |genCellMask| for the logic behind this.
   float cellSize = state.radius / state.crRatio;
   float maxWidth = maxInscribedWidth(state.radius, 3); // for 3D

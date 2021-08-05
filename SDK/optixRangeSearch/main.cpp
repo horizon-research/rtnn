@@ -62,6 +62,8 @@ int main( int argc, char* argv[] )
   {
     setDevice(state);
 
+    uploadData(state);
+
     // call this after set device.
     initBatches(state);
 
@@ -69,8 +71,6 @@ int main( int argc, char* argv[] )
 
     Timing::reset();
     Timing::startTiming("total search time");
-
-    uploadData(state);
 
     // if partition is enabled, we do it here too, which generate batches.
     // TODO: enable partition when !samepq.

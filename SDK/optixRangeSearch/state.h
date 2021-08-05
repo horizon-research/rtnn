@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <float.h>
 #include <vector_types.h>
 #include <optix_types.h>
 #include "optixRangeSearch.h"
@@ -85,6 +86,7 @@ struct WhittedState
     bool                        interleave                = true;
     bool                        partition                 = false;
     bool                        autoNB                    = false;
+    bool                        autoCR                    = true;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
@@ -106,6 +108,10 @@ struct WhittedState
     int                         maxBatchCount             = 1;
     double                      totDRAMSize               = 0;
 
+    float3                      pMin;
+    float3                      pMax;
+    float3                      qMin;
+    float3                      qMax;
     float3                      Min;
     float3                      Max;
 
