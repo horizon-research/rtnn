@@ -15,6 +15,8 @@ void setDevice ( WhittedState& state ) {
   CUDA_CHECK( cudaGetDeviceProperties ( &prop, state.device_id ) );
   CUDA_CHECK( cudaSetDevice( state.device_id ) );
   std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
+  state.totDRAMSize = (double)prop.totalGlobalMem/1024/1024/1024;
+  std::cerr << "\tMemory: " << state.totDRAMSize << " GB" << std::endl;
 }
 
 void setupSearch( WhittedState& state ) {

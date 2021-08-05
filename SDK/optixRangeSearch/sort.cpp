@@ -32,6 +32,16 @@
   extern double tot_alloc_size;
 #endif
 
+float calcCRRatio(WhittedState& state, unsigned int N) {
+  // will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
+  float particleArraysSize = 5 * N * sizeof(unsigned int);
+  float numOfCells = (state.totDRAMSize*1024*1024*1024 - particleArraysSize) / 3 / sizeof(unsigned int);
+  float sceneVolume = (state.Max.x - state.Min.x) * (state.Max.y - state.Min.y) * (state.Max.z - state.Min.z);
+  float cellSize = cbrt(sceneVolume / numOfCells) * 1.5;
+  //printf("%f, %f, %f, %f\n", particleArraysSize/1024/1024/1024, numOfCells, sceneVolume, cellSize);
+  return state.radius / cellSize;
+}
+
 void computeMinMax(WhittedState& state, unsigned int N, float3* particles)
 {
   // TODO: maybe use long since we are going to convert a float to its floor value?
@@ -82,6 +92,7 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
 #ifdef MEM_STATS
   fprintf(stdout, "\tUsed memory: %lf (MB)\n", tot_alloc_size);
 #endif
+  state.crRatio = calcCRRatio(state, N);
   float cellSize = state.radius/state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));
