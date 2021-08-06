@@ -234,18 +234,16 @@ void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned i
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
   float overhead = 0;
-  float maxOverhead = FLT_MAX;
-  int splitId = numAvailBatches - 2;
+  float maxOverhead = 0; // overhead must be negative for bundling to be useful
+  int splitId = numAvailBatches - 1; // by default we don't bundle
   for (int i = numAvailBatches - 2; i >= 0; i--) {
     float extraTime = h_rayHist[i] * (kSphereTest_PerIS - kAABBTest_PerIS) * state.knn;
     overhead += extraTime - tBuildGAS;
-    fprintf(stdout, "i: %d, extraTime: %f, overhead: %f\n", i, extraTime, overhead);
+    fprintf(stdout, "i: %d, %u extraTime: %f, overhead: %f\n", i, h_rayHist[i], extraTime, overhead);
     if (overhead < maxOverhead) {
       maxOverhead = overhead;
       splitId = i;
     }
-
-    //if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
   }
 
   for (int i = 0; i <= splitId - 1; i++) {
@@ -282,8 +280,8 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
   float overhead = 0;
-  float maxOverhead = FLT_MAX;
-  int splitId = numAvailBatches - 2;
+  float maxOverhead = 0;
+  int splitId = numAvailBatches - 1;
   for (int i = numAvailBatches - 2; i >= 0; i--) {
     float curWidth = kGetWidthFromIter(i, cellSize);
     float curRadius = std::min(state.radius, (float)(curWidth / 2 * sqrt(2)));
@@ -297,8 +295,6 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
       maxOverhead = overhead;
       splitId = i;
     }
-
-    //if (i <= numBatches - 2 || i == numAvailBatches - 1) batches.push_back(i);
   }
 
   for (int i = 0; i <= splitId - 1; i++) {
