@@ -223,12 +223,11 @@ void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned i
   // empirical coefficients on 2080Ti
   //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
   const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
-  const float kAABBTest_PerIS = 6.5e-6/50; // IS call time in *ms* if doing aabb test (div by 50 because the data was ubenchmarked using K=50)
-  const float kSphereTest_PerIS = 2e-5/50; // IS call time in *ms* if doing sphere test
+  const float kAABBTest_PerIS = 6.5e-4/50; // IS call time in *ms* if doing aabb test (div by 50 because the data was ubenchmarked using K=50)
+  const float kSphereTest_PerIS = 2e-3/50; // IS call time in *ms* if doing sphere test
 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
-  float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 2; // 2 is the empirical intercept (TODO)
-  //float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
+  float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 20; // 20 is the empirical intercept (TODO)
   fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
   // incrementally combine batch i with the last batch (assuming all other
@@ -266,17 +265,15 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   // empirical coefficients on 2080Ti
   //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
   const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
-  const float kSearch_PerIS = 6e-6; // knn search time in *ms* per IS call
+  const float kSearch_PerIS = 6e-2; // knn search time in *ms* per IS call
 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
-  float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 2; // 2 is the empirical intercept (TODO)
-  //float tBuildGAS = state.numPoints * kBuildGas_PerAABB;
+  float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 20; // 20 is the empirical intercept (TODO)
   float cellSize = state.radius / state.crRatio;
   fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
-  // calculate the total work if every available batch is an independent launch
   float maxWidth = kGetWidthFromIter(numAvailBatches - 1, cellSize);
-  float maxRadius = std::min(state.radius, (float)(maxWidth / 2 * sqrt(2)));
+  float maxRadius = std::min(state.radius, (float)(maxWidth / 2 * sqrt(2))); // TODO: sqrt(3)
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
   float overhead = 0;
@@ -284,10 +281,11 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   int splitId = numAvailBatches - 1;
   for (int i = numAvailBatches - 2; i >= 0; i--) {
     float curWidth = kGetWidthFromIter(i, cellSize);
-    float curRadius = std::min(state.radius, (float)(curWidth / 2 * sqrt(2)));
+    float curRadius = std::min(state.radius, (float)(curWidth / 2 * sqrt(2))); // TODO: sqrt(3)
     float density = state.knn / ((curWidth - cellSize) * (curWidth - cellSize) * (curWidth - cellSize));
 
-    float extraWork = h_rayHist[i] * (maxRadius * maxRadius - curRadius * curRadius) * density; // TODO: assuming density doesn't change dramatically; consider non-uniform density?
+    // TODO: assuming density doesn't change dramatically; consider non-uniform density?
+    float extraWork = h_rayHist[i] * 8 * (maxRadius * maxRadius * maxRadius - curRadius * curRadius * curRadius) * density;
     float extraTime = extraWork * kSearch_PerIS;
     overhead += extraTime - tBuildGAS;
     fprintf(stdout, "i: %d, density: %f, extraWork: %f, extraTime: %f, overhead: %f\n", i, density, extraWork, extraTime, overhead);

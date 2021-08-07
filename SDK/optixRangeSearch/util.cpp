@@ -360,16 +360,23 @@ float calcCRRatio(WhittedState& state) {
   // the fact that the actual number of cells will be greater than here due to
   // meta cell alignment.
   float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2;
-  float ratioLimitedBySort = state.radius / cellSizeLimitedBySort;
+  //float ratioLimitedBySort = state.radius / cellSizeLimitedBySort;
 
   // TODO: conservatively estimate the gas size as twice the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - pointDataSize - returnDataSize;
   float maxNumOfBatches = spaceAvail / gasSize;
-  float ratioLimitedByGAS = (maxNumOfBatches - 1) / sqrt(3); // TODO: sqrt(2) if 2D
+  //printf("NB: %f\n", maxNumOfBatches);
+  float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (maxNumOfBatches - 1));
 
-  float ratio = std::min(ratioLimitedBySort, ratioLimitedByGAS);
-  fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, ratioLimitedBySort, ratioLimitedByGAS);
+  float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
+  float ratio = state.radius / cellSize;
+  fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, cellSizeLimitedBySort, cellSizeLimitedByGAS);
+
+  //float ratioLimitedByGAS = (maxNumOfBatches - 1) / sqrt(3); // TODO: sqrt(2) if 2D
+  //float ratio = std::min(ratioLimitedBySort, ratioLimitedByGAS);
+  //fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, ratioLimitedBySort, ratioLimitedByGAS);
+
   return ratio;
 }
 

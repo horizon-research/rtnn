@@ -82,7 +82,7 @@ struct WhittedState
     float                       crRatio                   = 8; // celSize = radius / crRatio
     float                       gsrRatio                  = 1;
     bool                        toGather                  = false;
-    bool                        samepq                    = false;
+    bool                        samepq                    = true;
     bool                        interleave                = true;
     bool                        partition                 = false;
     bool                        autoNB                    = false;
