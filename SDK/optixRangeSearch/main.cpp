@@ -63,6 +63,7 @@ int main( int argc, char* argv[] )
   {
     setDevice(state);
 
+    Timing::reset();
     uploadData(state);
 
     // call this after set device.
@@ -70,7 +71,6 @@ int main( int argc, char* argv[] )
 
     setupOptiX(state);
 
-    Timing::reset();
     Timing::startTiming("total search time");
 
     // if partition is enabled, we do it here too, which generate batches.

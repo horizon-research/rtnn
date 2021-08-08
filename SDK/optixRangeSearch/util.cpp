@@ -356,18 +356,17 @@ float calcCRRatio(WhittedState& state) {
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize;
   float numOfCells = spaceAvail / (3 * sizeof(unsigned int));
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
-  // TODO: |1.2| is to loose the aggressive estimation of the numOfCells here and
+  // TODO: |1.2| is to loosen the aggressive estimation of the numOfCells here and
   // the fact that the actual number of cells will be greater than here due to
   // meta cell alignment.
-  float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2;
+  float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2; // can't be smaller than this
   //float ratioLimitedBySort = state.radius / cellSizeLimitedBySort;
 
   // TODO: conservatively estimate the gas size as twice the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - pointDataSize - returnDataSize;
   float maxNumOfBatches = spaceAvail / gasSize;
-  //printf("NB: %f\n", maxNumOfBatches);
-  float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (maxNumOfBatches - 1));
+  float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (maxNumOfBatches - 1)); // can't be smaller than this; TODO (sqrt(2) for 2D)
 
   float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
   float ratio = state.radius / cellSize;
