@@ -174,11 +174,16 @@ int main(int argc, char* argv[])
 
     try
     {
+        std::string outfile;
+        outfile = argv[1];
+        float radius = std::stof(argv[2]);
+        int knn = atoi(argv[3]);
+        int32_t device_id = atoi(argv[4]);
+
         int32_t device_count = 0;
         CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
         std::cout << "Total GPUs visible: " << device_count << std::endl;
 
-        int32_t device_id = 0;
         cudaDeviceProp prop;
         CUDA_CHECK( cudaGetDeviceProperties ( &prop, device_id ) );
         CUDA_CHECK( cudaSetDevice( device_id ) );
@@ -199,10 +204,6 @@ int main(int argc, char* argv[])
         //**Note:** Uncompress the data files in assets/data/*
         //          before executing the following examples
 
-        std::string outfile;
-        outfile = argv[1];
-        float radius = std::stof(argv[2]);
-        int knn = atoi(argv[3]);
         test_point_cloud(context, outfile.c_str(), radius, 1.f, knn);
         /*
         //params: optixContext, objFile, radius, fraction of samples as queries, knn

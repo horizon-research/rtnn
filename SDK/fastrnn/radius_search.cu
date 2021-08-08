@@ -172,28 +172,28 @@ namespace bvh_radSearch
         // brute-force priority queue).
         if (t < payload.query.radius * payload.query.radius)
         {
-            //if (t < payload.maxDistElemf)
-            //{
+            if (t < payload.maxDistElemf)
+            {
                 if (payload.foundNeighbors < params.knn)
                 {
                     const unsigned int idxToSave = payload.offset + payload.foundNeighbors;
                     params.optixIndices[idxToSave] = optixGetPrimitiveIndex();
-                    //params.optixDists[idxToSave] = t;
+                    params.optixDists[idxToSave] = t;
 
-                    //if (payload.foundNeighbors == params.knn - 1)
-                    //{
-                    //    findLargestDist(payload);
-                    //}
+                    if (payload.foundNeighbors == params.knn - 1)
+                    {
+                        findLargestDist(payload);
+                    }
 
                     ++payload.foundNeighbors;
                 }
-                //else
-                //{
-                //    params.optixIndices[payload.maxDistElemi] = optixGetPrimitiveIndex();
-                //    params.optixDists[payload.maxDistElemi] = t;
-                //    findLargestDist(payload);
-                //}
-            //}
+                else
+                {
+                    params.optixIndices[payload.maxDistElemi] = optixGetPrimitiveIndex();
+                    params.optixDists[payload.maxDistElemi] = t;
+                    findLargestDist(payload);
+                }
+            }
         }
     }
 
