@@ -331,10 +331,24 @@ void readData(WhittedState& state) {
   }
 }
 
-// this function returns the width of the largest inscribed cube of a sphere
+// this function returns the width of the inscribed cube (square) of a sphere (circle)
 float maxInscribedWidth(float radius, int dim) {
   if (dim == 2) return radius/sqrt(2)*2;
   else if (dim == 3) return radius/sqrt(3)*2;
+  else assert(0);
+}
+
+// this function returns the radius of the circumsphere (circumcircle) of a cube (square)
+float minCircumscribedRadius(float width, int dim) {
+  if (dim == 2) return width/2*sqrt(2);
+  else if (dim == 3) return width/2*sqrt(3);
+  else assert(0);
+}
+
+// this function returns the radius of a sphere (circle) with same volume of a cube (square)
+float radiusEquiVolume(float width, int dim) {
+  if (dim == 2) return width*sqrt(1/M_PI);
+  else if (dim == 3) return width*cbrt(3/(4*M_PI));
   else assert(0);
 }
 

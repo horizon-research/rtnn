@@ -273,7 +273,8 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
   float maxWidth = kGetWidthFromIter(numAvailBatches - 1, cellSize);
-  float maxRadius = std::min(state.radius, (float)(maxWidth / 2 * sqrt(2))); // TODO: sqrt(3)
+  //float maxRadius = std::min(state.radius, minCircumscribedRadius(maxWidth, 2)); // TODO: change it with how radius is actuallu computed.
+  float maxRadius = std::min(state.radius, radiusEquiVolume(maxWidth, 3));
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
   float overhead = 0;
@@ -281,7 +282,8 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   int splitId = numAvailBatches - 1;
   for (int i = numAvailBatches - 2; i >= 0; i--) {
     float curWidth = kGetWidthFromIter(i, cellSize);
-    float curRadius = std::min(state.radius, (float)(curWidth / 2 * sqrt(2))); // TODO: sqrt(3)
+    //float curRadius = std::min(state.radius, minCircumscribedRadius(curWidth, 2)); // TODO: change it with how radius is actuallu computed.
+    float curRadius = std::min(state.radius, radiusEquiVolume(curWidth, 3));
     float density = state.knn / ((curWidth - cellSize) * (curWidth - cellSize) * (curWidth - cellSize));
 
     // TODO: assuming density doesn't change dramatically; consider non-uniform density?
@@ -347,7 +349,12 @@ void genBatches(WhittedState& state,
     // see comments in how maxWidth is calculated in |genCellMask|.
     float partThd = kGetWidthFromIter(maxMask, cellSize); // partThd depends on the max mask.
     if (state.searchMode == "knn")
-      state.launchRadius[batchId] = (float)(partThd / 2 * sqrt(2));
+      // TODO: use 3 if want to be absolutely sure. if the sphere is to be of
+      // the same volume as the cube, its radius should be width * 0.62. if we
+      // use 2 here, the radius is width * 0.71. so very likely the sphere will
+      // have more than K neighbors.
+      //state.launchRadius[batchId] = minCircumscribedRadius(partThd, 2);
+      state.launchRadius[batchId] = radiusEquiVolume(partThd, 3);
     else
       state.launchRadius[batchId] = partThd / 2;
     if (batchId == (state.numOfBatches - 1)) state.launchRadius[batchId] = state.radius;

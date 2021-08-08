@@ -126,7 +126,7 @@ void calcSearchSize(int3 gridCell,
     // small, cellSize will be 0 (same as uninitialized).
     float width = getWidthFromIter(iter, cellSize);
   
-    if (width > maxWidth) { //if (iter > maxIter) {
+    if (width > maxWidth) {
       cellMask[cellIndex] = iter;
       break;
     }
