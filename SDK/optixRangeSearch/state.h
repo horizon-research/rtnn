@@ -106,7 +106,8 @@ struct WhittedState
 
     int                         numOfBatches              = -1;
     int                         maxBatchCount             = 1;
-    double                      totDRAMSize               = 0;
+    float                       totDRAMSize               = 0; // GB
+    float                       gpuMemUsed                = 0; // MB
 
     float3                      pMin;
     float3                      pMax;

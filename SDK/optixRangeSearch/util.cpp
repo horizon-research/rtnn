@@ -273,6 +273,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.crRatio = std::stof(argv[++i]);
       }
+      else if( arg == "--gpumemused" || arg == "-gmu" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.gpuMemUsed = std::stof(argv[++i]);
+      }
       else if( arg == "--gather" || arg == "-g" )
       {
           if( i >= argc - 1 )
@@ -367,14 +373,13 @@ float calcCRRatio(WhittedState& state) {
 
   // for sorting and partitioning, we will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
   float particleArraysSize = 5 * N * sizeof(unsigned int);
-  float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize;
+  float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize - state.gpuMemUsed * 1024 * 1024;
   float numOfCells = spaceAvail / (3 * sizeof(unsigned int));
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
   // TODO: |1.2| is to loosen the aggressive estimation of the numOfCells here and
   // the fact that the actual number of cells will be greater than here due to
   // meta cell alignment.
   float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2; // can't be smaller than this
-  //float ratioLimitedBySort = state.radius / cellSizeLimitedBySort;
 
   // TODO: conservatively estimate the gas size as twice the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
@@ -385,10 +390,6 @@ float calcCRRatio(WhittedState& state) {
   float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
   float ratio = state.radius / cellSize;
   fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, cellSizeLimitedBySort, cellSizeLimitedByGAS);
-
-  //float ratioLimitedByGAS = (maxNumOfBatches - 1) / sqrt(3); // TODO: sqrt(2) if 2D
-  //float ratio = std::min(ratioLimitedBySort, ratioLimitedByGAS);
-  //fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, ratioLimitedBySort, ratioLimitedByGAS);
 
   return ratio;
 }
