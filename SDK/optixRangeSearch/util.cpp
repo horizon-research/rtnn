@@ -396,6 +396,9 @@ float calcCRRatio(WhittedState& state) {
 
 void initBatches(WhittedState& state) {
   if (state.autoCR) {
+    // TODO: should we just use a fixed cell size/ratio? an overly small cell
+    // increases the sort cost, but probably mean little for range search. need
+    // some exhaustive testing.
     state.crRatio = calcCRRatio(state);
   }
 
