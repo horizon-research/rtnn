@@ -223,8 +223,7 @@ void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned i
   // empirical coefficients on 2080Ti
   //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
   const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
-  //const float kAABBTest_PerIS = 6.5e-4/50; // IS call time in *ms* if doing aabb test (div by 50 because the data was ubenchmarked using K=50)
-  //const float kSphereTest_PerIS = 2e-3/50; // IS call time in *ms* if doing sphere test
+  // higher values encourage batching.
   const float kAABBTest_PerIS = 1e-5/50; // IS call time in *ms* if doing aabb test (div by 50 because the data was ubenchmarked using K=50)
   const float kSphereTest_PerIS = 1e-4/50; // IS call time in *ms* if doing sphere test
 
@@ -253,6 +252,17 @@ void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned i
   batches.push_back(numAvailBatches - 1);
 }
 
+float radiusFromMegacell(float width) {
+  bool approx = true;
+
+  if (approx) return radiusEquiVolume(width, 3);
+  // TODO: use 3 if want to be absolutely sure. if the sphere is to be of
+  // the same volume as the cube, its radius should be width * 0.62. if we
+  // use 2 here, the radius is width * 0.71. so very likely the sphere will
+  // have more than K neighbors.
+  else return minCircumscribedRadius(width, 2);
+}
+
 void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
   // Logic: given CR (which has been decided beforehand), we know that max # of
   //   available batches (|numAvailBatches|). launching as many batches as
@@ -262,11 +272,12 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   // Searching time = max(memcpy time, compute time).
   // The memcpy time is empirically observed to be linear w.r.t., to the # of queries
   // The compute time, without considering CKE, is the lump sum of the compute time of each batch, which is linear w.r.t. the # of queries in the batch and cubic w.r.t., to the radius in the batch.
-  // TODO: fit a better model for IS calls: N_tl * T_tl + N_is * T_is
 
   // empirical coefficients on 2080Ti
   //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
   const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
+  // TODO: fit a better model for IS calls? N_tl * T_tl + N_is * T_is
+  // TODO: this should depend K.
   const float kSearch_PerIS = 6e-2; // knn search time in *ms* per IS call
 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
@@ -275,8 +286,7 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
   float maxWidth = kGetWidthFromIter(numAvailBatches - 1, cellSize);
-  //float maxRadius = std::min(state.radius, minCircumscribedRadius(maxWidth, 2)); // TODO: change it with how radius is actuallu computed.
-  float maxRadius = std::min(state.radius, radiusEquiVolume(maxWidth, 3));
+  float maxRadius = std::min(state.radius, radiusFromMegacell(maxWidth));
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
   float overhead = 0;
@@ -284,8 +294,7 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   int splitId = numAvailBatches - 1;
   for (int i = numAvailBatches - 2; i >= 0; i--) {
     float curWidth = kGetWidthFromIter(i, cellSize);
-    //float curRadius = std::min(state.radius, minCircumscribedRadius(curWidth, 2)); // TODO: change it with how radius is actuallu computed.
-    float curRadius = std::min(state.radius, radiusEquiVolume(curWidth, 3));
+    float curRadius = std::min(state.radius, radiusFromMegacell(curWidth));
     float density = state.knn / ((curWidth - cellSize) * (curWidth - cellSize) * (curWidth - cellSize));
 
     // TODO: assuming density doesn't change dramatically; consider non-uniform density?
@@ -351,12 +360,7 @@ void genBatches(WhittedState& state,
     // see comments in how maxWidth is calculated in |genCellMask|.
     float partThd = kGetWidthFromIter(maxMask, cellSize); // partThd depends on the max mask.
     if (state.searchMode == "knn")
-      // TODO: use 3 if want to be absolutely sure. if the sphere is to be of
-      // the same volume as the cube, its radius should be width * 0.62. if we
-      // use 2 here, the radius is width * 0.71. so very likely the sphere will
-      // have more than K neighbors.
-      //state.launchRadius[batchId] = minCircumscribedRadius(partThd, 2);
-      state.launchRadius[batchId] = radiusEquiVolume(partThd, 3);
+      state.launchRadius[batchId] = radiusFromMegacell(partThd);
     else
       state.launchRadius[batchId] = partThd / 2;
     if (batchId == (state.numOfBatches - 1)) state.launchRadius[batchId] = state.radius;
