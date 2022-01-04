@@ -106,7 +106,7 @@ endif()
 # Add paths to our CMake code to the module path, so they can be found automatically by
 # CMake.
 set(CMAKE_MODULE_PATH
-  "${CMAKE_SOURCE_DIR}/../SDK/CMake"
+  "${CMAKE_SOURCE_DIR}/../src/CMake"
   ${CMAKE_MODULE_PATH}
   )
 
@@ -261,7 +261,7 @@ endif (WIN32)
 
 #set(SAMPLES_CUDA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cuda")
 
-set(SAMPLES_SUPPORT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../SDK/support")
+set(SAMPLES_SUPPORT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src/support")
 
 # NVRTC include paths relative to the sample path
   #\"cuda\", \\
