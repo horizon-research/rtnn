@@ -33,11 +33,8 @@
 #include <optix_stack_size.h>
 #include <optix_stubs.h>
 
-#include <sutil/Camera.h>
 #include <sutil/Exception.h>
-#include <sutil/Matrix.h>
 #include <sutil/sutil.h>
-#include <sutil/vec_math.h>
 #include <sutil/Timing.h>
 
 #include <iomanip>

@@ -7,7 +7,6 @@
 #include <cstdlib>
 
 #include <sutil/Exception.h>
-#include <sutil/vec_math.h>
 
 #include <thrust/device_vector.h>
 #include <thrust/copy.h>

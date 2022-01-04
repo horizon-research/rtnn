@@ -7,7 +7,6 @@
 
 #include <vector_types.h>
 #include <optix_types.h>
-#include <sutil/vec_math.h>
 
 #include "state.h"
 #include "grid.h"

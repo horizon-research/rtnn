@@ -1,7 +1,6 @@
 #include <cuda_runtime.h>
 
 #include <sutil/Exception.h>
-#include <sutil/vec_math.h>
 #include <sutil/Timing.h>
 
 #include <thrust/device_vector.h>
