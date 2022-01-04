@@ -1,7 +1,6 @@
 # RTNN: Accelerating Neighbor Search Using Hardware Ray Tracing
 
 ## Build Instructions
----------
 
 ### Requirements
 
