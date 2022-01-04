@@ -26,7 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <cuda/helpers.h>
+//#include <cuda/helpers.h>
 #include <vector_types.h>
 #include <optix_device.h>
 
