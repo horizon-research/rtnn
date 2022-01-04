@@ -31,58 +31,9 @@
 
 #include <optix.h>
 
-#include <glad/glad.h>
-
 #include <stdexcept>
 #include <sstream>
 #include <iostream>
-
-//------------------------------------------------------------------------------
-//
-// GL error-checking
-//
-//------------------------------------------------------------------------------
-
-#define DO_GL_CHECK
-#ifdef DO_GL_CHECK
-#    define GL_CHECK( call )                                                   \
-        do                                                                     \
-        {                                                                      \
-            call;                                                              \
-            GLenum err = glGetError();                                         \
-            if( err != GL_NO_ERROR )                                           \
-            {                                                                  \
-                std::stringstream ss;                                          \
-                ss << "GL error " <<  sutil::getGLErrorString( err ) << " at " \
-                   << __FILE__  << "(" <<  __LINE__  << "): " << #call         \
-                   << std::endl;                                               \
-                std::cerr << ss.str() << std::endl;                            \
-                throw sutil::Exception( ss.str().c_str() );                    \
-            }                                                                  \
-        }                                                                      \
-        while (0)
-
-
-#    define GL_CHECK_ERRORS( )                                                 \
-        do                                                                     \
-        {                                                                      \
-            GLenum err = glGetError();                                         \
-            if( err != GL_NO_ERROR )                                           \
-            {                                                                  \
-                std::stringstream ss;                                          \
-                ss << "GL error " <<  sutil::getGLErrorString( err ) << " at " \
-                   << __FILE__  << "(" <<  __LINE__  << ")";                   \
-                std::cerr << ss.str() << std::endl;                            \
-                throw sutil::Exception( ss.str().c_str() );                    \
-            }                                                                  \
-        }                                                                      \
-        while (0)
-
-#else
-#    define GL_CHECK( call )   do { call; } while(0)
-#    define GL_CHECK_ERRORS( ) do { ;     } while(0)
-#endif
-
 
 //------------------------------------------------------------------------------
 //
@@ -262,40 +213,6 @@ class Exception : public std::runtime_error
      }
 };
 
-
-inline const char* getGLErrorString( GLenum error )
-{
-    switch( error )
-    {
-        case GL_NO_ERROR:            return "No error";
-        case GL_INVALID_ENUM:        return "Invalid enum";
-        case GL_INVALID_VALUE:       return "Invalid value";
-        case GL_INVALID_OPERATION:   return "Invalid operation";
-        //case GL_STACK_OVERFLOW:      return "Stack overflow";
-        //case GL_STACK_UNDERFLOW:     return "Stack underflow";
-        case GL_OUT_OF_MEMORY:       return "Out of memory";
-        //case GL_TABLE_TOO_LARGE:     return "Table too large";
-        default:                     return "Unknown GL error";
-    }
-}
-
-
-inline void checkGLError()
-{
-    GLenum err = glGetError();
-    if( err != GL_NO_ERROR )
-    {
-        std::ostringstream oss;
-        do
-        {
-            oss << "GL error: " << getGLErrorString( err ) << "\n";
-            err = glGetError();
-        }
-        while( err != GL_NO_ERROR );
-
-        throw Exception( oss.str().c_str() );
-    }
-}
 
 
 } // end namespace sutil

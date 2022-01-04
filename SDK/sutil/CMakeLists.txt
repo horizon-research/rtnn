@@ -28,39 +28,39 @@
 
 set(sources
     ${CMAKE_CURRENT_BINARY_DIR}/../sampleConfig.h
-    ${SAMPLES_CUDA_DIR}/sphere.cu
-    ${SAMPLES_CUDA_DIR}/whitted.cu
-    ${SAMPLES_CUDA_DIR}/BufferView.h
-    ${SAMPLES_CUDA_DIR}/GeometryData.h
-    ${SAMPLES_CUDA_DIR}/Light.h
-    ${SAMPLES_CUDA_DIR}/LocalGeometry.h
-    ${SAMPLES_CUDA_DIR}/MaterialData.h
-    ${SAMPLES_CUDA_DIR}/util.h
-    ${SAMPLES_CUDA_DIR}/helpers.h
-    Aabb.h
-    Camera.cpp
-    Camera.h
-    CUDAOutputBuffer.h
+    #${SAMPLES_CUDA_DIR}/sphere.cu
+    #${SAMPLES_CUDA_DIR}/whitted.cu
+    #${SAMPLES_CUDA_DIR}/BufferView.h
+    #${SAMPLES_CUDA_DIR}/GeometryData.h
+    #${SAMPLES_CUDA_DIR}/Light.h
+    #${SAMPLES_CUDA_DIR}/LocalGeometry.h
+    #${SAMPLES_CUDA_DIR}/MaterialData.h
+    #${SAMPLES_CUDA_DIR}/util.h
+    #${SAMPLES_CUDA_DIR}/helpers.h
+    #Aabb.h
+    #Camera.cpp
+    #Camera.h
+    #CUDAOutputBuffer.h
     Exception.h
-    GLDisplay.cpp
-    GLDisplay.h
+    #GLDisplay.cpp
+    #GLDisplay.h
     IDFactory.cpp
     IDFactory.h
-    Matrix.h
-    PPMLoader.cpp
-    PPMLoader.h
+    #Matrix.h
+    #PPMLoader.cpp
+    #PPMLoader.h
     Preprocessor.h
-    Quaternion.h
-    Record.h
-    Scene.cpp
-    Scene.h
+    #Quaternion.h
+    #Record.h
+    #Scene.cpp
+    #Scene.h
     sutilapi.h
     sutil.cpp
     sutil.h
     Timing.cpp
     Timing.h
-    Trackball.cpp
-    Trackball.h
+    #Trackball.cpp
+    #Trackball.h
     vec_math.h
     )
 
@@ -80,9 +80,9 @@ if( WIN32 )
 endif()
 
 target_link_libraries(${sutil_target} LINK_PRIVATE
-  ${GLFW_LIB_NAME}
-  glad
-  imgui
+  #${GLFW_LIB_NAME}
+  #glad
+  #imgui
   ${CUDA_LIBRARIES}
   )
 

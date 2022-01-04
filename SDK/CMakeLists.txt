@@ -237,7 +237,7 @@ find_package(OptiX REQUIRED)
 # Add the path to the OptiX headers to our include paths.
 include_directories(
   "${OptiX_INCLUDE}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cuda"
+  #"${CMAKE_CURRENT_SOURCE_DIR}/cuda"
   )
 
 # Select whether to use NVRTC or NVCC to generate PTX
@@ -259,13 +259,13 @@ else (WIN32)
   endif()
 endif (WIN32)
 
-set(SAMPLES_CUDA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cuda")
+#set(SAMPLES_CUDA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cuda")
 
 set(SAMPLES_SUPPORT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../SDK/support")
 
 # NVRTC include paths relative to the sample path
+  #\"cuda\", \\
 set(SAMPLES_RELATIVE_INCLUDE_DIRS "\\
-  \"cuda\", \\
   \"sutil\", \\
   \".\", ")
 
@@ -290,7 +290,7 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}
                      ${CUDA_INCLUDE_DIRS}
                      )
 
-set(SAMPLES_CUDA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cuda)
+#set(SAMPLES_CUDA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cuda)
 
 #########################################################
 # OPTIX_add_sample_executable
@@ -349,8 +349,8 @@ function(OPTIX_add_sample_executable target_name_base target_name_var)
   # Most of the samples link against the sutil library and the optix library.  Here is the
   # rule that specifies this linkage.
   target_link_libraries( ${target_name}
-    ${GLFW_LIB_NAME}
-    imgui
+    #${GLFW_LIB_NAME}
+    #imgui
     sutil_7_sdk
     )
 
@@ -408,7 +408,7 @@ add_subdirectory(sutil)
 # Our other libraries.
 #add_subdirectory( lib/optixPaging )
 # Third-party support libraries.
-add_subdirectory(support)
+#add_subdirectory(support)
 
 #################################################################
 

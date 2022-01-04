@@ -32,7 +32,7 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/grid.cu PROPERTIES CUDA_
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/aabb.cu PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
 
 OPTIX_add_sample_executable( optixRangeSearch target_name
-  ${SAMPLES_CUDA_DIR}/helpers.h
+  #${SAMPLES_CUDA_DIR}/helpers.h
   main.cpp
   search.cpp
   optix.cpp
