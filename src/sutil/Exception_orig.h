@@ -1,8 +1,3 @@
-// Fast Radius Search Exploiting Ray Tracing Frameworks
-// Authors: I. Evangelou, G. Papaioannou, K. Vardis, A. A. Vasilakis
-// The following code has been retrieved from the NVIDIA Optix SDK and some parts have been
-// stripped/modified for the purposes of this work
-
 //
 // Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
 //
@@ -31,10 +26,12 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
+
 #pragma once
 
-#include <cuda.h>
 #include <optix.h>
+
+#include <glad/glad.h>
 
 #include <stdexcept>
 #include <sstream>
@@ -42,29 +39,56 @@
 
 //------------------------------------------------------------------------------
 //
-// OptiX error-checking
+// GL error-checking
 //
 //------------------------------------------------------------------------------
 
-class Exception : public std::runtime_error
-{
-public:
-    Exception(const char* msg)
-        : std::runtime_error(msg)
-    { }
+#define DO_GL_CHECK
+#ifdef DO_GL_CHECK
+#    define GL_CHECK( call )                                                   \
+        do                                                                     \
+        {                                                                      \
+            call;                                                              \
+            GLenum err = glGetError();                                         \
+            if( err != GL_NO_ERROR )                                           \
+            {                                                                  \
+                std::stringstream ss;                                          \
+                ss << "GL error " <<  sutil::getGLErrorString( err ) << " at " \
+                   << __FILE__  << "(" <<  __LINE__  << "): " << #call         \
+                   << std::endl;                                               \
+                std::cerr << ss.str() << std::endl;                            \
+                throw sutil::Exception( ss.str().c_str() );                    \
+            }                                                                  \
+        }                                                                      \
+        while (0)
 
-    Exception(OptixResult res, const char* msg)
-        : std::runtime_error(createMessage(res, msg).c_str())
-    { }
 
-private:
-    std::string createMessage(OptixResult res, const char* msg)
-    {
-        std::ostringstream out;
-        out << optixGetErrorName(res) << ": " << msg;
-        return out.str();
-    }
-};
+#    define GL_CHECK_ERRORS( )                                                 \
+        do                                                                     \
+        {                                                                      \
+            GLenum err = glGetError();                                         \
+            if( err != GL_NO_ERROR )                                           \
+            {                                                                  \
+                std::stringstream ss;                                          \
+                ss << "GL error " <<  sutil::getGLErrorString( err ) << " at " \
+                   << __FILE__  << "(" <<  __LINE__  << ")";                   \
+                std::cerr << ss.str() << std::endl;                            \
+                throw sutil::Exception( ss.str().c_str() );                    \
+            }                                                                  \
+        }                                                                      \
+        while (0)
+
+#else
+#    define GL_CHECK( call )   do { call; } while(0)
+#    define GL_CHECK_ERRORS( ) do { ;     } while(0)
+#endif
+
+
+//------------------------------------------------------------------------------
+//
+// OptiX error-checking
+//
+//------------------------------------------------------------------------------
 
 #define OPTIX_CHECK( call )                                                    \
     do                                                                         \
@@ -75,7 +99,7 @@ private:
             std::stringstream ss;                                              \
             ss << "Optix call '" << #call << "' failed: " __FILE__ ":"         \
                << __LINE__ << ")\n";                                           \
-            throw Exception( res, ss.str().c_str() );                   \
+            throw sutil::Exception( res, ss.str().c_str() );                   \
         }                                                                      \
     } while( 0 )
 
@@ -93,7 +117,7 @@ private:
                << __LINE__ << ")\nLog:\n" << log                               \
                << ( sizeof_log_returned > sizeof( log ) ? "<TRUNCATED>" : "" ) \
                << "\n";                                                        \
-            throw Exception( res, ss.str().c_str() );                   \
+            throw sutil::Exception( res, ss.str().c_str() );                   \
         }                                                                      \
     } while( 0 )
 
@@ -118,7 +142,7 @@ private:
                << __LINE__ << ")\nLog:\n" << LOG                               \
                << ( LOG_SIZE > sizeof( LOG ) ? "<TRUNCATED>" : "" )            \
                << "\n";                                                        \
-            throw Exception( res, ss.str().c_str() );                   \
+            throw sutil::Exception( res, ss.str().c_str() );                   \
         }                                                                      \
     } while( 0 )
 
@@ -150,7 +174,7 @@ private:
             ss << "CUDA call (" << #call << " ) failed with error: '"          \
                << cudaGetErrorString( error )                                  \
                << "' (" __FILE__ << ":" << __LINE__ << ")\n";                  \
-            throw Exception( ss.str().c_str() );                        \
+            throw sutil::Exception( ss.str().c_str() );                        \
         }                                                                      \
     } while( 0 )
 
@@ -166,7 +190,7 @@ private:
             ss << "CUDA error on synchronize with error '"                     \
                << cudaGetErrorString( error )                                  \
                << "' (" __FILE__ << ":" << __LINE__ << ")\n";                  \
-            throw Exception( ss.str().c_str() );                        \
+            throw sutil::Exception( ss.str().c_str() );                        \
         }                                                                      \
     } while( 0 )
 
@@ -199,7 +223,7 @@ private:
         {                                                                      \
             std::stringstream ss;                                              \
             ss << __FILE__ << " (" << __LINE__ << "): " << #cond;              \
-            throw Exception( ss.str().c_str() );                        \
+            throw sutil::Exception( ss.str().c_str() );                        \
         }                                                                      \
     } while( 0 )
 
@@ -211,6 +235,67 @@ private:
         {                                                                      \
             std::stringstream ss;                                              \
             ss << (msg) << ": " << __FILE__ << " (" << __LINE__ << "): " << #cond ; \
-            throw Exception( ss.str().c_str() ); \
+            throw sutil::Exception( ss.str().c_str() ); \
         }                                                                      \
     } while( 0 )
+
+namespace sutil
+{
+
+class Exception : public std::runtime_error
+{
+ public:
+     Exception( const char* msg )
+         : std::runtime_error( msg )
+     { }
+
+     Exception( OptixResult res, const char* msg )
+         : std::runtime_error( createMessage( res, msg ).c_str() )
+     { }
+
+ private:
+     std::string createMessage( OptixResult res, const char* msg )
+     {
+         std::ostringstream out;
+         out << optixGetErrorName( res ) << ": " << msg;
+         return out.str();
+     }
+};
+
+
+inline const char* getGLErrorString( GLenum error )
+{
+    switch( error )
+    {
+        case GL_NO_ERROR:            return "No error";
+        case GL_INVALID_ENUM:        return "Invalid enum";
+        case GL_INVALID_VALUE:       return "Invalid value";
+        case GL_INVALID_OPERATION:   return "Invalid operation";
+        //case GL_STACK_OVERFLOW:      return "Stack overflow";
+        //case GL_STACK_UNDERFLOW:     return "Stack underflow";
+        case GL_OUT_OF_MEMORY:       return "Out of memory";
+        //case GL_TABLE_TOO_LARGE:     return "Table too large";
+        default:                     return "Unknown GL error";
+    }
+}
+
+
+inline void checkGLError()
+{
+    GLenum err = glGetError();
+    if( err != GL_NO_ERROR )
+    {
+        std::ostringstream oss;
+        do
+        {
+            oss << "GL error: " << getGLErrorString( err ) << "\n";
+            err = glGetError();
+        }
+        while( err != GL_NO_ERROR );
+
+        throw Exception( oss.str().c_str() );
+    }
+}
+
+
+} // end namespace sutil
