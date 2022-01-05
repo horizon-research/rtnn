@@ -2,7 +2,7 @@
 
 This repository contains the code that uses the hardware ray tracing capability provided by Nvidia's RT cores to accelerate neighbor search in low-dimensional space (lower than 3D), which is prevalent in engineering and science fields (e.g., computational fluid dynamics, graphics, vision), because they deal with physical data such as particles and surface samples that inherently reside in the 2D/3D space.
 
-While RT cores are designed (and optimized) for ray tracing, we show how to map neighbor search to the ray tracing hardware to achieve significant speedups (over an order of magnitude) to traditional GPU (CUDA) implementations of neighbor search. The code is primarily developed using the OptiX programming interface (for ray tracing) and also uses CUDA to parallelize many non-ray tracing helper functions. The technical aspects of the code are discussed in this [PPoPP 2021 paper](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
+While RT cores are designed (and optimized) for ray tracing, we show how to map neighbor search to the ray tracing hardware to achieve significant speedups (over an order of magnitude) to traditional GPU (CUDA) implementations of neighbor search. The code is primarily developed using the OptiX programming interface (for ray tracing) and also uses CUDA to parallelize many non-ray tracing helper functions. The technical aspects of the code are discussed in this [PPoPP 2022 paper](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
 
 ## Build Instructions
 
@@ -17,6 +17,15 @@ You do not have to install the Optix SDK yourself. The code is developed using t
 
 ### Code structure
 
+`include`: headers needed for OptiX. Copied from the Optix SDK 7.1 without modifications.
+
+`src`:
+- `optixNSearch`: the main source code.
+- `sutil`: the utility library from the Optix SDK. We keep only those that are actually used in this project.
+- `CMakeLists.txt`: the usual cmake file.
+- `CMake`: contains a bunch of `.cmake` files that are used by `CMakeLists.txt to find libraries, etc.
+- `samplepc.txt`: a sample point cloud file illustrating the input file format.
+
 ### Build
 
 ```
@@ -27,6 +36,14 @@ cmake -DKNN=5 ..
 make
 ```
 Executable should be found in the `bin` directory.
+
+## Run
+
+## FAQ
+
+#### What do I do when I get an out of memory error?
+
+#### It seems like the first time I run the code it takes a long time to bootstrap. Why?
 
 ## Publication
 
