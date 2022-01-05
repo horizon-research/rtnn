@@ -4,7 +4,7 @@ This repository contains the code that uses the hardware ray tracing capability 
 
 While RT cores are designed (and optimized) for ray tracing, we show how to map neighbor search to the ray tracing hardware to achieve significant speedups (over an order of magnitude) to traditional GPU (CUDA) implementations of neighbor search. The code is primarily developed using the OptiX programming interface (for ray tracing) and also uses CUDA to parallelize many non-ray tracing helper functions. The technical aspects of the code are discussed in this [PPoPP 2022 paper](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
 
-## What forms of neighbor search are supported?
+### What forms of neighbor search are supported?
 
 Two types of neighbor search exist: fixed-radius search (a.k.a., range search) and K nearest neighbor search (KNN). RTNN optimizes for both types. For both types of search we assume a search interface that provides a search radius `r` and a maximum neighbor count `K`, consistent with the interface of many existing neighbor search libraries. We could emulate an unbounded KNN search by providing a very large `r` and emulate an unbounded range search by providing a very large `K`.
 
@@ -16,22 +16,23 @@ Why do we need to bound `K` (even in range searches)? In practical applications 
 
 ### Requirements
 
-* Nvidia CUDA Toolkit. Tested on 11.3.109 and 11.4.48. We use [Thrust](https://github.com/NVIDIA/thrust) that is installed along with the Toolkit.
+* NVCC. Tested on 11.3.109 and 11.4.48.
 * CMake. Tested on 3.20.5.
 * g++. Tested on 7.5.0.
+* [Thrust](https://github.com/NVIDIA/thrust). Tested on v10.11.00.
 * A RTX-capable GPU (Turing architecture and later) from Nvidia. Tested on RTX 2080 and RTX 2800 Ti.
 
-You do not have to install the Optix SDK yourself. The code is developed using the SDK as a template and includes all the necessary headers. The particular Optix SDK used is 7.1.0.
+You do not have to install the OptiX SDK yourself. The code is developed using the SDK as a template and includes all the necessary headers. The particular OptiX SDK used is 7.1.0.
 
 ### Code structure
 
-`include`: headers needed for OptiX. Copied from the Optix SDK 7.1 without modifications.
+`include`: headers needed for OptiX. Copied from the OptiX SDK 7.1 without modifications.
 
 `src`:
 - `optixNSearch/`: the main source code.
-- `sutil/`: the utility library from the Optix SDK. We keep only those that are actually used in this project.
+- `sutil/`: the utility library from the OptiX SDK. We keep only those that are actually used in this project.
 - `CMakeLists.txt`: the usual cmake file.
-- `CMake/`: contains a bunch of `.cmake` files that are used by `CMakeLists.txt to find libraries, etc. This is also copied from the Optix SDK without any change.
+- `CMake/`: contains a bunch of `.cmake` files that are used by `CMakeLists.txt to find libraries, etc. This is also copied from the OptiX SDK without any change.
 - `samplepc.txt`: a sample point cloud file illustrating the input file format.
 
 ### Build
@@ -57,7 +58,7 @@ Like many other GPU-based neighbor search libraries, we need to build a bunch of
 
 #### It seems like the first time I launch the code it takes a long time to bootstrap. Why?
 
-Your Optix device code is compiled after the program is launch and cached. Subsequent launches would be faster if the cache hasn't been flushed. See the discussion [here](https://forums.developer.nvidia.com/t/why-does-the-first-launch-of-optix-take-so-long/70895).
+Your OptiX device code is compiled after the program is launch and cached. Subsequent launches would be faster if the cache hasn't been flushed. See the discussion [here](https://forums.developer.nvidia.com/t/why-does-the-first-launch-of-optix-take-so-long/70895).
 
 ## Publication
 
