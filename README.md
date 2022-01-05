@@ -54,9 +54,13 @@ The executable is `bin/optixNSearch`.
 
 See `samplepc.txt` for an example. Each point takes a line. Each line has three coordinates separated by commas.
 
-### Simple runs
+### Simple run
 
 To get started, in the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; all the points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
+
+### Common configurations
+
+Below are commands to some common search configurations that you might find handy.
 
 #### KNN search on GPU 0 with a custom range of 10
 
@@ -74,9 +78,9 @@ For KNN search, the way to change `K` is to use the `-DKNN` switch during cmake 
 
 `bin/optixNSearch -f f1.txt -q f2.txt`
 
-### Advanced configurations
+#### Advanced configurations
 
-Use the `-h` switch to dump all the configuration options and their default values, which should be self-explanatory. Below are commands to some common search configurations that you might find handy.
+Use the `-h` switch to dump all the configuration options and their default values, which should be self-explanatory.
 
 ## FAQ
 
