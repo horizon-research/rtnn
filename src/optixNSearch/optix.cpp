@@ -83,7 +83,7 @@ void uploadData ( WhittedState& state ) {
       state.qMax = state.pMax;
     } else {
       thrust::device_ptr<float3> d_queries_ptr;
-      state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numPoints);
+      state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numQueries);
       
       thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
       computeMinMax(state.numQueries, state.params.queries, state.qMin, state.qMax);
