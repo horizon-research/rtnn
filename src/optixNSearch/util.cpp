@@ -135,25 +135,36 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 
 void printUsageAndExit( const char* argv0 )
 {
-    std::cerr << "Usage  : " << argv0 << " [options]\n";
-    std::cerr << "Usage  : " << argv0 << " [options]\n";
-    std::cerr << "Options: --file            | -f <filename>   File for point cloud input\n";
-    std::cerr << "         --searchmode      | -sm             Search mode; can only be \"knn\" or \"radius\" \n";
-    std::cerr << "         --radius          | -r              Search radius\n";
-    std::cerr << "         --knn             | -k              Max K returned\n";
-    std::cerr << "         --partition       | -p              Allow query partition?\n";
-    std::cerr << "         --partthd         | -pt             The threshold between query partitions\n";
-    std::cerr << "         --samepq          | -spq            Same points and queries?\n";
-    std::cerr << "         --autobatch       | -ab             Automatically determining batches?\n";
-    std::cerr << "         --autocrtatio     | -ac             Automatically determining crRatio?\n";
-    std::cerr << "         --device          | -d              Which GPU to use?\n";
-    std::cerr << "         --gassort         | -s              GAS-based query sort mode\n";
-    std::cerr << "         --pointsort       | -ps             Point sort mode\n";
-    std::cerr << "         --querysort       | -qs             Query sort mode\n";
-    std::cerr << "         --crratio         | -cr             cell/radius ratio\n";
-    std::cerr << "         --gsrRatio        | -sg             Radius ratio used in gas sort\n";
-    std::cerr << "         --gather          | -g              Whether to gather queries after sort \n";
-    std::cerr << "         --help            | -h              Print this usage message\n";
+    std::cerr << "\e[1mUsage:\e[0m " << argv0 << " [options]\n\n";
+    std::cerr << "\e[1mBasic Options:\e[0m\n";
+    std::cerr << "  --pfile           | -f      File for search points. By default it's also used as queries unless -q is speficied.\n";
+    std::cerr << "  --qfile           | -q      File for queries.\n";
+    std::cerr << "  --searchmode      | -sm     Search mode; can only be \"knn\" or \"radius\". Default is \"radius\". \n";
+    std::cerr << "  --radius          | -r      Search radius. Default is 2.\n";
+    std::cerr << "  --knn             | -k      Max K returned. Default is 50.\n";
+    std::cerr << "  --device          | -d      Specify GPU ID. Default is 0.\n";
+    //std::cerr << "  --samepq          | -spq    Same points and queries? Default is true. Always set to true if query partitioning is enabled.\n";
+    std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
+
+    std::cerr << "  --help            | -h      Print this usage message\n";
+
+    std::cerr << "\n\e[1mAdvanced Options:\e[0m\n";
+    std::cerr << "  --partition       | -p      Allow query partitioning? Enable it for better performance. Default is true.\n";
+    std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
+
+    std::cerr << "  --autobatch       | -ab     Automatically determining how to batch partitions? Default is true.\n";
+    std::cerr << "  --numbatch        | -nb     Specify the number of batches when batching partitions. It's only used if -ab is false. Default nb is -1, which uses the max available batch; otherwise the numebr of batches to launch = min(avail batches, nb).\n";
+
+    std::cerr << "  --gassort         | -s      GAS-based query sort mode. {0: no sort. 1: 1D order. 2: ID order.} Default is 2.\n";
+    std::cerr << "  --gsrRatio        | -sg     Radius ratio used in GAS sort. Default is 1.\n";
+    std::cerr << "  --gather          | -g      Whether to gather queries after GAS sort? Default is false.\n";
+
+    std::cerr << "  --pointsort       | -ps     Grid-based point sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1.\n";
+    std::cerr << "  --querysort       | -qs     Grid-based query sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1. It's only used when -spq is false. When -spq is true, -qs is ignored and queries are sorted using -ps.\n";
+
+    std::cerr << "  --autocrratio     | -ac     Automatically determining crRatio (cell/radius ratio)? cellSize = radius / crRatio. cellSize is used to create the grid for sorting queries. Default is true.\n";
+    std::cerr << "  --crratio         | -cr     Specify crRatio. It's only used if \'-ac\' is false. Default is 8.\n";
+    std::cerr << "  --gpumemused      | -gmu    Specify GPU memory that's occupied by other jobs. This allows a better estimation of crRatio to avoid OOM errors. Default is 0.\n";
     exit( 0 );
 }
 
@@ -246,7 +257,7 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.device_id = atoi(argv[++i]);
       }
-      else if( arg == "--qgassort" || arg == "-s" )
+      else if( arg == "--gassort" || arg == "-s" )
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );

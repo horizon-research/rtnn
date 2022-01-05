@@ -78,7 +78,7 @@ int main( int argc, char* argv[] )
     // TODO: streamline the logic of partition and sorting.
     sortParticles(state, POINT, state.pointSortMode);
 
-    // when samepq, queries have been are sorted using the point sort mode so
+    // when samepq, queries have been sorted using the point sort mode so
     // no need to sort queries again.
     if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
 

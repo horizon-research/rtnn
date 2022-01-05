@@ -79,13 +79,13 @@ struct WhittedState
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
-    float                       crRatio                   = 8; // celSize = radius / crRatio
+    float                       crRatio                   = 8; // cellSize = radius / crRatio
     float                       gsrRatio                  = 1;
     bool                        toGather                  = false;
     bool                        samepq                    = true;
     bool                        interleave                = true;
-    bool                        partition                 = false;
-    bool                        autoNB                    = false;
+    bool                        partition                 = true;
+    bool                        autoNB                    = true;
     bool                        autoCR                    = true;
 
     unsigned int                numPoints                 = 0;

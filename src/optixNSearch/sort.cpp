@@ -223,11 +223,12 @@ void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned i
   //const float kD2H_PerB = 6e-7; // D2H memcpy time in *ms* / byte (TODO)
   const float kBuildGas_PerAABB = 3.8e-6; // GAS building time in *ms* / AABB
   // higher values encourage batching.
-  const float kAABBTest_PerIS = 4e-5/50; // IS call time in *ms* if doing aabb test (div by 50 because the data was ubenchmarked using K=50)
-  const float kSphereTest_PerIS = 4e-4/50; // IS call time in *ms* if doing sphere test
+  //const float kAABBTest_PerIS = 4e-5/50; // IS call time in *ms* if doing aabb test (by 50 as the data was ubenchmarked using K=50)
+  //const float kSphereTest_PerIS = 4e-4/50; // IS call time in *ms* if doing sphere test
+
   // empirical coefficients on 2080
-  //const float kAABBTest_PerIS = 1e-5/50;
-  //const float kSphereTest_PerIS = 1e-4/50;
+  const float kAABBTest_PerIS = 1e-5/50;
+  const float kSphereTest_PerIS = 1e-4/50;
 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
   float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 20; // 20 is the empirical intercept (TODO)
