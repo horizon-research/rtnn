@@ -88,6 +88,8 @@ Use the `-h` switch to dump all the configuration options and their default valu
 
 Like many other GPU-based neighbor search libraries, we need to build a bunch of data structures to enable fast search. Unlike other libraries that statically allocate the memory for those data structures, we do so based on the total GPU memory capacity queried dynamically. So you should see this error much less often than in others. If you do see this, it's most likely because there are other jobs running on the GPU eating part of the GPU memory. If you can't kill those jobs, you could pass the occupied GPU memory in MB through the `-gmu` switch.
 
+It's also possible to get an OOM error when you use different files for queries and search points. The way RTNN is currently implemented we allocate memory based on search points so you might get an OOM when sorting queries. It's a known issue. See the comment [here](https://github.com/horizon-research/rtnn/blob/main/src/optixNSearch/util.cpp#L371).
+
 #### It seems like the first time I launch the code it takes a long time to bootstrap. Why?
 
 Your OptiX device code is compiled after the program is launch and cached. Subsequent launches would be faster if the cache hasn't been flushed. See the discussion [here](https://forums.developer.nvidia.com/t/why-does-the-first-launch-of-optix-take-so-long/70895).
