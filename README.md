@@ -46,9 +46,37 @@ make
 ```
 The executable is `bin/optixNSearch`.
 
-`-DKNN=5` specifies that the maximum number of returned neighbors is 5 by passing a preprocessor macro through cmake. See `optixNSearch/CMakeLists.txt`. Set it to a number that fits your application.
+`-DKNN=5` specifies that the maximum number of returned neighbors is 5 by passing a preprocessor macro through cmake. See `optixNSearch/CMakeLists.txt`. This `K` number is used only in the KNN search and will be overwritten by a run-time commandline flag for range search (see the description [here](#specify-maximum-returned-neighbors)), but you have to give a number here nevertheless.
 
 ## Run
+
+### Input format
+
+See `samplepc.txt` for an example. Each point takes a line. Each line has three coordinates separated by commas.
+
+### Simple runs
+
+To get started, in the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; all the points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
+
+#### KNN search on GPU 0 with a custom range of 10
+
+`bin/optixNSearch -f ../samplepc.txt -sm knn -d 0 -r 10`
+
+`-sm` specifies the search mode, which could either be `radius` for range search or `knn` for KNN search. `-d` specifies the device/GPU ID, and `-r` specifies the range.
+
+#### Specify maximum returned neighbors
+
+For range search, the deafult `K` is 50. You can change it by using the `-k` switch. For instance, to return 100 neighbors run: `bin/optixNSearch -f ../samplepc.txt -k 100`.
+
+For KNN search, the way to change `K` is to use the `-DKNN` switch during cmake and recompile. Whatever is passed in through `-k` is ignored. We need a compile-time `K` such that the priority queue used in the KNN search has a known size, which hopefully will allow the compiler to place the priority queue in registers rather than the global memory.
+
+#### Use file f1.txt for search points and file f2.txt for queries
+
+`bin/optixNSearch -f f1.txt -q f2.txt`
+
+### Advanced configurations
+
+Use the `-h` switch to dump all the configuration options and their default values, which should be self-explanatory. Below are commands to some common search configurations that you might find handy.
 
 ## FAQ
 
