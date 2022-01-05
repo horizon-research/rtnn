@@ -28,7 +28,7 @@
 
 #include <optix.h>
 
-#include "optixRangeSearch.h"
+#include "optixNSearch.h"
 #include "helpers.h"
 
 extern "C" {

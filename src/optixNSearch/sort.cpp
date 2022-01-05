@@ -21,7 +21,7 @@
 #include <map>
 #include <float.h>
 
-#include "optixRangeSearch.h"
+#include "optixNSearch.h"
 #include "func.h"
 #include "state.h"
 #include "grid.h"

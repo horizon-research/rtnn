@@ -1,7 +1,7 @@
 #include <sutil/Exception.h>
 #include <sutil/Timing.h>
 
-#include "optixRangeSearch.h"
+#include "optixNSearch.h"
 #include "state.h"
 #include "func.h"
 #include "grid.h"

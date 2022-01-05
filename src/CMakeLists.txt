@@ -349,8 +349,6 @@ function(OPTIX_add_sample_executable target_name_base target_name_var)
   # Most of the samples link against the sutil library and the optix library.  Here is the
   # rule that specifies this linkage.
   target_link_libraries( ${target_name}
-    #${GLFW_LIB_NAME}
-    #imgui
     sutil_7_sdk
     )
 
@@ -367,7 +365,7 @@ function(OPTIX_add_sample_executable target_name_base target_name_var)
     target_link_libraries( ${target_name} m ) # Explicitly link against math library (C samples don't do that by default)
   endif()
 
-  #YZ
+  # This uses dynamically linked libraries, which is needed if you were to use the memstat library.
   #https://stackoverflow.com/questions/63153342/cmake-undefined-reference-to-symbol-dlsymglibc-2-2-5-even-though-i-link-with
   if(USE_SHARED_CUDA_LIBS)
     target_link_libraries( ${target_name} -ldl -lmylib )
@@ -381,34 +379,11 @@ endfunction()
 # If you wish to start your own sample, you can copy one of the sample's directories.
 # Just make sure you rename all the occurances of the sample's name in the C code as well
 # and the CMakeLists.txt file.
-#add_subdirectory( optixCallablePrograms )
-#add_subdirectory( optixCurves           )
-#add_subdirectory( optixCutouts          )
-#add_subdirectory( optixDemandTexture    )
-#add_subdirectory( optixDynamicMaterials )
-#add_subdirectory( optixHair             )
-#add_subdirectory( optixHello            )
-#add_subdirectory( optixMeshViewer       )
-#add_subdirectory( optixMultiGPU         )
-#add_subdirectory( optixNVLink           )
-#add_subdirectory( optixPathTracer       )
-#add_subdirectory( optixRaycasting       )
-#add_subdirectory( optixSimpleMotionBlur )
-#add_subdirectory( optixSphere           )
-#add_subdirectory( optixTriangle         )
-#add_subdirectory( optixWhitted          )
-#add_subdirectory( example01_helloOptix  )
-add_subdirectory( optixRangeSearch      )
-#add_subdirectory( optixBenchmarking     )
-#add_subdirectory( optixNDRangeSearch    )
-#add_subdirectory( fastrnn )
+add_subdirectory( optixNSearch )
 
 # Our sutil library.  The rules to build it are found in the subdirectory.
 add_subdirectory(sutil)
-# Our other libraries.
-#add_subdirectory( lib/optixPaging )
-# Third-party support libraries.
-#add_subdirectory(support)
+# Add other libraries if you have one.
 
 #################################################################
 

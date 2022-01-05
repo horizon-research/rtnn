@@ -31,8 +31,7 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/thrust_helper.cu PROPERT
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/grid.cu PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/aabb.cu PROPERTIES CUDA_SOURCE_PROPERTY_FORMAT OBJ)
 
-OPTIX_add_sample_executable( optixRangeSearch target_name
-  #${SAMPLES_CUDA_DIR}/helpers.h
+OPTIX_add_sample_executable( optixNSearch target_name
   main.cpp
   search.cpp
   optix.cpp
@@ -44,7 +43,7 @@ OPTIX_add_sample_executable( optixRangeSearch target_name
   thrust_helper.cu
   grid.cu
   aabb.cu
-  optixRangeSearch.h
+  optixNSearch.h
   state.h
   grid.h
   helper_linearIndex.h

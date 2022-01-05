@@ -46,7 +46,7 @@
 #include <queue>
 #include <unordered_set>
 
-#include "optixRangeSearch.h"
+#include "optixNSearch.h"
 #include "state.h"
 #include "func.h"
 #include "grid.h"

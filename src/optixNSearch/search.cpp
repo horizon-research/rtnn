@@ -2,7 +2,7 @@
 #include <sutil/Timing.h>
 #include <thrust/device_vector.h>
 
-#include "optixRangeSearch.h"
+#include "optixNSearch.h"
 #include "state.h"
 #include "func.h"
 

@@ -31,7 +31,7 @@
 #include <float.h>
 #include <vector_types.h>
 #include <optix_types.h>
-#include "optixRangeSearch.h"
+#include "optixNSearch.h"
 
 // the SDK cmake defines NDEBUG in the Release build, but we still want to use assert
 // TODO: fix it in cmake files?
