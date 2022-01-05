@@ -4,6 +4,14 @@ This repository contains the code that uses the hardware ray tracing capability 
 
 While RT cores are designed (and optimized) for ray tracing, we show how to map neighbor search to the ray tracing hardware to achieve significant speedups (over an order of magnitude) to traditional GPU (CUDA) implementations of neighbor search. The code is primarily developed using the OptiX programming interface (for ray tracing) and also uses CUDA to parallelize many non-ray tracing helper functions. The technical aspects of the code are discussed in this [PPoPP 2022 paper](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
 
+## What forms of neighbor search are supported?
+
+Two types of neighbor search exist: fixed-radius search (a.k.a., range search) and K nearest neighbor search (KNN). RTNN optimizes for both types. For both types of search we assume a search interface that provides a search radius `r` and a maximum neighbor count `K`, consistent with the interface of many existing neighbor search libraries. We could emulate an unbounded KNN search by providing a very large `r` and emulate an unbounded range search by providing a very large `K`.
+
+Why do we need a search radius (even in KNN searches)? In practical applications the returned neighbors are usually bounded by a search radius, beyond which the neighbors are discarded. This is because the significance of a neighbor (e.g., the force that a particle exerts on another) is minimal and of little interest when it is too far away.
+
+Why do we need to bound `K` (even in range searches)? In practical applications the maximum amount of returned neighbors is bounded in order to bound the memory consumption and to interface with downstream tasks, which usually expect a fixed amount of neighbors.
+
 ## Build Instructions
 
 ### Requirements
@@ -20,10 +28,10 @@ You do not have to install the Optix SDK yourself. The code is developed using t
 `include`: headers needed for OptiX. Copied from the Optix SDK 7.1 without modifications.
 
 `src`:
-- `optixNSearch`: the main source code.
-- `sutil`: the utility library from the Optix SDK. We keep only those that are actually used in this project.
+- `optixNSearch/`: the main source code.
+- `sutil/`: the utility library from the Optix SDK. We keep only those that are actually used in this project.
 - `CMakeLists.txt`: the usual cmake file.
-- `CMake`: contains a bunch of `.cmake` files that are used by `CMakeLists.txt to find libraries, etc.
+- `CMake/`: contains a bunch of `.cmake` files that are used by `CMakeLists.txt to find libraries, etc. This is also copied from the Optix SDK without any change.
 - `samplepc.txt`: a sample point cloud file illustrating the input file format.
 
 ### Build
@@ -35,15 +43,21 @@ cd build
 cmake -DKNN=5 ..
 make
 ```
-Executable should be found in the `bin` directory.
+The executable is `bin/optixNSearch`.
+
+`-DKNN=5` specifies that the maximum number of returned neighbors is 5 by passing a preprocessor macro through cmake. See `optixNSearch/CMakeLists.txt`. Set it to a number that fits your application.
 
 ## Run
 
 ## FAQ
 
-#### What do I do when I get an out of memory error?
+#### What do I do when I get an "out of memory" error?
 
-#### It seems like the first time I run the code it takes a long time to bootstrap. Why?
+Like many other GPU-based neighbor search libraries, we need to build a bunch of data structures to enable fast search. Unlike other libraries that statically allocate the memory for those data structures, we do so based on the total GPU memory capacity queried dynamically. So you should see this error much less often than in others. If you do see this, it's most likely because there are other jobs running on the GPU eating part of the GPU memory. If you can't kill those jobs, you could pass the occupied GPU memory in MB through the `-gmu` switch.
+
+#### It seems like the first time I launch the code it takes a long time to bootstrap. Why?
+
+Your Optix device code is compiled after the program is launch and cached. Subsequent launches would be faster if the cache hasn't been flushed. See the discussion [here](https://forums.developer.nvidia.com/t/why-does-the-first-launch-of-optix-take-so-long/70895).
 
 ## Publication
 
