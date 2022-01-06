@@ -56,7 +56,7 @@ See `samplepc.txt` for an example. Each point takes a line. Each line has three 
 
 ### Simple run
 
-To get started, in the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; all the points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
+To get started, in the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
 
 ### Common configurations
 
@@ -66,7 +66,7 @@ Below are commands to some common search configurations that you might find hand
 
 `bin/optixNSearch -f ../samplepc.txt -sm knn -d 0 -r 10`
 
-`-sm` specifies the search mode, which could either be `radius` for range search or `knn` for KNN search. `-d` specifies the device/GPU ID, and `-r` specifies the range.
+`-sm` specifies the search mode, which could either be `radius` for range search (default) or `knn` for KNN search. `-d` specifies the device/GPU ID, and `-r` specifies the range.
 
 #### Specify maximum returned neighbors
 
@@ -76,7 +76,11 @@ For KNN search, the way to change `K` is to use the `-DKNN` switch during cmake 
 
 #### Use file f1.txt for search points and file f2.txt for queries
 
-`bin/optixNSearch -f f1.txt -q f2.txt`
+`bin/optixNSearch -f f1.txt -q f2.txt -p 0`
+
+`-f` specifies the file for search points, and `-q` specifies the file for queries. If only `-f` is given, search points are used as queries.
+
+`-p 0` disables query partitioning, a performance enhancing technique, which is currently not supported when queries and search points are different. This is by no means a fundamental limitation; the code just needs to be streamlined to support it.
 
 #### Advanced configurations
 
