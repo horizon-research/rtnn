@@ -136,6 +136,8 @@ float3* read_pc_data(const char* data_file, unsigned int* N) {
 void printUsageAndExit( const char* argv0 )
 {
     std::cerr << "\e[1mUsage:\e[0m " << argv0 << " [options]\n\n";
+    
+
     std::cerr << "\e[1mBasic Options:\e[0m\n";
     std::cerr << "  --pfile           | -f      File for search points. By default it's also used as queries unless -q is speficied.\n";
     std::cerr << "  --qfile           | -q      File for queries.\n";
@@ -143,15 +145,18 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --radius          | -r      Search radius. Default is 2.\n";
     std::cerr << "  --knn             | -k      Max K returned. Default is 50.\n";
     std::cerr << "  --device          | -d      Specify GPU ID. Default is 0.\n";
+    std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
     //std::cerr << "  --samepq          | -spq    Same points and queries? Default is true. Always set to true if query partitioning is enabled.\n";
     std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
     std::cerr << "  --check           | -c      Enable sanity check? Default is false.\n";
 
     std::cerr << "  --help            | -h      Print this usage message\n";
 
+
     std::cerr << "\n\e[1mAdvanced Options:\e[0m\n";
+
     std::cerr << "  --partition       | -p      Allow query partitioning? Enable it for better performance. Default is true.\n";
-    std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
+    std::cerr << "  --approx          | -a      Approximate query partitioning mode. {0: no approx, i.e., 3D circumRadius for 3D search; 1: 2D circumRadius for 3D search; 2: equiVol approx in query partitioning)} See |radiusFromMegacell| function. Default is 2.\n";
 
     std::cerr << "  --autobatch       | -ab     Automatically determining how to batch partitions? Default is true.\n";
     std::cerr << "  --numbatch        | -nb     Specify the number of batches when batching partitions. It's only used if -ab is false. Default nb is -1, which uses the max available batch; otherwise the numebr of batches to launch = min(avail batches, nb).\n";
@@ -166,6 +171,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --autocrratio     | -ac     Automatically determining crRatio (cell/radius ratio)? cellSize = radius / crRatio. cellSize is used to create the grid for sorting queries. Default is true.\n";
     std::cerr << "  --crratio         | -cr     Specify crRatio. It's only used if \'-ac\' is false. Default is 8.\n";
     std::cerr << "  --gpumemused      | -gmu    Specify GPU memory that's occupied by other jobs. This allows a better estimation of crRatio to avoid OOM errors. Default is 0.\n";
+
     exit( 0 );
 }
 
@@ -295,6 +301,12 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
+      }
+      else if( arg == "--approx" || arg == "-a" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.approxMode = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--check" || arg == "-c" )
       {
