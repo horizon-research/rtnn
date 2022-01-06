@@ -98,11 +98,11 @@ The analytical model is constructed empirically based on measurements on RTX 208
 
 Many applications that use neighbor search do not require exact searches, which we can leverage to improve performance. Approximation is particularly useful for KNN search, which tends to be very slow (certainly much slower than range search).
 
-In RTNN, range search is always exact (it's fast enough anyways). KNN search is also exact when query partitioning is diabled. With query partitioning enabled, RTNN allows you to control whether/how much to approximate KNN search through the `-a` switch --- with 3 approximation levels: `0` for exact search and `2` for the most aggressive approximation. Default is 2.
+In RTNN, range search is always exact (it's fast enough anyways). KNN search is also exact when query partitioning is diabled. With query partitioning enabled, RTNN allows you to control whether/how much to approximate KNN search through the `-a` switch --- with 3 approximation levels: `0` for exact search and `2` for the most aggressive approximation. Default is `2`.
 
 Even with the default approximate search, incorrect results *rarely* occur. In our benchmarking of datasets from different application domains (N-body simulation, graphics, autonomous machines), incorrect searches make up than 0.001% of the queries in the default setting. This is exactly our goal: noticeable performance gains (~50%) with virtually no accuracy loss.
 
-The exact mechanism we rely on is to relax the search radius of each partition to be smaller than what's strictly necessary for correctness. The default aproximation setting (`-a 2`) falls back to an exact search if the point distribution is uniform.
+The exact approximation mechanism we rely on is to relax the search radius of each partition to be smaller than what's strictly necessary for correctness. The default aproximation setting (`-a 2`) falls back to an exact search if the point distribution is uniform.
 
 
 ## FAQ
@@ -119,7 +119,7 @@ Your OptiX device code is compiled after the program is launch and cached. Subse
 
 #### Is neighbor search in RTNN approximate or exact?
 
-Range search is always exact (it's fast enough). Whether/how to approximate KNN search is controlled by the `-a` switch. See the description [here]().
+Range search is always exact (it's fast enough). Whether/how to approximate KNN search is controlled by the `-a` switch. See the description [here](#approximate-search).
 
 ## Acknowledgement
 
