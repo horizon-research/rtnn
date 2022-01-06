@@ -145,6 +145,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --device          | -d      Specify GPU ID. Default is 0.\n";
     //std::cerr << "  --samepq          | -spq    Same points and queries? Default is true. Always set to true if query partitioning is enabled.\n";
     std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
+    std::cerr << "  --check           | -c      Enable sanity check? Default is false.\n";
 
     std::cerr << "  --help            | -h      Print this usage message\n";
 
@@ -294,6 +295,12 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.toGather = (bool)(atoi(argv[++i]));
+      }
+      else if( arg == "--check" || arg == "-c" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.sanCheck = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--gsrRatio" || arg == "-sg" )
       {

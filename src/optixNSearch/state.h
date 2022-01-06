@@ -69,6 +69,7 @@ struct RTNNState
     float3**                    h_ndqueries               = nullptr;
     int                         dim;
     bool                        msr                       = true;
+    bool                        sanCheck                  = false;
 
     int32_t                     device_id                 = 0;
     std::string                 searchMode                = "radius";

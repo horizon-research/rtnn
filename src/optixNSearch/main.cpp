@@ -131,7 +131,7 @@ int main( int argc, char* argv[] )
     CUDA_SYNC_CHECK();
     Timing::stopTiming(true);
 
-    sanityCheck(state);
+    if(state.sanCheck) sanityCheck(state);
 
     cleanupState(state);
   }
