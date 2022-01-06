@@ -6,7 +6,7 @@
 #include "state.h"
 #include "func.h"
 
-void search(WhittedState& state, int batch_id) {
+void search(RTNNState& state, int batch_id) {
   Timing::startTiming("batch search time");
     Timing::startTiming("search compute");
       unsigned int numQueries = state.numActQueries[batch_id];
@@ -57,7 +57,7 @@ void search(WhittedState& state, int batch_id) {
   state.d_res[batch_id] = (void*)thrust::raw_pointer_cast(output_buffer);
 }
 
-thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch_id) {
+thrust::device_ptr<unsigned int> initialTraversal(RTNNState& state, int batch_id) {
   Timing::startTiming("initial traversal");
     unsigned int numQueries = state.numActQueries[batch_id];
 
@@ -77,7 +77,7 @@ thrust::device_ptr<unsigned int> initialTraversal(WhittedState& state, int batch
   return output_buffer;
 }
 
-void gasSortSearch(WhittedState& state, int batch_id) {
+void gasSortSearch(RTNNState& state, int batch_id) {
   // TODO: maybe we should have a third mode where we sort FH primitives in
   // z-order or raster order. This would improve the performance when no
   // pre-sorting is done, and might even out-perform it since we are sorting

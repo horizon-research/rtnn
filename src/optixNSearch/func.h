@@ -80,32 +80,32 @@ void calcSearchSize(int3,
                    );
 float kGetWidthFromIter(int, float);
 
-void sanityCheck(WhittedState&);
+void sanityCheck(RTNNState&);
 
 void computeMinMax(unsigned, float3*, float3&, float3&);
-void gridSort(WhittedState&, unsigned int, float3*, float3*, bool);
-void sortParticles(WhittedState&, ParticleType, int);
-thrust::device_ptr<unsigned int> sortQueriesByFHCoord(WhittedState&, thrust::device_ptr<unsigned int>, int);
-thrust::device_ptr<unsigned int> sortQueriesByFHIdx(WhittedState&, thrust::device_ptr<unsigned int>, int);
-void gatherQueries(WhittedState&, thrust::device_ptr<unsigned int>, int);
+void gridSort(RTNNState&, unsigned int, float3*, float3*, bool);
+void sortParticles(RTNNState&, ParticleType, int);
+thrust::device_ptr<unsigned int> sortQueriesByFHCoord(RTNNState&, thrust::device_ptr<unsigned int>, int);
+thrust::device_ptr<unsigned int> sortQueriesByFHIdx(RTNNState&, thrust::device_ptr<unsigned int>, int);
+void gatherQueries(RTNNState&, thrust::device_ptr<unsigned int>, int);
 
 void kGenAABB(float3*, float, unsigned int, OptixAabb*, cudaStream_t);
-void uploadData(WhittedState&);
-void createGeometry(WhittedState&, int, float);
-void launchSubframe(unsigned int*, WhittedState&, int);
-void initLaunchParams(WhittedState&);
-void setupOptiX(WhittedState&);
-void cleanupState(WhittedState&);
+void uploadData(RTNNState&);
+void createGeometry(RTNNState&, int, float);
+void launchSubframe(unsigned int*, RTNNState&, int);
+void initLaunchParams(RTNNState&);
+void setupOptiX(RTNNState&);
+void cleanupState(RTNNState&);
 float maxInscribedWidth(float, int);
 float minCircumscribedRadius(float, int);
 float radiusEquiVolume(float, int);
 
 int tokenize(std::string, std::string, float3**, unsigned int);
-void parseArgs(WhittedState&, int, char**);
-void readData(WhittedState&);
-void initBatches(WhittedState&);
+void parseArgs(RTNNState&, int, char**);
+void readData(RTNNState&);
+void initBatches(RTNNState&);
 bool isClose(float3, float3);
 
-void search(WhittedState&, int);
-void gasSortSearch(WhittedState&, int);
-thrust::device_ptr<unsigned int> initialTraversal(WhittedState&);
+void search(RTNNState&, int);
+void gasSortSearch(RTNNState&, int);
+thrust::device_ptr<unsigned int> initialTraversal(RTNNState&);

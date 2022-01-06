@@ -70,7 +70,7 @@ void computeMinMax(unsigned int N, float3* particles, float3& min, float3& max)
   fprintf(stdout, "\tscene boundary: (%f, %f, %f), (%f, %f, %f)\n", min.x, min.y, min.z, max.x, max.y, max.z);
 }
 
-unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo) {
+unsigned int genGridInfo(RTNNState& state, unsigned int N, GridInfo& gridInfo) {
   float3 sceneMin = state.Min;
   float3 sceneMax = state.Max;
 
@@ -134,7 +134,7 @@ unsigned int genGridInfo(WhittedState& state, unsigned int N, GridInfo& gridInfo
 
 void test(GridInfo);
 
-thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQueries, float3* particles, unsigned int* d_CellParticleCounts, unsigned int numberOfCells, GridInfo gridInfo, unsigned int N, unsigned int numUniqQs, bool morton) {
+thrust::device_ptr<int> genCellMask (RTNNState& state, unsigned int* d_repQueries, float3* particles, unsigned int* d_CellParticleCounts, unsigned int numberOfCells, GridInfo gridInfo, unsigned int N, unsigned int numUniqQs, bool morton) {
   float cellSize = state.radius / state.crRatio;
 
   // |maxWidth| is the max width of a cube that can be enclosed by the sphere.
@@ -214,7 +214,7 @@ thrust::device_ptr<int> genCellMask (WhittedState& state, unsigned int* d_repQue
   return d_cellMask;
 }
 
-void autoBatchingRange(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
+void autoBatchingRange(RTNNState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
   // now that we allow AABBTEST in all but the last batch in radius search,
   // batching could save time, since doing sphere test is much more costly than
   // aabb test. build the cost model and find the optimal batching.
@@ -266,7 +266,7 @@ float radiusFromMegacell(float width) {
   else return minCircumscribedRadius(width, 2);
 }
 
-void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
+void autoBatchingKNN(RTNNState& state, const thrust::host_vector<unsigned int>& h_rayHist, std::vector<int>& batches, int numAvailBatches) {
   // Logic: given CR (which has been decided beforehand), we know that max # of
   //   available batches (|numAvailBatches|). launching as many batches as
   //   available minimizes the work, but also introduces gas building overhead.
@@ -317,7 +317,7 @@ void autoBatchingKNN(WhittedState& state, const thrust::host_vector<unsigned int
   batches.push_back(numAvailBatches - 1);
 }
 
-void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int>& h_rayHist) {
+void prepBatches(RTNNState& state, std::vector<int>& batches, const thrust::host_vector<unsigned int>& h_rayHist) {
   int numAvailBatches = (int)h_rayHist.size();
   fprintf(stdout, "\tnumAvailBatches: %d\n", numAvailBatches);
 
@@ -341,7 +341,7 @@ void prepBatches(WhittedState& state, std::vector<int>& batches, const thrust::h
   }
 }
 
-void genBatches(WhittedState& state,
+void genBatches(RTNNState& state,
                 std::vector<int>& batches,
                 thrust::host_vector<unsigned int> h_rayHist,
                 float3* particles,
@@ -387,7 +387,7 @@ void genBatches(WhittedState& state,
   }
 }
 
-void sortGenBatch(WhittedState& state,
+void sortGenBatch(RTNNState& state,
                   unsigned int N,
                   bool morton,
                   unsigned int numberOfCells,
@@ -476,7 +476,7 @@ void sortGenBatch(WhittedState& state,
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );
 }
 
-void gridSort(WhittedState& state, unsigned int N, float3* particles, float3* h_particles, bool morton) {
+void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_particles, bool morton) {
   GridInfo gridInfo;
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
@@ -550,7 +550,7 @@ void gridSort(WhittedState& state, unsigned int N, float3* particles, float3* h_
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr) ) );
 }
 
-void oneDSort ( WhittedState& state, unsigned int N, float3* particles, float3* h_particles ) {
+void oneDSort ( RTNNState& state, unsigned int N, float3* particles, float3* h_particles ) {
   // sort points/queries based on coordinates (x/y/z)
 
   // TODO: do this whole thing on GPU.
@@ -574,7 +574,7 @@ void oneDSort ( WhittedState& state, unsigned int N, float3* particles, float3* 
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 }
 
-void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
+void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
   // 0: no sort
   // 1: z-order sort
   // 2: raster sort
@@ -614,7 +614,7 @@ void sortParticles ( WhittedState& state, ParticleType type, int sortMode ) {
   Timing::stopTiming(true);
 }
 
-thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thrust::device_ptr<unsigned int> d_firsthit_idx_ptr, int batch_id ) {
+thrust::device_ptr<unsigned int> sortQueriesByFHCoord( RTNNState& state, thrust::device_ptr<unsigned int> d_firsthit_idx_ptr, int batch_id ) {
   // this is sorting queries by the x/y/z coordinate of the first hit primitives.
   unsigned int numQueries = state.numActQueries[batch_id];
 
@@ -671,7 +671,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( WhittedState& state, thru
   return d_r2q_map_ptr;
 }
 
-thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust::device_ptr<unsigned int> d_firsthit_idx_ptr, int batch_id ) {
+thrust::device_ptr<unsigned int> sortQueriesByFHIdx( RTNNState& state, thrust::device_ptr<unsigned int> d_firsthit_idx_ptr, int batch_id ) {
   // this is sorting queries just by the first hit primitive IDs
   unsigned int numQueries = state.numActQueries[batch_id];
 
@@ -719,7 +719,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( WhittedState& state, thrust
   return d_r2q_map_ptr;
 }
 
-void gatherQueries( WhittedState& state, thrust::device_ptr<unsigned int> d_indices_ptr, int batch_id ) {
+void gatherQueries( RTNNState& state, thrust::device_ptr<unsigned int> d_indices_ptr, int batch_id ) {
   // Perform a device gather before launching the actual search, which by
   // itself is not useful, since we access each query only once (in the RG
   // program) anyways. in reality we see little gain by gathering queries. but

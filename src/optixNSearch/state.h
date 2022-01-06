@@ -41,7 +41,7 @@
 #define OMIT_ON_E2EMSR(x) \
   if (state.msr == 0) x   \
 
-struct WhittedState
+struct RTNNState
 {
     OptixDeviceContext          context                   = 0;
     OptixTraversableHandle*     gas_handle                = nullptr;

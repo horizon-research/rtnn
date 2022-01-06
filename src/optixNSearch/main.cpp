@@ -6,7 +6,7 @@
 #include "func.h"
 #include "grid.h"
 
-void setDevice ( WhittedState& state ) {
+void setDevice ( RTNNState& state ) {
   int32_t device_count = 0;
   CUDA_CHECK( cudaGetDeviceCount( &device_count ) );
   std::cerr << "\tTotal GPUs visible: " << device_count << std::endl;
@@ -19,7 +19,7 @@ void setDevice ( WhittedState& state ) {
   std::cerr << "\tMemory: " << state.totDRAMSize << " GB" << std::endl;
 }
 
-void setupSearch( WhittedState& state ) {
+void setupSearch( RTNNState& state ) {
   if (state.partition) return;
 
   assert(state.numOfBatches == -1);
@@ -33,7 +33,7 @@ void setupSearch( WhittedState& state ) {
 
 int main( int argc, char* argv[] )
 {
-  WhittedState state;
+  RTNNState state;
 
   parseArgs( state, argc, argv );
 

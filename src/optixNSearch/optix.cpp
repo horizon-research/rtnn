@@ -64,7 +64,7 @@ typedef Record<GeomData>        RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
-void uploadData ( WhittedState& state ) {
+void uploadData ( RTNNState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
     thrust::device_ptr<float3> d_points_ptr;
@@ -92,7 +92,7 @@ void uploadData ( WhittedState& state ) {
 }
 
 static void buildGas(
-    WhittedState &state,
+    RTNNState &state,
     const OptixAccelBuildOptions &accel_options,
     const OptixBuildInput &build_input,
     OptixTraversableHandle &gas_handle,
@@ -169,7 +169,7 @@ static void buildGas(
     fprintf(stdout, "\tFinal GAS size: %f MB\n", (float)compacted_gas_size/(1024 * 1024));
 }
 
-CUdeviceptr createAABB( WhittedState& state, int batch_id, float radius )
+CUdeviceptr createAABB( RTNNState& state, int batch_id, float radius )
 {
   // Load AABB into device memory
   unsigned int numPrims = state.numPoints;
@@ -199,7 +199,7 @@ CUdeviceptr createAABB( WhittedState& state, int batch_id, float radius )
   return reinterpret_cast<CUdeviceptr>(d_aabb);
 }
 
-void createGeometry( WhittedState& state, int batch_id, float radius )
+void createGeometry( RTNNState& state, int batch_id, float radius )
 {
   Timing::startTiming("create and upload geometry");
     CUdeviceptr d_aabb = createAABB(state, batch_id, radius);
@@ -239,7 +239,7 @@ void createGeometry( WhittedState& state, int batch_id, float radius )
   Timing::stopTiming(true);
 }
 
-void createModules( WhittedState &state )
+void createModules( RTNNState &state )
 {
     OptixModuleCompileOptions module_compile_options = {
         100,                                    // maxRegisterCount
@@ -276,7 +276,7 @@ void createModules( WhittedState &state )
     }
 }
 
-static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
+static void createCameraProgram( RTNNState &state, std::vector<OptixProgramGroup> &program_groups )
 {
     OptixProgramGroup           cam_prog_group;
     OptixProgramGroupOptions    cam_prog_group_options = {};
@@ -303,7 +303,7 @@ static void createCameraProgram( WhittedState &state, std::vector<OptixProgramGr
     state.raygen_prog_group = cam_prog_group;
 }
 
-static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
+static void createMetalSphereProgram( RTNNState &state, std::vector<OptixProgramGroup> &program_groups )
 {
     char    log[2048];
     size_t  sizeof_log = sizeof( log );
@@ -335,7 +335,7 @@ static void createMetalSphereProgram( WhittedState &state, std::vector<OptixProg
     state.radiance_metal_sphere_prog_group = radiance_sphere_prog_group;
 }
 
-static void createMissProgram( WhittedState &state, std::vector<OptixProgramGroup> &program_groups )
+static void createMissProgram( RTNNState &state, std::vector<OptixProgramGroup> &program_groups )
 {
     OptixProgramGroupOptions    miss_prog_group_options = {};
     OptixProgramGroupDesc       miss_prog_group_desc = {};
@@ -357,7 +357,7 @@ static void createMissProgram( WhittedState &state, std::vector<OptixProgramGrou
     program_groups.push_back(state.radiance_miss_prog_group);
 }
 
-void createPipeline( WhittedState &state )
+void createPipeline( RTNNState &state )
 {
     const int max_trace = 2;
 
@@ -420,7 +420,7 @@ void createPipeline( WhittedState &state )
     }
 }
 
-void createSBT( WhittedState &state )
+void createSBT( RTNNState &state )
 {
     // Raygen program record
     {
@@ -498,7 +498,7 @@ void createSBT( WhittedState &state )
 //              << message << "\n";
 //}
 
-void createContext( WhittedState& state )
+void createContext( RTNNState& state )
 {
     // Initialize CUDA
     CUDA_CHECK( cudaFree( 0 ) );
@@ -515,7 +515,7 @@ void createContext( WhittedState& state )
     state.context = context;
 }
 
-void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch_id )
+void launchSubframe( unsigned int* output_buffer, RTNNState& state, int batch_id )
 {
     unsigned int numQueries = state.numActQueries[batch_id];
     state.params.handle = state.gas_handle[batch_id];
@@ -554,7 +554,7 @@ void launchSubframe( unsigned int* output_buffer, WhittedState& state, int batch
     ) );
 }
 
-void cleanupState( WhittedState& state )
+void cleanupState( RTNNState& state )
 {
     for (int i = 0; i < state.maxBatchCount; i++) {
       OPTIX_CHECK( optixPipelineDestroy     ( state.pipeline[i]           ) );
@@ -618,7 +618,7 @@ void cleanupState( WhittedState& state )
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_fhsort_key         ) ) );
 }
 
-void setupOptiX( WhittedState& state ) {
+void setupOptiX( RTNNState& state ) {
   Timing::startTiming("create context");
     createContext  ( state );
   Timing::stopTiming(true);

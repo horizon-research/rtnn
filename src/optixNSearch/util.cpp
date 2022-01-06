@@ -168,7 +168,7 @@ void printUsageAndExit( const char* argv0 )
     exit( 0 );
 }
 
-void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
+void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
   for( int i = 1; i < argc; ++i )
   {
       const std::string arg = argv[i];
@@ -321,13 +321,12 @@ void parseArgs( WhittedState& state,  int argc, char* argv[] ) {
   }
 }
 
-void readData(WhittedState& state) {
+void readData(RTNNState& state) {
   // p and q files being the same dones't mean samepq have to be true. we can
   // still set it to be false to evaluate different reordering policies on
   // points and queries separately.
 
   state.h_points = read_pc_data(state.pfile.c_str(), &state.numPoints);
-  //state.h_ndpoints = read_pc_data(state.pfile.c_str(), &state.numPoints, &state.dim);
   state.numQueries = state.numPoints;
   if (state.samepq) state.h_queries = state.h_points;
   else {
@@ -368,7 +367,7 @@ float radiusEquiVolume(float width, int dim) {
   else assert(0);
 }
 
-float calcCRRatio(WhittedState& state) {
+float calcCRRatio(RTNNState& state) {
   //TODO: the crratio is determined from the points, not queries, for now. that
   //is, when sorting queries we will use the same ratio. ideally points and
   //queries should have different ratios if they are diferent. so we could
@@ -404,7 +403,7 @@ float calcCRRatio(WhittedState& state) {
   return ratio;
 }
 
-void initBatches(WhittedState& state) {
+void initBatches(RTNNState& state) {
   if (state.autoCR) {
     // TODO: should we just use a fixed cell size/ratio? an overly small cell
     // increases the sort cost, but probably mean little for range search. need

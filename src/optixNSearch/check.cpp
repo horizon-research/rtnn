@@ -17,7 +17,7 @@ class Compare
 };
 typedef std::priority_queue<knn_res_t, std::vector<knn_res_t>, Compare> knn_queue;
 
-void sanityCheckKNN( WhittedState& state, int batch_id ) {
+void sanityCheckKNN( RTNNState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
@@ -98,7 +98,7 @@ void sanityCheckKNN( WhittedState& state, int batch_id ) {
   std::cerr << "\tSanity check done." << std::endl;
 }
 
-void sanityCheckRadius( WhittedState& state, int batch_id ) {
+void sanityCheckRadius( RTNNState& state, int batch_id ) {
   // this is stateful in that it relies on state.params.limit
   // TODO: now use knn rather than limit. good?
 
@@ -134,7 +134,7 @@ void sanityCheckRadius( WhittedState& state, int batch_id ) {
   if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
 }
 
-void sanityCheck(WhittedState& state) {
+void sanityCheck(RTNNState& state) {
   for (int i = 0; i < state.numOfBatches; i++) {
   //for (int i = 0; i < 1; i++) {
     state.numQueries = state.numActQueries[i];
