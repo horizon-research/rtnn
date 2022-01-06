@@ -159,17 +159,17 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --approx          | -a      Approximate query partitioning mode for KNN search. Range search is always exact. {0: no approx, i.e., 3D circumRadius for 3D search; 1: 2D circumRadius for 3D search; 2: equiVol approx in query partitioning)} See |radiusFromMegacell| function. Default is 2.\n";
 
     std::cerr << "  --autobatch       | -ab     Automatically determining how to batch partitions? Default is true.\n";
-    std::cerr << "  --numbatch        | -nb     Specify the number of batches when batching partitions. It's only used if -ab is false. Default nb is -1, which uses the max available batch; otherwise the numebr of batches to launch = min(avail batches, nb).\n";
+    std::cerr << "  --numbatch        | -nb     Specify the number of batches when batching partitions. It's used only if -ab is false. Default nb is -1, which uses the max available batch; otherwise the numebr of batches to launch = min(avail batches, nb).\n";
 
     std::cerr << "  --gassort         | -s      GAS-based query sort mode. {0: no sort. 1: 1D order. 2: ID order.} Default is 2.\n";
     std::cerr << "  --gsrRatio        | -sg     Radius ratio used in GAS sort. Default is 1.\n";
     std::cerr << "  --gather          | -g      Whether to gather queries after GAS sort? Default is false.\n";
 
     std::cerr << "  --pointsort       | -ps     Grid-based point sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1.\n";
-    std::cerr << "  --querysort       | -qs     Grid-based query sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1. It's only used when -spq is false. When -spq is true, -qs is ignored and queries are sorted using -ps.\n";
+    std::cerr << "  --querysort       | -qs     Grid-based query sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1. It's used only when -spq is false. When -spq is true, -qs is ignored and queries are sorted using -ps.\n";
 
     std::cerr << "  --autocrratio     | -ac     Automatically determining crRatio (cell/radius ratio)? cellSize = radius / crRatio. cellSize is used to create the grid for sorting queries. Default is true.\n";
-    std::cerr << "  --crratio         | -cr     Specify crRatio. It's only used if \'-ac\' is false. Default is 8.\n";
+    std::cerr << "  --crratio         | -cr     Specify crRatio. It's used only if \'-ac\' is false. Default is 8.\n";
     std::cerr << "  --gpumemused      | -gmu    Specify GPU memory that's occupied by other jobs. This allows a better estimation of crRatio to avoid OOM errors. Default is 0.\n";
 
     exit( 0 );
@@ -226,7 +226,7 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
       {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
-          state.numOfBatches = atoi(argv[++i]); // only used if ab is not enabled; nb==-1 means using the max available batch, otherwise the # of batches to launch = min(avail batches, nb)
+          state.numOfBatches = atoi(argv[++i]); // used only if ab is not enabled; nb==-1 means using the max available batch, otherwise the # of batches to launch = min(avail batches, nb)
       }
       else if( arg == "--autobatch" || arg == "-ab" )
       {
