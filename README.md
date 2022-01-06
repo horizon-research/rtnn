@@ -98,6 +98,11 @@ It's also possible to get an OOM error when you use different files for queries 
 
 Your OptiX device code is compiled after the program is launch and cached. Subsequent launches would be faster if the cache hasn't been flushed. See the discussion [here](https://forums.developer.nvidia.com/t/why-does-the-first-launch-of-optix-take-so-long/70895).
 
+## Acknowledgement
+
+- The grid-based sorting is partially adapted from [cuNSearch](https://github.com/InteractiveComputerGraphics/cuNSearch).
+- The prioritity queue implementation in OptiX is partially adaptad from the [CUDA implementation](https://github.com/facebookresearch/pytorch3d/blob/f593bfd3c258b0ff2b7bdbabfb06ab5210b43a52/pytorch3d/csrc/utils/mink.cuh) in PyTorch3D.
+
 ## Publication
 
 The project contains the artifact of the PPoPP 2022 paper [RTNN: Accelerating Neighbor Search Using Hardware Ray Tracing](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
