@@ -19,14 +19,16 @@ void search(RTNNState& state, int batch_id) {
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
 
       state.params.mode = PRECISE;
-      // note that AABB test in current OptiX implementation is inherently
-      // approximately so if we want to guarantee correctness we still have to
-      // test against the aabb. see:
-      // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
-      // with AABBTEST we still save time since 1) sphere test is much more
-      // costly then aabb test and 2) the search radius is smaller so
-      // traversals are slightly fewer.
       if ((state.searchMode == "radius") && state.partition && (batch_id < state.numOfBatches - 1)) {
+        // note that hardware AABB test during traversal in the current OptiX
+        // implementation is inherently approximate, so if we want to guarantee
+        // that a point is inside an AABB we still have to do an explicit aabb
+        // test (instead of using NOTEST). see:
+        // https://forums.developer.nvidia.com/t/numerical-imprecision-in-intersection-test/183665/4.
+
+        // in radius mode use AABBTEST except for the last batch. see how the
+        // launchRadius is calculated in the |genBatches| function. AABBTEST is
+        // faster than PRECISE since sphere test is much more costly then aabb test.
         state.params.mode = AABBTEST;
       }
 

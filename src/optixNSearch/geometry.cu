@@ -35,52 +35,51 @@ extern "C" {
 __constant__ Params params;
 }
 
-extern "C" __device__ void intersect_sphere(SearchType mode)
+extern "C" __device__ bool check_intersect(SearchType mode)
 {
-    // This is called when a ray-bbox intersection is found, but we still can't
-    // be sure that the point is within the sphere. It's possible that the
-    // point is within the bbox but no within the sphere, and it's also
-    // possible that the point is just outside of the bbox and just intersects
-    // with the bbox.
+  unsigned int primIdx = optixGetPrimitiveIndex();
+  const float3 center = params.points[primIdx];
+  const float3 ray_orig = optixGetWorldRayOrigin();
 
+  bool intersect = false;
+  if (mode == AABBTEST) {
+    float3 topRight = center + params.radius;
+    float3 bottomLeft = center - params.radius;
+    if ((ray_orig > bottomLeft) && (ray_orig < topRight))
+      intersect = true;
+
+    //unsigned int queryIdx = optixGetPayload_0();
+    //if (primIdx == 1269439 && queryIdx == 16702) {
+    //  printf("ray: %f, %f, %f\n", ray_orig.x, ray_orig.y, ray_orig.z);
+    //  printf("point: %f, %f, %f\n", center.x, center.y, center.z);
+    //  printf("topRight: %f, %f, %f\n", topRight.x, topRight.y, topRight.z);
+    //  printf("bottomLeft: %f, %f, %f\n", bottomLeft.x, bottomLeft.y, bottomLeft.z);
+    //  printf("dist: %f\n", sqrt(dot(ray_orig - center, ray_orig - center)));
+    //}
+
+  } else {
+    float3 O = ray_orig - center;
+    float sqdist = dot(O, O);
+
+    // first check excludes the query itself; same as (ray_orig != center)
+    if (sqdist < params.radius * params.radius)
+      intersect = true;
+  }
+
+  return intersect;
+}
+
+extern "C" __device__ void write_res_radius()
+{
+  unsigned int id = optixGetPayload_1();
+  if (id < params.limit) {
+    unsigned int queryIdx = optixGetPayload_0();
     unsigned int primIdx = optixGetPrimitiveIndex();
-    const float3 center = params.points[primIdx];
-
-    const float3  ray_orig = optixGetWorldRayOrigin();
-
-    bool intersect = false;
-    if (mode == AABBTEST) {
-      float3 topRight = center + params.radius;
-      float3 bottomLeft = center - params.radius;
-      if ((ray_orig > bottomLeft) && (ray_orig < topRight))
-        intersect = true;
-
-      //unsigned int queryIdx = optixGetPayload_0();
-      //if (primIdx == 1269439 && queryIdx == 16702) {
-      //  printf("ray: %f, %f, %f\n", ray_orig.x, ray_orig.y, ray_orig.z);
-      //  printf("point: %f, %f, %f\n", center.x, center.y, center.z);
-      //  printf("topRight: %f, %f, %f\n", topRight.x, topRight.y, topRight.z);
-      //  printf("bottomLeft: %f, %f, %f\n", bottomLeft.x, bottomLeft.y, bottomLeft.z);
-      //  printf("dist: %f\n", sqrt(dot(ray_orig - center, ray_orig - center)));
-      //}
-
-    } else {
-      float3 O = ray_orig - center;
-      if (dot(O, O) < params.radius * params.radius)
-        intersect = true;
-    }
-
-    if (intersect) {
-      unsigned int id = optixGetPayload_1();
-      if (id < params.limit) {
-        unsigned int queryIdx = optixGetPayload_0();
-        unsigned int primIdx = optixGetPrimitiveIndex();
-        params.frame_buffer[queryIdx * params.limit + id] = primIdx;
-        if (id + 1 == params.limit)
-          optixReportIntersection( 0, 0 );
-        else optixSetPayload_1( id+1 );
-      }
-    }
+    params.frame_buffer[queryIdx * params.limit + id] = primIdx;
+    if (id + 1 == params.limit)
+      optixReportIntersection( 0, 0 );
+    else optixSetPayload_1( id+1 );
+  }
 }
 
 extern "C" __global__ void __intersection__sphere_radius()
@@ -91,17 +90,18 @@ extern "C" __global__ void __intersection__sphere_radius()
   SearchType mode = params.mode;
 
   if (mode == NOTEST) {
-    unsigned int id = optixGetPayload_1();
-    if (id < params.limit) {
-      unsigned int queryIdx = optixGetPayload_0();
-      unsigned int primIdx = optixGetPrimitiveIndex();
-      params.frame_buffer[queryIdx * params.limit + id] = primIdx;
-      if (id + 1 == params.limit)
-        optixReportIntersection( 0, 0 );
-      else optixSetPayload_1( id+1 );
-    }
+    write_res_radius();
   } else {
-    intersect_sphere(mode);
+    // This is called when a ray-bbox intersection is found, but we still can't
+    // be sure that the point is within the sphere. It's possible that the
+    // point is within the bbox but no within the sphere, and it's also
+    // possible that the point is just outside of the bbox and just intersects
+    // with the bbox.
+
+    bool intersect = check_intersect(mode);
+    if (intersect) {
+      write_res_radius();
+    }
   }
 }
 
@@ -163,13 +163,12 @@ extern "C" __global__ void __intersection__sphere_knn()
 
   unsigned int queryIdx = optixGetPayload_0();
   unsigned int primIdx = optixGetPrimitiveIndex();
-  if (mode == NOTEST) {
+  if (mode == NOTEST) { // this implies that this is an initial traversal
     params.frame_buffer[queryIdx * params.limit] = primIdx;
     optixReportIntersection( 0, 0 );
   } else {
     const float3 center = params.points[primIdx];
-
-    const float3  ray_orig = optixGetWorldRayOrigin();
+    const float3 ray_orig = optixGetWorldRayOrigin();
     float3 O = ray_orig - center;
     float sqdist = dot(O, O);
 
@@ -179,6 +178,7 @@ extern "C" __global__ void __intersection__sphere_knn()
     //  printf("primIdx: %u, sqdist: %f\n\n", primIdx, sqrt(sqdist));
     //}
 
+    // the first check excludes the query itself.
     // even for optimized search the second check is necessary since a point
     // being in the optimized AABB doesn't mean it's in target sphere. this
     // checking against the optimized sphere is to make sure a point is also in

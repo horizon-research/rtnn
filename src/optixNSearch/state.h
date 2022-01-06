@@ -88,6 +88,7 @@ struct RTNNState
     bool                        partition                 = true;
     bool                        autoNB                    = true;
     bool                        autoCR                    = true;
+    int                         approxMode                = 0; // {0: no approx; 1: approx query partitioning), 2: }
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;

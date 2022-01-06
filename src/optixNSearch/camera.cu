@@ -90,10 +90,10 @@ extern "C" __global__ void __raygen__knn()
         reinterpret_cast<unsigned int&>(size)
     );
 
-    // write this if not in the initial traversal
-    // TODO: need an explicit test condition for initial traversal
-    if (params.d_r2q_map != nullptr || params.limit != 1) {
-      for (unsigned int i = 0; i < size; i++) { // the bound should be size rather than K (no need to initialize min_idxs)!
+    // write minK queue data to frame_buffer if is an actual search, i.e., not initial traversal
+    if (params.mode == PRECISE) { // implies this is an actual search
+      // the bound should be |size| rather than K (size <= K) so that we don't have to initialize min_idxs!
+      for (unsigned int i = 0; i < size; i++) {
         params.frame_buffer[queryIdx * K + i] = min_idxs[i];
       }
     }

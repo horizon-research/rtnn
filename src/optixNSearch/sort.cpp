@@ -304,7 +304,7 @@ void autoBatchingKNN(RTNNState& state, const thrust::host_vector<unsigned int>& 
     float extraWork = h_rayHist[i] * 8 * (maxRadius * maxRadius * maxRadius - curRadius * curRadius * curRadius) * density;
     float extraTime = extraWork * kSearch_PerIS;
     overhead += extraTime - tBuildGAS;
-    fprintf(stdout, "i: %d, density: %f, extraWork: %f, extraTime: %f, overhead: %f\n", i, density, extraWork, extraTime, overhead);
+    //fprintf(stdout, "i: %d, density: %f, extraWork: %f, extraTime: %f, overhead: %f\n", i, density, extraWork, extraTime, overhead);
     if (overhead < maxOverhead) {
       maxOverhead = overhead;
       splitId = i;

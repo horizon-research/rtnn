@@ -1,3 +1,6 @@
+/* Parially adapted from cuNSearch (https://github.com/InteractiveComputerGraphics/cuNSearch),
+   especially https://github.com/InteractiveComputerGraphics/cuNSearch/blob/master/src/cuNSearchKernels.cu */
+
 #include <sutil/vec_math.h>
 
 #include "helper_mortonCode.h"

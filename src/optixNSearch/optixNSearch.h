@@ -47,9 +47,9 @@ enum RayType
 
 enum SearchType
 {
-    PRECISE = 0, // i.e., test against the sphere
-    AABBTEST = 1,
-    NOTEST = 2
+    PRECISE = 0, // test against the sphere
+    AABBTEST = 1, // test against the AABB
+    NOTEST = 2 // test against nothing
 };
 
 struct Params
