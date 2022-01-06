@@ -156,7 +156,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "\n\e[1mAdvanced Options:\e[0m\n";
 
     std::cerr << "  --partition       | -p      Allow query partitioning? Enable it for better performance. Default is true.\n";
-    std::cerr << "  --approx          | -a      Approximate query partitioning mode. {0: no approx, i.e., 3D circumRadius for 3D search; 1: 2D circumRadius for 3D search; 2: equiVol approx in query partitioning)} See |radiusFromMegacell| function. Default is 2.\n";
+    std::cerr << "  --approx          | -a      Approximate query partitioning mode for KNN search. Range search is always exact. {0: no approx, i.e., 3D circumRadius for 3D search; 1: 2D circumRadius for 3D search; 2: equiVol approx in query partitioning)} See |radiusFromMegacell| function. Default is 2.\n";
 
     std::cerr << "  --autobatch       | -ab     Automatically determining how to batch partitions? Default is true.\n";
     std::cerr << "  --numbatch        | -nb     Specify the number of batches when batching partitions. It's only used if -ab is false. Default nb is -1, which uses the max available batch; otherwise the numebr of batches to launch = min(avail batches, nb).\n";
