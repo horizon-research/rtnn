@@ -34,6 +34,7 @@ You do not have to install the OptiX SDK yourself. The code is developed using t
 - `CMakeLists.txt`: the usual cmake file.
 - `CMake/`: contains a bunch of `.cmake` files that are used by `CMakeLists.txt to find libraries, etc. This is also copied from the OptiX SDK without any change.
 - `samplepc.txt`: a sample point cloud file illustrating the input file format.
+- `memstablib/`: this builds a dynamic library that tracks memory allocation in CUDA. It's not needed for the main RTNN code. See the readme file there for more information.
 
 ### Build
 
