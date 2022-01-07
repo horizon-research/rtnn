@@ -474,7 +474,7 @@ void sortGenBatch(RTNNState& state,
     CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );
 }
 
-void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_particles, bool morton) {
+void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_particles, bool morton, bool toPartition) {
   GridInfo gridInfo;
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
@@ -506,7 +506,7 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
   allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
   // if partition is enabled, do it here. we are partitioning points, but it's the same as queries.
-  if (state.partition) {
+  if (toPartition) {
     // normal particle sorting is done here too.
     sortGenBatch(state,
                  N,
@@ -541,6 +541,9 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 
+  // TODO: these will block future allocations. for instance, if query is to be
+  // sorted after point, the query sorting will appear to take much longer
+  // since it includes the cudafree time from point sorting.
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellOffsets_ptr) ) );
@@ -612,7 +615,7 @@ void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
       bool morton; // false for raster order
       if (sortMode == 1) morton = true;
       else morton = false;
-      gridSort(state, N, particles, h_particles, morton);
+      gridSort(state, N, particles, h_particles, morton, state.partition&&(type==POINT));
     }
   Timing::stopTiming(true);
 }
