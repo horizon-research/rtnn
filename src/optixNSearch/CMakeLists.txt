@@ -51,8 +51,6 @@ OPTIX_add_sample_executable( optixNSearch target_name
   #OPTIONS -rdc true
 )
 
-link_directories(${PCL_LIBRARY_DIRS})
-
 target_link_libraries( ${target_name}
   ${CUDA_LIBRARIES}
   )

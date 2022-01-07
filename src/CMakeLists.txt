@@ -368,7 +368,7 @@ function(OPTIX_add_sample_executable target_name_base target_name_var)
   # This uses dynamically linked libraries, which is needed if you were to use the memstat library.
   #https://stackoverflow.com/questions/63153342/cmake-undefined-reference-to-symbol-dlsymglibc-2-2-5-even-though-i-link-with
   if(USE_SHARED_CUDA_LIBS)
-    target_link_libraries( ${target_name} -ldl -lmylib )
+    target_link_libraries( ${target_name} -ldl -lmemstatlib )
     add_compile_definitions(MEM_STATS)
   endif()
 endfunction()
