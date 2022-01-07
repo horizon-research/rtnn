@@ -2,7 +2,7 @@
 
 This repository contains the code that uses the hardware ray tracing capability provided by Nvidia's RT cores to accelerate neighbor search in low-dimensional space (lower than 3D), which is prevalent in engineering and science fields (e.g., computational fluid dynamics, graphics, vision), because they deal with physical data such as particles and surface samples that inherently reside in the 2D/3D space.
 
-While RT cores are designed (and optimized) for ray tracing, we show how to map neighbor search to the ray tracing hardware to achieve significant speedups (an order of magnitude) over traditional GPU (CUDA) implementations. The code is primarily developed using the OptiX programming interface (for ray tracing) and also uses CUDA to parallelize many non-ray tracing helper functions. The technical aspects of the code are discussed in this [PPoPP 2022 paper](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
+While RT cores are designed (and optimized) for ray tracing, we show how to map neighbor search to the ray tracing hardware to achieve significant speedups (an order of magnitude) over traditional GPU (CUDA) implementations. The code is primarily developed using the OptiX programming interface (for ray tracing) and also uses CUDA to parallelize many non-ray tracing helper functions. The technical aspects of the code are discussed in this [PPoPP 2022 paper](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf). The performance of RTNN has been much improved since the publication of the paper.
 
 ### What forms of neighbor search are supported?
 
