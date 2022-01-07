@@ -543,7 +543,9 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
 
   // TODO: these will block future allocations. for instance, if query is to be
   // sorted after point, the query sorting will appear to take much longer
-  // since it includes the cudafree time from point sorting.
+  // since it includes the cudafree time from point sorting.  Can defer to the
+  // end, but then we will also change the logic to calculate crRatio in case
+  // of !samepq.
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
   CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellOffsets_ptr) ) );
