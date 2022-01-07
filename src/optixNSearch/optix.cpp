@@ -610,7 +610,7 @@ void cleanupState( RTNNState& state )
     // device queries and host queries have been freed before.
     if ((state.partition && state.pointSortMode) || !state.samepq) {
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points        ) ) );
-      delete state.h_points;
+      //delete state.h_points;
     }
     if (state.d_1dsort_key)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_1dsort_key         ) ) );

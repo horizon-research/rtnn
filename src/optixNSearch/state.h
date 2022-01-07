@@ -83,7 +83,7 @@ struct RTNNState
     float                       crRatio                   = 8; // cellSize = radius / crRatio
     float                       gsrRatio                  = 1;
     bool                        toGather                  = false;
-    bool                        samepq                    = true;
+    bool                        samepq                    = false;
     bool                        interleave                = true;
     bool                        partition                 = true;
     bool                        autoNB                    = true;

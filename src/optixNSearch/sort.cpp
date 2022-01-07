@@ -232,7 +232,7 @@ void autoBatchingRange(RTNNState& state, const thrust::host_vector<unsigned int>
 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
   float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 20; // 20 is the empirical intercept (TODO)
-  fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
+  //fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
   // incrementally combine batch i with the last batch (assuming all other
   // batches are independent) and calculate the cost. choose the min cost.
@@ -242,7 +242,7 @@ void autoBatchingRange(RTNNState& state, const thrust::host_vector<unsigned int>
   for (int i = numAvailBatches - 2; i >= 0; i--) {
     float extraTime = h_rayHist[i] * (kSphereTest_PerIS - kAABBTest_PerIS) * state.knn;
     overhead += extraTime - tBuildGAS;
-    fprintf(stdout, "i: %d, %u extraTime: %f, overhead: %f\n", i, h_rayHist[i], extraTime, overhead);
+    //fprintf(stdout, "i: %d, %u extraTime: %f, overhead: %f\n", i, h_rayHist[i], extraTime, overhead);
     if (overhead < maxOverhead) {
       maxOverhead = overhead;
       splitId = i;
@@ -284,7 +284,7 @@ void autoBatchingKNN(RTNNState& state, const thrust::host_vector<unsigned int>& 
   //float tMemcpy = state.numQueries * state.knn * sizeof(unsigned int) * kD2H_PerB; // TODO: consider max(memcpy, compute)
   float tBuildGAS = state.numPoints * kBuildGas_PerAABB + 20; // 20 is the empirical intercept (TODO)
   float cellSize = state.radius / state.crRatio;
-  fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
+  //fprintf(stdout, "tBuildGAS: %f\n", tBuildGAS);
 
   float maxWidth = kGetWidthFromIter(numAvailBatches - 1, cellSize);
   float maxRadius = std::min(state.radius, radiusFromMegacell(maxWidth, state.approxMode));
@@ -377,7 +377,7 @@ void genBatches(RTNNState& state,
     state.d_actQs[batchId] = thrust::raw_pointer_cast(d_actQs);
 
     // Copy the active queries to host (for sanity check).
-    // TODO: is this redundant give the copy at the end of |gridSort|?
+    // TODO: is this redundant given the copy at the end of |gridSort|?
     state.h_actQs[batchId] = new float3[numActQs];
     thrust::copy(d_actQs, d_actQs + numActQs, state.h_actQs[batchId]);
 
@@ -505,7 +505,7 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
 
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
   allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
-  // if samepq and partition is enabled, do it here. we are partitioning points, but it's the same as queries.
+  // if partition is enabled, do it here. we are partitioning points, but it's the same as queries.
   if (state.partition) {
     // normal particle sorting is done here too.
     sortGenBatch(state,
@@ -578,8 +578,13 @@ void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
   // 2: raster sort
   // 3: 1D sort
 
-  // even if sortMode == 0, but if partition is enabled, go ahead.
-  if (!sortMode && !state.partition) return;
+  if (!sortMode) {
+    // even if sortMode == 0, but if partition is enabled for POINT, go ahead
+    // since we need to partition; won't actually sort since we will check this
+    // again later. ugly logic.
+    if ((type == POINT) && !state.partition) return;
+    else if (type == QUERY) return;
+  }
 
   unsigned int N;
   float3* particles;

@@ -75,12 +75,12 @@ int main( int argc, char* argv[] )
     Timing::startTiming("total search time");
 
     // if partition is enabled, we do it here too, which generate batches.
-    // TODO: enable partition when !samepq.
+    // TODO: enable partition when underlying data are different
     // TODO: streamline the logic of partition and sorting.
     sortParticles(state, POINT, state.pointSortMode);
 
-    // when samepq, queries have been sorted using the point sort mode so
-    // no need to sort queries again.
+    // samepq indicates same underlying data and sorting mode, in which case
+    // queries have been sorted so no need to sort them again.
     if (!state.samepq) sortParticles(state, QUERY, state.querySortMode);
 
     setupSearch(state);

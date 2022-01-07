@@ -146,7 +146,6 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --knn             | -k      Max K returned. Default is 50.\n";
     std::cerr << "  --device          | -d      Specify GPU ID. Default is 0.\n";
     std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
-    //std::cerr << "  --samepq          | -spq    Same points and queries? Default is true. Always set to true if query partitioning is enabled.\n";
     std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
     std::cerr << "  --check           | -c      Enable sanity check? Default is false.\n";
 
@@ -166,7 +165,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --gather          | -g      Whether to gather queries after GAS sort? Default is false.\n";
 
     std::cerr << "  --pointsort       | -ps     Grid-based point sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1.\n";
-    std::cerr << "  --querysort       | -qs     Grid-based query sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1. It's used only when -spq is false. When -spq is true, -qs is ignored and queries are sorted using -ps.\n";
+    std::cerr << "  --querysort       | -qs     Grid-based query sort mode. {0: no sort. 1: morton order. 2: raster order. 3: 1D order.} Default 1.\n";
 
     std::cerr << "  --autocrratio     | -ac     Automatically determining crRatio (cell/radius ratio)? cellSize = radius / crRatio. cellSize is used to create the grid for sorting queries. Default is true.\n";
     std::cerr << "  --crratio         | -cr     Specify crRatio. It's used only if \'-ac\' is false. Default is 8.\n";
@@ -252,12 +251,6 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
               printUsageAndExit( argv[0] );
           state.interleave = (bool)(atoi(argv[++i]));
       }
-      else if( arg == "--samepq" || arg == "-spq" )
-      {
-          if( i >= argc - 1 )
-              printUsageAndExit( argv[0] );
-          state.samepq = (bool)(atoi(argv[++i]));
-      }
       else if( arg == "--device" || arg == "-d" )
       {
           if( i >= argc - 1 )
@@ -333,35 +326,39 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
   if (state.searchMode == "knn")
     state.knn = K; // a macro
 
-  // currently must be samepq to support query partition
+  bool sameData = (state.qfile.empty() || (state.qfile == state.pfile));
+  bool sameSortMode = (state.pointSortMode == state.querySortMode);
+
+  // TODO: currently p and q must be the same to support query partitioning
   if (state.partition) {
-    assert(state.qfile.empty() || (state.qfile == state.pfile));
-    state.samepq = 1;
+    assert(sameData);
+  }
+
+  // samepq indicates whether queries and points share the same host and device
+  // memory (for now; partitioning will change it). even if p and q are the
+  // same data, but if they have different sorting modes we can't have them
+  // share the same device memory since sorting is in-place; they can't share
+  // the same host memory either since host memory layout will be mutated to be
+  // in-sync with device memory layout for sanity check purpose.
+  if (sameSortMode && sameData) {
+    state.samepq = true;
   }
 }
 
 void readData(RTNNState& state) {
-  // p and q files being the same dones't mean samepq have to be true. we can
-  // still set it to be false to evaluate different reordering policies on
-  // points and queries separately.
-
   state.h_points = read_pc_data(state.pfile.c_str(), &state.numPoints);
+  state.h_queries = state.h_points;
   state.numQueries = state.numPoints;
-  if (state.samepq) state.h_queries = state.h_points;
-  else {
-    state.h_queries = (float3*)malloc(state.numQueries * sizeof(float3));
-    thrust::copy(state.h_points, state.h_points+state.numQueries, state.h_queries);
-  }
 
-  if (!state.qfile.empty()) {
-    state.h_queries = read_pc_data(state.qfile.c_str(), &state.numQueries);
-    assert(state.h_points != state.h_queries);
-    // overwrite the samepq option from commandline
-    state.samepq = false;
-
-    //int query_dim;
-    //state.h_ndqueries = read_pc_data(state.qfile.c_str(), &state.numQueries, &query_dim);
-    //assert(query_dim == state.dim);
+  if (!state.samepq) { // if can't share the host memory
+    if (!state.qfile.empty() && (state.qfile != state.pfile)) {
+      // if the underlying data are different, read it
+      state.h_queries = read_pc_data(state.qfile.c_str(), &state.numQueries);
+    } else {
+      // if underlying data are the same, copy it
+      state.h_queries = (float3*)malloc(state.numQueries * sizeof(float3));
+      thrust::copy(state.h_points, state.h_points+state.numQueries, state.h_queries);
+    }
   }
 }
 
