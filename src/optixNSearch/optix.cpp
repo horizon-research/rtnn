@@ -616,6 +616,10 @@ void cleanupState( RTNNState& state )
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_1dsort_key         ) ) );
     if (state.d_fhsort_key)
       CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_fhsort_key         ) ) );
+
+    for (auto it = state.d_pointers.begin(); it != state.d_pointers.end(); it++) {
+      CUDA_CHECK( cudaFree( *it ) );
+    }
 }
 
 void setupOptiX( RTNNState& state ) {

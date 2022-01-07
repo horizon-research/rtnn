@@ -31,6 +31,7 @@
 #include <float.h>
 #include <vector_types.h>
 #include <optix_types.h>
+#include <unordered_set>
 #include "optixNSearch.h"
 
 // the SDK cmake defines NDEBUG in the Release build, but we still want to use assert
@@ -105,6 +106,8 @@ struct RTNNState
     void**                      d_temp_buffer_gas         = nullptr;
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
     int*                        d_cellMask                = nullptr;
+
+    std::unordered_set<void*>   d_pointers;
 
     int                         numOfBatches              = -1;
     int                         maxBatchCount             = 1;

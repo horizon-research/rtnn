@@ -393,20 +393,23 @@ float calcCRRatio(RTNNState& state) {
   unsigned int N = state.numPoints;
   unsigned int Q = state.numQueries;
 
+  int scale = (state.samepq ? 1 : 2);
+
   float pointDataSize = 2 * N * sizeof(float3); // conservatively include both points and queries
   float returnDataSize = Q * state.knn * sizeof(unsigned int);
 
-  // for sorting and partitioning, we will have to allocate 3 arrays that have numOfCell elements and 5 arrays that have N elements.
-  float particleArraysSize = 5 * N * sizeof(unsigned int);
+  // for sorting and partitioning, we will have to allocate 3 arrays that have
+  // numOfCell elements and 5 arrays that have N elements.
+  float particleArraysSize = 5 * N * sizeof(unsigned int) * scale;
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize - state.gpuMemUsed * 1024 * 1024;
-  float numOfCells = spaceAvail / (3 * sizeof(unsigned int));
+  float numOfCells = spaceAvail / (3 * sizeof(unsigned int) * scale);
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
   // TODO: |1.2| is to loosen the aggressive estimation of the numOfCells here and
   // the fact that the actual number of cells will be greater than here due to
   // meta cell alignment.
   float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2; // can't be smaller than this
 
-  // TODO: conservatively estimate the gas size as twice the point size (better fit?)
+  // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - pointDataSize - returnDataSize;
   float maxNumOfBatches = spaceAvail / gasSize;

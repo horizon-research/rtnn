@@ -459,7 +459,7 @@ void sortGenBatch(RTNNState& state,
 
       sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
       sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
-      CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy) ) );
+      state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy));
     }
 
     // |batches| will contain the last mask of each batch.
@@ -470,8 +470,8 @@ void sortGenBatch(RTNNState& state,
 
     genBatches(state, batches, h_rayHist, particles, N, d_rayMask);
 
-    CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_rayMask) ) );
-    CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_cellMask) ) );
+    state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_rayMask));
+    state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_cellMask));
 }
 
 void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_particles, bool morton, bool toPartition) {
@@ -541,16 +541,11 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 
-  // TODO: these will block future allocations. for instance, if query is to be
-  // sorted after point, the query sorting will appear to take much longer
-  // since it includes the cudafree time from point sorting.  Can defer to the
-  // end, but then we will also change the logic to calculate crRatio in case
-  // of !samepq.
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr) ) );
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr) ) );
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellOffsets_ptr) ) );
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr) ) );
-  CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr) ) );
+  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr));
+  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr));
+  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellOffsets_ptr));
+  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr));
+  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr));
 }
 
 void oneDSort ( RTNNState& state, unsigned int N, float3* particles, float3* h_particles ) {
