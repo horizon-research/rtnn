@@ -77,9 +77,6 @@ unsigned int genGridInfo(RTNNState& state, unsigned int N, GridInfo& gridInfo) {
   gridInfo.ParticleCount = N;
   gridInfo.GridMin = sceneMin;
 
-#ifdef MEM_STATS
-  fprintf(stdout, "\tUsed memory: %lf (MB)\n", tot_alloc_size);
-#endif
   float cellSize = state.radius / state.crRatio;
   float3 gridSize = sceneMax - sceneMin;
   gridInfo.GridDimension.x = static_cast<unsigned int>(ceilf(gridSize.x / cellSize));
@@ -103,7 +100,7 @@ unsigned int genGridInfo(RTNNState& state, unsigned int N, GridInfo& gridInfo) {
   // smaller grids (meta_grid here). the order within each meta_grid is morton,
   // but the order across meta_grids is raster order. the current
   // implementation uses a heuristics. TODO: revisit this later.
-  gridInfo.meta_grid_dim = (int)pow(2, floorf(log2(std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z}))))/2;
+  gridInfo.meta_grid_dim = (int)pow(2, floorf(log2(std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z}))))/4;
   gridInfo.meta_grid_size = gridInfo.meta_grid_dim * gridInfo.meta_grid_dim * gridInfo.meta_grid_dim;
 
   // One meta grid cell contains meta_grid_dim^3 cells. The morton curve is
@@ -119,8 +116,8 @@ unsigned int genGridInfo(RTNNState& state, unsigned int N, GridInfo& gridInfo) {
   unsigned int numberOfCells = (gridInfo.MetaGridDimension.x * gridInfo.MetaGridDimension.y * gridInfo.MetaGridDimension.z) * gridInfo.meta_grid_size;
   fprintf(stdout, "\tGrid dimension (without meta grids): %u, %u, %u\n", gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z);
   fprintf(stdout, "\tGrid dimension (with meta grids): %u, %u, %u\n", gridInfo.MetaGridDimension.x * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.y * gridInfo.meta_grid_dim, gridInfo.MetaGridDimension.z * gridInfo.meta_grid_dim);
-  fprintf(stdout, "\tMeta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
-  fprintf(stdout, "\t# of cells in a meta grid: %u\n", gridInfo.meta_grid_dim);
+  //fprintf(stdout, "\tMeta Grid dimension: %u, %u, %u\n", gridInfo.MetaGridDimension.x, gridInfo.MetaGridDimension.y, gridInfo.MetaGridDimension.z);
+  //fprintf(stdout, "\t# of cells in a meta grid: %u\n", gridInfo.meta_grid_dim);
   //fprintf(stdout, "\tGridDelta: %f, %f, %f\n", gridInfo.GridDelta.x, gridInfo.GridDelta.y, gridInfo.GridDelta.z);
   fprintf(stdout, "\tNumber of cells: %u\n", numberOfCells);
   fprintf(stdout, "\tCell size: %f\n", cellSize);

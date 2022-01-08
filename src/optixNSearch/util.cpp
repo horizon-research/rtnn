@@ -394,30 +394,67 @@ float calcCRRatio(RTNNState& state) {
   unsigned int Q = state.numQueries;
 
   int scale = (state.samepq ? 1 : 2);
+  // Note: scale_ms is to loosen the aggressive estimation of the numOfCells here
+  // and also actual # of cells will be greater due to meta cell alignment.
 
-  float pointDataSize = 2 * N * sizeof(float3); // conservatively include both points and queries
+  // conservatively include both points and queries and one more copy for partitioned queries
+  float pointDataSize = 3 * N * sizeof(float3);
   float returnDataSize = Q * state.knn * sizeof(unsigned int);
 
   // for sorting and partitioning, we will have to allocate 3 arrays that have
-  // numOfCell elements and 5 arrays that have N elements.
-  float particleArraysSize = 5 * N * sizeof(unsigned int) * scale;
+  // numOfCell elements and 7 arrays that have N elements.
+  float particleArraysSize = 7 * N * sizeof(unsigned int) * scale;
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+  fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tpointData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
+                   spaceAvail/1024/1024,
+                   particleArraysSize/1024/1024,
+                   pointDataSize/1024/1024,
+                   returnDataSize/1024/1024,
+                   state.gpuMemUsed,
+                   gasSize/1014/1024);
 
-  float maxNumOfBatches = spaceAvail / gasSize;
-  float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (maxNumOfBatches - 1)); // can't be smaller than this; TODO (sqrt(2) for 2D)
+  // total gas size + total sorting structure size <= avail mem
+  // total gas size = (state.radius / (sqrt(3) * cellSize) + 1) * gasSize; // TODO (sqrt(2) for 2D)
+  // total sorting structure size = sceneVolume / power(cellSize, 3) * (3 * sizeof(unsigned int) * scale);
+  // it's a cubic equation. don't want to solve it analytically. let's do that
+  // iteratively. the initial size is the smallest cell size that can
+  // accommodate the entire gas or the entire sorting structures.
 
+  float numOfBatches = spaceAvail / gasSize;
+  float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (numOfBatches - 1));
+
+  // could |genGridInfo| too but doesn't matter
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
-  float numOfCells = spaceAvail / (3 * sizeof(unsigned int) * scale);
-  // TODO: |1.2| is to loosen the aggressive estimation of the numOfCells here and
-  // the fact that the actual number of cells will be greater than here due to
-  // meta cell alignment.
-  float cellSizeLimitedBySort = cbrt(sceneVolume / numOfCells) * 1.2; // can't be smaller than this
+  float numOfSortingCells = spaceAvail / (3 * sizeof(unsigned int) * scale);
+  float cellSizeLimitedBySort = cbrt(sceneVolume / numOfSortingCells);
 
   float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
+
+  float curGASSize = 0;
+  float curSortingSize = 0;
+  float curTotalSize = 0;
+  while (1) {
+    numOfBatches = state.radius / (sqrt(3) * cellSize) + 1;
+    curGASSize = numOfBatches * gasSize;
+
+    GridInfo gridInfo;
+    state.crRatio = state.radius / cellSize;
+    state.Min = state.pMin;
+    state.Max = state.pMax;
+    numOfSortingCells = genGridInfo(state, N, gridInfo);
+    curSortingSize = numOfSortingCells * (3 * sizeof(unsigned int) * scale);
+
+    curTotalSize = curGASSize + curSortingSize;
+    fprintf(stdout, "%f+%f=%f, %f\n", curGASSize/1024/1024, curSortingSize/1024/1024, curTotalSize/1024/1024, spaceAvail/1024/1024);
+    if (curTotalSize < spaceAvail) break;
+    cellSize *= 1.05;
+  }
+
   float ratio = state.radius / cellSize;
-  fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, cellSizeLimitedBySort, cellSizeLimitedByGAS);
+  fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, curGASSize/1024/1024, curSortingSize/1024/1024);
+  fprintf(stdout, "\tMemory utilization: %.3f\n", 1 - (spaceAvail-curTotalSize)/(state.totDRAMSize*1024*1024*1024));
 
   return ratio;
 }

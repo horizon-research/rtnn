@@ -66,7 +66,7 @@ public:
 			double t = elapsed_seconds.count() * 1000.0;
 
 			if (print)
-				std::cout << "time " << h.name.c_str() << ": " << t << " ms\n" << std::flush;
+				std::cout << "time " << h.name.c_str() << ": " << t << " ms\n\n" << std::flush;
 			return t;
 	}
 		return 0;
