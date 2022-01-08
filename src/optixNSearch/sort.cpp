@@ -438,7 +438,7 @@ void sortGenBatch(RTNNState& state,
     // get a histogram of d_rayMask, which won't be mutated. this needs to happen before sorting |d_rayMask|.
     // the last mask in the histogram indicates the number of rays that need full search.
     thrust::device_vector<unsigned int> d_rayHist;
-    unsigned int numMasks = thrustGenHist(d_rayMask, d_rayHist, N);
+    unsigned int numMasks = thrustGenHist(d_rayMask, d_rayHist, N); // this would trigger a cudafree of size N
     thrust::host_vector<unsigned int> h_rayHist(numMasks);
     thrust::copy(d_rayHist.begin(), d_rayHist.end(), h_rayHist.begin());
 

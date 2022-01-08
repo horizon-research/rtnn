@@ -384,43 +384,47 @@ float radiusEquiVolume(float width, int dim) {
 }
 
 float calcCRRatio(RTNNState& state) {
-  //TODO: the crratio is determined from the points, not queries, for now. that
-  //is, when sorting queries we will use the same ratio. ideally points and
-  //queries should have different ratios if they are diferent. so we could
-  //still have an OOM when sorting queries. maybe we shouldn't have the notion
-  //of crRatio; we should determine individually for points and queries what
-  //the cell size is.
   unsigned int N = state.numPoints;
   unsigned int Q = state.numQueries;
 
   int scale = (state.samepq ? 1 : 2);
-  // Note: scale_ms is to loosen the aggressive estimation of the numOfCells here
-  // and also actual # of cells will be greater due to meta cell alignment.
 
   // conservatively include both points and queries and one more copy for partitioned queries
-  float pointDataSize = 3 * N * sizeof(float3);
-  float returnDataSize = Q * state.knn * sizeof(unsigned int);
+  float particleDataSize = 3 * N * sizeof(float3);
+  // +1 to include the space for initial search which always returns 1 element
+  float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
 
   // for sorting and partitioning, we will have to allocate 3 arrays that have
-  // numOfCell elements and 7 arrays that have N elements.
+  // numOfCell elements (2 for sorting and 1 for partition) and 7 arrays that
+  // have N elements (3 for sorting and 4 for partition).
+  // TODO: so maybe a more fine-grained estimation here based on partition or not.
   float particleArraysSize = 7 * N * sizeof(unsigned int) * scale;
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
-  float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - pointDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
-  fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tpointData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
+  float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+  fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
                    spaceAvail/1024/1024,
                    particleArraysSize/1024/1024,
-                   pointDataSize/1024/1024,
+                   particleDataSize/1024/1024,
                    returnDataSize/1024/1024,
                    state.gpuMemUsed,
                    gasSize/1014/1024);
 
-  // total gas size + total sorting structure size <= avail mem
-  // total gas size = (state.radius / (sqrt(3) * cellSize) + 1) * gasSize; // TODO (sqrt(2) for 2D)
-  // total sorting structure size = sceneVolume / power(cellSize, 3) * (3 * sizeof(unsigned int) * scale);
-  // it's a cubic equation. don't want to solve it analytically. let's do that
-  // iteratively. the initial size is the smallest cell size that can
-  // accommodate the entire gas or the entire sorting structures.
+  // algorithm to estimate the cellSize
+  //   total gas size + total sorting structure size <= avail mem
+  //   total gas size = (state.radius / (sqrt(3) * cellSize) + 1) * gasSize; // TODO (sqrt(2) for 2D)
+  //   total sorting structure size = sceneVolume / power(cellSize, 3) * (3 * sizeof(unsigned int) * scale);
+  //   it's a cubic equation. don't want to solve it analytically. let's do that
+  //   iteratively. the initial size is the smallest cell size that can
+  //   accommodate the entire gas or the entire sorting structures.
+  // TODO: the crRatio is determined from the points, not queries, for now. so
+  //   when sorting queries we will use the same ratio. so we could still have an
+  //   OOM when sorting queries.  to support different crRatio for query and
+  //   points, we would need to add two more terms for query (instead of simply
+  //   scaling by 2 since query file could have a different scene boundary and
+  //   count). then we could either 1) use the same cellSize and or 2) use two
+  //   different cellSize. the latter makes it hard to find the optimal
+  //   combination.
 
   float numOfBatches = spaceAvail / gasSize;
   float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (numOfBatches - 1));
