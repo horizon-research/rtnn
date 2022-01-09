@@ -77,11 +77,9 @@ For KNN search, the way to change `K` is to use the `-DKNN` switch during cmake 
 
 #### Use file f1.txt for search points and file f2.txt for queries
 
-`bin/optixNSearch -f f1.txt -q f2.txt -p 0`
+`bin/optixNSearch -f f1.txt -q f2.txt`
 
 `-f` specifies the file for search points, and `-q` specifies the file for queries. If only `-f` is given, search points are used as queries.
-
-`-p 0` disables query partitioning, a performance enhancing technique, which is currently not supported when queries and search points are different. This is by no means a fundamental limitation; the code just needs to be streamlined to support it.
 
 ### Advanced configurations
 
