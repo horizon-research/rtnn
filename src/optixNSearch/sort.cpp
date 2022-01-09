@@ -445,7 +445,7 @@ void sortGenBatch(RTNNState& state,
     // Sort the queries if sorting is enabled, in which case sort the ray masks
     // the same way as query sorting. Sorting particles MUST happen right after
     // sorting the masks so that queries and masks are consistent!!!
-    if (state.pointSortMode) {
+    if (state.querySortMode) {
       // make a copy of the keys since they are useless after the first sort. no
       // need to use stable sort since the keys are unique, so masks and the
       // queries are gauranteed to be sorted in exactly the same way.
@@ -504,7 +504,7 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
   // if partition is enabled, do it here. we are partitioning points, but it's the same as queries.
   if (toPartition) {
-    // normal particle sorting is done here too.
+    // must be QUERY here; this would sort queries if enabled
     sortGenBatch(state,
                  N,
                  morton,
@@ -569,19 +569,16 @@ void oneDSort ( RTNNState& state, unsigned int N, float3* particles, float3* h_p
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 }
 
+// this does both sorting and query partitioning, since both use the same grid
 void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
+  // sortMode:
   // 0: no sort
   // 1: z-order sort
   // 2: raster sort
-  // 3: 1D sort
+  // 3: 1D sort; doesn't do query partitioning
 
-  if (!sortMode) {
-    // even if sortMode == 0, but if partition is enabled for POINT, go ahead
-    // since we need to partition; won't actually sort since we will check this
-    // again later. ugly logic.
-    if ((type == POINT) && !state.partition) return;
-    else if (type == QUERY) return;
-  }
+  if ((type == QUERY) && !state.partition && !sortMode) return;
+  else if ((type == POINT) && !sortMode) return;
 
   unsigned int N;
   float3* particles;
@@ -592,25 +589,24 @@ void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
     h_particles = state.h_points;
     state.Min = state.pMin;
     state.Max = state.pMax;
+    Timing::startTiming("sort points");
   } else {
     N = state.numQueries;
     particles = state.params.queries;
     h_particles = state.h_queries;
     state.Min = state.qMin;
     state.Max = state.qMax;
+    Timing::startTiming("sort and/or partition queries");
   }
 
   // the semantices of the two sort functions are: sort data in device, and copy the sorted data back to host.
-  std::string typeName = ((type == POINT) ? "points" : "queries");
-  Timing::startTiming("sort " + typeName);
-    if (sortMode == 3) {
-      oneDSort(state, N, particles, h_particles);
-    } else {
-      bool morton; // false for raster order
-      if (sortMode == 1) morton = true;
-      else morton = false;
-      gridSort(state, N, particles, h_particles, morton, state.partition&&(type==POINT));
-    }
+  if (sortMode == 3) {
+    oneDSort(state, N, particles, h_particles);
+  } else {
+    gridSort(state, N, particles, h_particles,
+        (sortMode == 1) ? true : false, // morton
+        (type == QUERY) && state.partition);
+  }
   Timing::stopTiming(true);
 }
 

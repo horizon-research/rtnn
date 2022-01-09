@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdlib>
 
+#include <sutil/Timing.h>
 #include <sutil/Exception.h>
 
 #include <thrust/device_vector.h>
@@ -329,11 +330,6 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
   bool sameData = (state.qfile.empty() || (state.qfile == state.pfile));
   bool sameSortMode = (state.pointSortMode == state.querySortMode);
 
-  // TODO: currently p and q must be the same to support query partitioning
-  if (state.partition) {
-    assert(sameData);
-  }
-
   // samepq indicates whether queries and points share the same host and device
   // memory (for now; partitioning will change it). even if p and q are the
   // same data, but if they have different sorting modes we can't have them
@@ -464,6 +460,7 @@ float calcCRRatio(RTNNState& state) {
 }
 
 void initBatches(RTNNState& state) {
+  Timing::startTiming("create data structures");
   if (state.autoCR) {
     // TODO: should we just use a fixed cell size/ratio? an overly small cell
     // increases the sort cost, but probably mean little for range search. need
@@ -497,6 +494,7 @@ void initBatches(RTNNState& state) {
 
   for (int i = 0; i < maxBatchCount; i++)
       CUDA_CHECK( cudaStreamCreate( &state.stream[i] ) );
+  Timing::stopTiming(true);
 }
 
 bool isClose(float3 a, float3 b) {
