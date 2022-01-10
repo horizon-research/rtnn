@@ -84,7 +84,7 @@ void sanityCheck(RTNNState&);
 
 void computeMinMax(unsigned, float3*, float3&, float3&);
 unsigned int genGridInfo(RTNNState&, unsigned int, GridInfo&);
-void gridSort(RTNNState&, unsigned int, float3*, float3*, bool, bool);
+void gridSort(RTNNState&, unsigned int, float3*, float3*, bool, ParticleType);
 void sortParticles(RTNNState&, ParticleType, int);
 thrust::device_ptr<unsigned int> sortQueriesByFHCoord(RTNNState&, thrust::device_ptr<unsigned int>, int);
 thrust::device_ptr<unsigned int> sortQueriesByFHIdx(RTNNState&, thrust::device_ptr<unsigned int>, int);

@@ -66,7 +66,7 @@ typedef Record<HitGroupData>    HitGroupRecord;
 
 void filterRemoteQueries ( RTNNState& state ) {
   // filter out queries that are theorerically impossible to reach any search
-  // points given the search radius, then create a unified grid.  why? query
+  // points given the search radius, then create a unified grid. why? query
   // partition in theory will need a unified grid anyways, and if without
   // filtering the grid could be overly large such that the cells are big. the
   // unified grid after filtering will have desirable size for partitioning and
@@ -74,6 +74,12 @@ void filterRemoteQueries ( RTNNState& state ) {
   // density is much smaller the unified grid could be too coarse-grained.
   // could generate a dedicated query grid for query sorting.
   // TODO: implement this
+
+  // TODO: another idea is that the grid doesn't HAVE to be union. it just
+  // needs to include the query scene, and we can collapse all out-of-boundary
+  // points to the edge cells. this would allow us to potentially have
+  // finer-grained cells, but edge cells can have lots of points that generate
+  // some overly dense partitions.
 
   state.Min = fminf(state.qMin, state.pMin);
   state.Max = fmaxf(state.qMax, state.pMax);

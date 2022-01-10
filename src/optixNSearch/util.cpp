@@ -422,10 +422,11 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     qNArrayCount = 6;
     cellArrayCount = 4;
 
-    // TODO: although in this case we could reuse the same grid (since qP will
-    // insert points to the grid). we didn't implement it yet.
+    // this case we could reuse the same grid (since qP will insert points to
+    // the grid), and so we save one cellArray (d_CellParticleCounts_ptr_p).
+    // also 2 of the 3 pNArrays are allocated during partitioning
     pNArrayCount = 3;
-    cellArrayCount += 2;
+    cellArrayCount += 1;
   } else if (!qP && qS && pS) {
     qNArrayCount = 3;
     cellArrayCount = 2;
@@ -445,8 +446,11 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     cellArrayCount = 4;
 
     if (!state.samepq) {
+      // this case we could reuse the same grid (since qP will insert points to
+      // the grid), and so we save one cellArray (d_CellParticleCounts_ptr_p).
+      // also 2 of the 3 pNArrays are allocated during partitioning
       pNArrayCount = 3;
-      cellArrayCount += 2;
+      cellArrayCount += 1;
     }
   } else if (!qP && !qS && !pS) {
     // no need to create a grid
