@@ -411,7 +411,7 @@ float calcCRRatio(RTNNState& state) {
   // for sorting and partitioning, we will have to allocate 3(with
   // partition)/2(sorting only) arrays that have numOfCell elements and 7(
   // partition+sorting)/6(partition only)/3(sorting only) arrays that have N
-  // elements.
+  // elements. also one more array (numQueries) if gas sort is enabled.
   // TODO: so maybe a more fine-grained estimation here based on partition or not.
   float particleArraysSize = 7 * N * sizeof(unsigned int) * scale;
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
@@ -434,7 +434,7 @@ float calcCRRatio(RTNNState& state) {
   //   accommodate the entire gas or the entire sorting structures.
   // TODO: the crRatio is determined from the points, not queries, for now. so
   //   when sorting queries we will use the same ratio. so we could still have an
-  //   OOM when sorting queries.  to support different crRatio for query and
+  //   OOM when sorting queries. to support different crRatio for query and
   //   points, we would need to add two more terms for query (instead of simply
   //   scaling by 2 since query file could have a different scene boundary and
   //   count). then we could either 1) use the same cellSize and or 2) use two
@@ -446,7 +446,8 @@ float calcCRRatio(RTNNState& state) {
 
   // could |genGridInfo| too but doesn't matter
   float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
-  float numOfSortingCells = spaceAvail / (3 * sizeof(unsigned int) * scale);
+  //float numOfSortingCells = spaceAvail / (3 * sizeof(unsigned int) * scale);
+  float numOfSortingCells = spaceAvail / (4 * sizeof(unsigned int) * scale); // TODO: let's use 4 for now
   float cellSizeLimitedBySort = cbrt(sceneVolume / numOfSortingCells);
 
   float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
@@ -463,7 +464,8 @@ float calcCRRatio(RTNNState& state) {
     state.Min = state.pMin;
     state.Max = state.pMax;
     numOfSortingCells = genGridInfo(state, N, gridInfo);
-    curSortingSize = numOfSortingCells * (3 * sizeof(unsigned int) * scale);
+    //curSortingSize = numOfSortingCells * (3 * sizeof(unsigned int) * scale);
+    curSortingSize = numOfSortingCells * (4 * sizeof(unsigned int) * scale);
 
     curTotalSize = curGASSize + curSortingSize;
     fprintf(stdout, "%f+%f=%f, %f\n", curGASSize/1024/1024, curSortingSize/1024/1024, curTotalSize/1024/1024, spaceAvail/1024/1024);
@@ -473,7 +475,7 @@ float calcCRRatio(RTNNState& state) {
 
   float ratio = state.radius / cellSize;
   fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, curGASSize/1024/1024, curSortingSize/1024/1024);
-  fprintf(stdout, "\tMemory utilization: %.3f\n", 1 - (spaceAvail-curTotalSize)/(state.totDRAMSize*1024*1024*1024));
+  fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curTotalSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
 
   return ratio;
 }

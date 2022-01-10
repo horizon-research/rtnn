@@ -112,23 +112,28 @@ void calcSearchSize(int3 gridCell,
   //if (x == 283 && y == 10 && z == 418) printf("cell %d has %d particles. morton? %d\n", cellIndex, CellParticleCounts[cellIndex], morton);
   //assert(cellIndex <= numberOfCells);
   //if (CellParticleCounts[cellIndex] == 0) return; // should never hit this.
-  
+
   int iter = 0;
   unsigned int count = 0;
   addCount(count, CellParticleCounts, gridInfo, x, y, z, morton);
-  
+
   int xmin = x;
   int xmax = x;
   int ymin = y;
   int ymax = y;
   int zmin = z;
   int zmax = z;
-  
+ 
   while(1) {
     // TODO: there could be corner cases here, e.g., maxWidth is very
     // small, cellSize will be 0 (same as uninitialized).
+    // TODO: another optimization we can do is what if a query is so far away
+    // from the search points? right now those queries will fall into the last
+    // batch and searched using the search radius. how can we skip searches for
+    // them altogether by doing something here? for that we need a different
+    // maxWidth that encloses the search sphere.
     float width = getWidthFromIter(iter, cellSize);
-  
+ 
     if (width > maxWidth) {
       cellMask[cellIndex] = iter;
       break;
@@ -142,58 +147,58 @@ void calcSearchSize(int3 gridCell,
     else {
       iter++;
     }
-  
+ 
     int ix, iy, iz;
-  
+ 
     iz = zmin - 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iy = ymin; iy <= ymax; iy++) {
         addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
-  
+ 
     iz = zmax + 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iy = ymin; iy <= ymax; iy++) {
         addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
-  
+
     ix = xmin - 1;
     for (iy = ymin; iy <= ymax; iy++) {
       for (iz = zmin; iz <= zmax; iz++) {
         addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
-  
+
     ix = xmax + 1;
     for (iy = ymin; iy <= ymax; iy++) {
       for (iz = zmin; iz <= zmax; iz++) {
         addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
-  
+ 
     iy = ymin - 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iz = zmin; iz <= zmax; iz++) {
         addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
-  
+ 
     iy = ymax + 1;
     for (ix = xmin; ix <= xmax; ix++) {
       for (iz = zmin; iz <= zmax; iz++) {
         addCount(count, CellParticleCounts, gridInfo, ix, iy, iz, morton);
       }
     }
-  
+ 
     xmin--;
     xmax++;
     ymin--;
     ymax++;
     zmin--;
     zmax++;
-  
+ 
     addCount(count, CellParticleCounts, gridInfo, xmin, ymin, zmin, morton);
     addCount(count, CellParticleCounts, gridInfo, xmin, ymin, zmax, morton);
     addCount(count, CellParticleCounts, gridInfo, xmin, ymax, zmin, morton);
@@ -250,7 +255,8 @@ __global__ void kInsertParticles_Raster(
   int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
 
   unsigned int cellIndex = (gridCell.x * GridInfo.GridDimension.y + gridCell.y) * GridInfo.GridDimension.z + gridCell.z;
-  particleCellIndices[particleIndex] = cellIndex;
+  if (particleCellIndices)
+    particleCellIndices[particleIndex] = cellIndex;
 
   //float3 query = particles[particleIndex];
   //float3 b = make_float3(-57.230999, 2.710000, 9.608000);
@@ -259,7 +265,10 @@ __global__ void kInsertParticles_Raster(
   //}
 
   // this stores the within-cell sorted indices of particles
-  localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
+  if (localSortedIndices)
+    localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
+  else // if localSortedIndices is nullptr, we still need to increment cellParticleCounts
+    atomicAdd(&cellParticleCounts[cellIndex], 1);
 
   //if (cellIndex == 6054598)
   //  printf("cell 6054598 has %u particles [%f, %f, %f]. Dist: %f\n", cellParticleCounts[cellIndex], query.x, query.y, query.z, sqrt((query.x - b.x) * (query.x - b.x) + (query.y - b.y) * (query.y - b.y) + (query.z - b.z) * (query.z - b.z)));
@@ -282,7 +291,8 @@ __global__ void kInsertParticles_Morton(
   int3 gridCell = make_int3(int(gridCellF.x), int(gridCellF.y), int(gridCellF.z));
 
   unsigned int cellIndex = ToCellIndex_MortonMetaGrid(GridInfo, gridCell);
-  particleCellIndices[particleIndex] = cellIndex;
+  if (particleCellIndices)
+    particleCellIndices[particleIndex] = cellIndex;
 
   //float3 query = particles[particleIndex];
   //float3 b = make_float3(21.618000, -0.005000, -13.505000);
@@ -291,7 +301,10 @@ __global__ void kInsertParticles_Morton(
   //}
 
   // this stores the within-cell sorted indices of particles
-  localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
+  if (localSortedIndices)
+    localSortedIndices[particleIndex] = atomicAdd(&cellParticleCounts[cellIndex], 1);
+  else // if localSortedIndices is nullptr, we still need to increment cellParticleCounts
+    atomicAdd(&cellParticleCounts[cellIndex], 1);
 
   //printf("%u, %u, (%d, %d, %d)\n", particleIndex, cellIndex, gridCell.x, gridCell.y, gridCell.z);
 }

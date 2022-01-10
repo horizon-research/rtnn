@@ -528,7 +528,7 @@ void launchSubframe( unsigned int* output_buffer, RTNNState& state, int batch_id
                                   numQueries * state.params.limit * sizeof(unsigned int),
                                   state.stream[batch_id] ) );
 
-    fprintf(stdout, "\tLaunch %u (%f) queries\n", numQueries, (float)numQueries/(float)state.numQueries);
+    fprintf(stdout, "\tLaunch %u (%.4f%%) queries\n", numQueries, (float)numQueries/(float)state.numQueries*100.0);
     fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);
     fprintf(stdout, "\tSearch K: %u\n", state.params.limit);
     fprintf(stdout, "\tSearch mode: %d\n", state.params.mode);

@@ -54,6 +54,11 @@ extern "C" __global__ void __raygen__knn()
     float3 ray_origin = params.queries[queryIdx];
     float3 ray_direction = normalize(make_float3(1, 0, 0));
 
+    //if (queryIdx == 163455) {
+    //  printf("%u, %u!!!\n", queryIdx, rayIdx);
+    //  printf("%f, %f, %f!!!\n", ray_origin.x, ray_origin.y, ray_origin.z);
+    //}
+
     const float tmin = 0.f;
     const float tmax = 1.e-16f;
 

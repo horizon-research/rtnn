@@ -21,7 +21,8 @@ void sanityCheckKNN( RTNNState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  //std::vector<unsigned int> randQ {0};
+  //std::vector<unsigned int> randQ {163455};
+  //std::vector<unsigned int> randQ {2522634};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {
     if (std::find(randQ.begin(), randQ.end(), q) == randQ.end()) continue;
@@ -83,16 +84,16 @@ void sanityCheckKNN( RTNNState& state, int batch_id ) {
     // https://www.techiedelight.com/print-set-unordered_set-cpp/
     if (gt_dists != gpu_dists) {
       fprintf(stdout, "Incorrect query [%u] %f, %f, %f\n", q, query.x, query.y, query.z);
-      //std::cout << "GT:\n";
-      //std::copy(gt_dists.begin(),
-      //      gt_dists.end(),
-      //      std::ostream_iterator<float>(std::cout, " "));
-      //      std::cout << "\n\n";
-      //std::cout << "RTX:\n";
-      //std::copy(gpu_dists.begin(),
-      //      gpu_dists.end(),
-      //      std::ostream_iterator<float>(std::cout, " "));
-      //      std::cout << "\n\n";
+      std::cout << "GT:\n";
+      std::copy(gt_dists.begin(),
+            gt_dists.end(),
+            std::ostream_iterator<float>(std::cout, " "));
+            std::cout << "\n\n";
+      std::cout << "RTX:\n";
+      std::copy(gpu_dists.begin(),
+            gpu_dists.end(),
+            std::ostream_iterator<float>(std::cout, " "));
+            std::cout << "\n\n";
     }
   }
   std::cerr << "\tSanity check done." << std::endl;
