@@ -57,7 +57,9 @@ See `samplepc.txt` for an example. Each point takes a line. Each line has three 
 
 ### Simple run
 
-To get started, in the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
+Assuming the code is located at `$HOME/rtnn`, add `$HOME/rtnn/src/build/lib` to `LD_LIBRARY_PATH`.
+
+In the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
 
 ### Common configurations
 
@@ -77,11 +79,9 @@ For KNN search, the way to change `K` is to use the `-DKNN` switch during cmake 
 
 #### Use file f1.txt for search points and file f2.txt for queries
 
-`bin/optixNSearch -f f1.txt -q f2.txt -p 0`
+`bin/optixNSearch -f f1.txt -q f2.txt`
 
 `-f` specifies the file for search points, and `-q` specifies the file for queries. If only `-f` is given, search points are used as queries.
-
-`-p 0` disables query partitioning, a performance enhancing technique, which is currently not supported when queries and search points are different. This is by no means a fundamental limitation; the code just needs to be streamlined to support it.
 
 ### Advanced configurations
 
