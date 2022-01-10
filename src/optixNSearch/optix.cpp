@@ -64,6 +64,21 @@ typedef Record<GeomData>        RayGenRecord;
 typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
+void filterRemoteQueries ( RTNNState& state ) {
+  // filter out queries that are theorerically impossible to reach any search
+  // points given the search radius, then create a unified grid.  why? query
+  // partition in theory will need a unified grid anyways, and if without
+  // filtering the grid could be overly large such that the cells are big. the
+  // unified grid after filtering will have desirable size for partitioning and
+  // point sorting. the only concern is for query partitioning, where is query
+  // density is much smaller the unified grid could be too coarse-grained.
+  // could generate a dedicated query grid for query sorting.
+  // TODO: implement this
+
+  state.Min = fminf(state.qMin, state.pMin);
+  state.Max = fmaxf(state.qMax, state.pMax);
+}
+
 void uploadData ( RTNNState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
@@ -88,6 +103,8 @@ void uploadData ( RTNNState& state ) {
       thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
       computeMinMax(state.numQueries, state.params.queries, state.qMin, state.qMax);
     }
+
+    filterRemoteQueries(state);
   Timing::stopTiming(true);
 }
 

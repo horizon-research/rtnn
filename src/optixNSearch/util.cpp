@@ -397,23 +397,82 @@ float radiusEquiVolume(float width, int dim) {
   else assert(0);
 }
 
+void estimateArrayCounts(RTNNState& state, int& NArrayCount, int& cellArrayCount) {
+  // TODO: more fine-grained estimation based on detailed partition/sorting config.
+  // for sorting and partitioning, we will have to allocate 3(with
+  // partition)/2(sorting only) arrays that have numOfCell elements and 7(
+  // partition+sorting)/6(partition only)/3(sorting only) arrays that have N
+  // elements. also one more array (numQueries) if gas sort is enabled.
+
+  bool qP = state.partition;
+  bool qS = (state.querySortMode != 0); // TODO: 1D sort doesn't need that many.
+  bool pS = (state.pointSortMode != 0);
+  bool gS = (state.qGasSortMode != 0);
+
+  // assuming that a unified grid is to be generated; see |filterRemoteQueries|
+  NArrayCount = 0;
+  cellArrayCount = 0;
+
+  if (qP && !qS && !pS) {
+    NArrayCount = 7;
+    cellArrayCount = 4;
+  } else if (qP && qS && !pS) {
+    NArrayCount = 7;
+    cellArrayCount = 4;
+  } else if (qP && !qS && pS) {
+    NArrayCount = 7;
+    cellArrayCount = 4;
+
+    // TODO: although in this case we could reuse the same grid (since qP will
+    // insert points to the grid). we didn't implement it yet.
+    NArrayCount += 7;
+    cellArrayCount += 3;
+  } else if (!qP && qS && pS) {
+    NArrayCount = 7;
+    cellArrayCount = 3;
+
+    if (!state.samepq) {
+      NArrayCount += 7;
+      cellArrayCount += 3;
+    }
+  } else if (!qP && qS && !pS) {
+    NArrayCount = 7;
+    cellArrayCount = 3;
+  } else if (!qP && !qS && pS) {
+    NArrayCount = 7;
+    cellArrayCount = 3;
+  } else if (qP && qS && pS) {
+    NArrayCount = 7;
+    cellArrayCount = 4;
+
+    if (!state.samepq) {
+      NArrayCount += 7;
+      cellArrayCount += 3;
+    }
+  } else if (!qP && !qS && !pS) {
+    // Nothing there
+  } else {
+    assert(0);
+  }
+
+  if (gS) NArrayCount++;
+}
+
 float calcCRRatio(RTNNState& state) {
   unsigned int N = state.numPoints;
   unsigned int Q = state.numQueries;
-
-  int scale = (state.samepq ? 1 : 2);
 
   // conservatively include both points and queries and one more copy for partitioned queries
   float particleDataSize = 3 * N * sizeof(float3);
   // +1 to include the space for initial search which always returns 1 element
   float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
 
-  // for sorting and partitioning, we will have to allocate 3(with
-  // partition)/2(sorting only) arrays that have numOfCell elements and 7(
-  // partition+sorting)/6(partition only)/3(sorting only) arrays that have N
-  // elements. also one more array (numQueries) if gas sort is enabled.
-  // TODO: so maybe a more fine-grained estimation here based on partition or not.
-  float particleArraysSize = 7 * N * sizeof(unsigned int) * scale;
+  int NArrayCount;
+  int cellArrayCount;
+  estimateArrayCounts(state, NArrayCount, cellArrayCount);
+  if (!NArrayCount || !cellArrayCount) return 0;
+
+  float particleArraysSize = NArrayCount * N * sizeof(unsigned int);
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
@@ -428,26 +487,17 @@ float calcCRRatio(RTNNState& state) {
   // algorithm to estimate the cellSize
   //   total gas size + total sorting structure size <= avail mem
   //   total gas size = (state.radius / (sqrt(3) * cellSize) + 1) * gasSize; // TODO (sqrt(2) for 2D)
-  //   total sorting structure size = sceneVolume / power(cellSize, 3) * (3 * sizeof(unsigned int) * scale);
+  //   total sorting structure size = sceneVolume / power(cellSize, 3) * (cellArrayCount * sizeof(unsigned int));
   //   it's a cubic equation. don't want to solve it analytically. let's do that
   //   iteratively. the initial size is the smallest cell size that can
   //   accommodate the entire gas or the entire sorting structures.
-  // TODO: the crRatio is determined from the points, not queries, for now. so
-  //   when sorting queries we will use the same ratio. so we could still have an
-  //   OOM when sorting queries. to support different crRatio for query and
-  //   points, we would need to add two more terms for query (instead of simply
-  //   scaling by 2 since query file could have a different scene boundary and
-  //   count). then we could either 1) use the same cellSize and or 2) use two
-  //   different cellSize. the latter makes it hard to find the optimal
-  //   combination.
 
   float numOfBatches = spaceAvail / gasSize;
   float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (numOfBatches - 1));
 
   // could |genGridInfo| too but doesn't matter
-  float sceneVolume = (state.pMax.x - state.pMin.x) * (state.pMax.y - state.pMin.y) * (state.pMax.z - state.pMin.z);
-  //float numOfSortingCells = spaceAvail / (3 * sizeof(unsigned int) * scale);
-  float numOfSortingCells = spaceAvail / (4 * sizeof(unsigned int) * scale); // TODO: let's use 4 for now
+  float sceneVolume = (state.Max.x - state.Min.x) * (state.Max.y - state.Min.y) * (state.Max.z - state.Min.z);
+  float numOfSortingCells = spaceAvail / (cellArrayCount * sizeof(unsigned int));
   float cellSizeLimitedBySort = cbrt(sceneVolume / numOfSortingCells);
 
   float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
@@ -461,11 +511,8 @@ float calcCRRatio(RTNNState& state) {
 
     GridInfo gridInfo;
     state.crRatio = state.radius / cellSize;
-    state.Min = state.pMin;
-    state.Max = state.pMax;
     numOfSortingCells = genGridInfo(state, N, gridInfo);
-    //curSortingSize = numOfSortingCells * (3 * sizeof(unsigned int) * scale);
-    curSortingSize = numOfSortingCells * (4 * sizeof(unsigned int) * scale);
+    curSortingSize = numOfSortingCells * (cellArrayCount * sizeof(unsigned int));
 
     curTotalSize = curGASSize + curSortingSize;
     fprintf(stdout, "%f+%f=%f, %f\n", curGASSize/1024/1024, curSortingSize/1024/1024, curTotalSize/1024/1024, spaceAvail/1024/1024);

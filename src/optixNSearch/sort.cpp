@@ -498,16 +498,12 @@ void sortGenBatch(RTNNState& state,
 
 void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_particles, bool morton, bool toPartition) {
   // TODO: for partitioning queries generate the grid based on the union of
-  // points and queries and insert queries to the grid.  also it doesn't HAVE
+  // points and queries and insert queries to the grid. also it doesn't HAVE
   // to be union. it just needs to include the query scene, and we can collapse
   // all out-of-boundary points to the edge cells. this would allow us to
   // potentially have finer-grained cells, but edge cells can have lots of
   // points that generate some overly dense partitions.
   GridInfo gridInfo;
-  if (toPartition) {
-    state.Min = fminf(state.qMin, state.pMin);
-    state.Max = fmaxf(state.qMax, state.pMax);
-  }
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
   thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr;
@@ -549,6 +545,7 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
     thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr_p;
     allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells); // this takes a lot of memory
     fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
+    state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p));
 
     // insert points to the unioned grid
     numOfBlocks = state.numPoints / threadsPerBlock + 1;
@@ -648,15 +645,11 @@ void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
     N = state.numPoints;
     particles = state.params.points;
     h_particles = state.h_points;
-    state.Min = state.pMin;
-    state.Max = state.pMax;
     Timing::startTiming("sort points");
   } else {
     N = state.numQueries;
     particles = state.params.queries;
     h_particles = state.h_queries;
-    state.Min = state.qMin;
-    state.Max = state.qMax;
     Timing::startTiming("sort and/or partition queries");
   }
 

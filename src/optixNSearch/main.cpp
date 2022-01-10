@@ -81,6 +81,7 @@ int main( int argc, char* argv[] )
 
     // samepq indicates same underlying data and sorting mode, in which case
     // queries have been sorted so no need to sort them again.
+    // TODO: if partitioning then we could simplify point sorting since it's partially done in partitioning
     if (!state.samepq) sortParticles(state, POINT, state.pointSortMode);
 
     setupSearch(state);
