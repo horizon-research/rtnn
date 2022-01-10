@@ -397,65 +397,68 @@ float radiusEquiVolume(float width, int dim) {
   else assert(0);
 }
 
-void estimateArrayCounts(RTNNState& state, int& NArrayCount, int& cellArrayCount) {
-  // TODO: more fine-grained estimation based on detailed partition/sorting config.
-  // for sorting and partitioning, we will have to allocate 3(with
-  // partition)/2(sorting only) arrays that have numOfCell elements and 7(
-  // partition+sorting)/6(partition only)/3(sorting only) arrays that have N
-  // elements. also one more array (numQueries) if gas sort is enabled.
+bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount, int& cellArrayCount) {
+  // for sorting and partitioning, we will have to:
+  // allocate 4(with partition)/2(sorting only) arrays that have numOfCell elements and
+  // 7(partition+sorting)/6(partition only)/3(sorting only) arrays that have N/Q elements.
+  // also one or two more Q arrays if gas sort is enabled.
 
   bool qP = state.partition;
   bool qS = (state.querySortMode != 0); // TODO: 1D sort doesn't need that many.
   bool pS = (state.pointSortMode != 0);
-  bool gS = (state.qGasSortMode != 0);
 
   // assuming that a unified grid is to be generated; see |filterRemoteQueries|
-  NArrayCount = 0;
+  pNArrayCount = 0;
+  qNArrayCount = 0;
   cellArrayCount = 0;
 
   if (qP && !qS && !pS) {
-    NArrayCount = 7;
+    qNArrayCount = 6;
     cellArrayCount = 4;
   } else if (qP && qS && !pS) {
-    NArrayCount = 7;
+    qNArrayCount = 7;
     cellArrayCount = 4;
   } else if (qP && !qS && pS) {
-    NArrayCount = 7;
+    qNArrayCount = 6;
     cellArrayCount = 4;
 
     // TODO: although in this case we could reuse the same grid (since qP will
     // insert points to the grid). we didn't implement it yet.
-    NArrayCount += 7;
-    cellArrayCount += 3;
+    pNArrayCount = 3;
+    cellArrayCount += 2;
   } else if (!qP && qS && pS) {
-    NArrayCount = 7;
-    cellArrayCount = 3;
+    qNArrayCount = 3;
+    cellArrayCount = 2;
 
     if (!state.samepq) {
-      NArrayCount += 7;
-      cellArrayCount += 3;
+      pNArrayCount = 3;
+      cellArrayCount += 2;
     }
   } else if (!qP && qS && !pS) {
-    NArrayCount = 7;
-    cellArrayCount = 3;
+    qNArrayCount = 3;
+    cellArrayCount = 2;
   } else if (!qP && !qS && pS) {
-    NArrayCount = 7;
-    cellArrayCount = 3;
+    pNArrayCount = 3;
+    cellArrayCount = 2;
   } else if (qP && qS && pS) {
-    NArrayCount = 7;
+    qNArrayCount = 7;
     cellArrayCount = 4;
 
     if (!state.samepq) {
-      NArrayCount += 7;
-      cellArrayCount += 3;
+      pNArrayCount = 3;
+      cellArrayCount += 2;
     }
   } else if (!qP && !qS && !pS) {
-    // Nothing there
+    // no need to create a grid
+    return false;
   } else {
     assert(0);
   }
 
-  if (gS) NArrayCount++;
+  if (state.qGasSortMode == 2) qNArrayCount++;
+  else if (state.qGasSortMode == 1) qNArrayCount += 2;
+
+  return true;
 }
 
 float calcCRRatio(RTNNState& state) {
@@ -467,12 +470,11 @@ float calcCRRatio(RTNNState& state) {
   // +1 to include the space for initial search which always returns 1 element
   float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
 
-  int NArrayCount;
+  int pNArrayCount, qNArrayCount;
   int cellArrayCount;
-  estimateArrayCounts(state, NArrayCount, cellArrayCount);
-  if (!NArrayCount || !cellArrayCount) return 0;
+  if (!estimateArrayCounts(state, pNArrayCount, qNArrayCount, cellArrayCount)) return 0;
 
-  float particleArraysSize = NArrayCount * N * sizeof(unsigned int);
+  float particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
@@ -482,7 +484,7 @@ float calcCRRatio(RTNNState& state) {
                    particleDataSize/1024/1024,
                    returnDataSize/1024/1024,
                    state.gpuMemUsed,
-                   gasSize/1014/1024);
+                   gasSize/1024/1024);
 
   // algorithm to estimate the cellSize
   //   total gas size + total sorting structure size <= avail mem
@@ -492,8 +494,10 @@ float calcCRRatio(RTNNState& state) {
   //   iteratively. the initial size is the smallest cell size that can
   //   accommodate the entire gas or the entire sorting structures.
 
+  // set numOfBatches to 1 if no partitioning or nb==1
+  bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
   float numOfBatches = spaceAvail / gasSize;
-  float cellSizeLimitedByGAS = state.radius / (sqrt(3) * (numOfBatches - 1));
+  float cellSizeLimitedByGAS = isOneBatch ? 0 : state.radius / (sqrt(3) * (numOfBatches - 1));
 
   // could |genGridInfo| too but doesn't matter
   float sceneVolume = (state.Max.x - state.Min.x) * (state.Max.y - state.Min.y) * (state.Max.z - state.Min.z);
@@ -506,7 +510,7 @@ float calcCRRatio(RTNNState& state) {
   float curSortingSize = 0;
   float curTotalSize = 0;
   while (1) {
-    numOfBatches = state.radius / (sqrt(3) * cellSize) + 1;
+    numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
     curGASSize = numOfBatches * gasSize; // TODO: should be the max of all gas and the space needed to build one gas
 
     GridInfo gridInfo;
