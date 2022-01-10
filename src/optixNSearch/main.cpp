@@ -47,15 +47,17 @@ int main( int argc, char* argv[] )
   std::cout << "E2E Measure? " << std::boolalpha << state.msr << std::endl;
   std::cout << "K: " << state.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
-  std::cout << "Query Partition? " << std::boolalpha << state.partition << std::endl;
-  std::cout << "Approx Query Partition? " << state.approxMode << std::endl;
+  std::cout << "Query partition? " << std::boolalpha << state.partition << std::endl;
+  std::cout << "Approx query partition mode: " << state.approxMode << std::endl;
   std::cout << "Auto batching? " << std::boolalpha << state.autoNB << std::endl;
   std::cout << "Auto crRatio? " << std::boolalpha << state.autoCR << std::endl;
   std::cout << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2 and autoCR is false
+  std::cout << "mcScale: " << state.mcScale << std::endl;
+  std::cout << "crStep: " << state.crStep << std::endl;
   std::cout << "Interleave? " << std::boolalpha << state.interleave << std::endl;
   std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
-  std::cout << "pointSortMode: " << std::boolalpha << state.pointSortMode << std::endl;
-  std::cout << "querySortMode: " << std::boolalpha << state.querySortMode << std::endl;
+  std::cout << "pointSortMode: " << state.pointSortMode << std::endl;
+  std::cout << "querySortMode: " << state.querySortMode << std::endl;
   std::cout << "gsrRatio: " << state.gsrRatio << std::endl; // only useful when qGasSortMode != 0
   std::cout << "Gather after gas sort? " << std::boolalpha << state.toGather << std::endl;
   std::cout << "========================================" << std::endl << std::endl;

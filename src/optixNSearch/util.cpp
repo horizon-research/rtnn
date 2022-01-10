@@ -171,6 +171,8 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --autocrratio     | -ac     Automatically determining crRatio (cell/radius ratio)? cellSize = radius / crRatio. cellSize is used to create the grid for sorting queries. Default is true.\n";
     std::cerr << "  --crratio         | -cr     Specify crRatio. It's used only if \'-ac\' is false. Default is 8.\n";
     std::cerr << "  --gpumemused      | -gmu    Specify GPU memory that's occupied by other jobs. This allows a better estimation of crRatio to avoid OOM errors. Default is 0.\n";
+    std::cerr << "  --crStep          | -crs    Specify the step size in iteratively determining the best crRatio. Must be > 1. Default is 1.01.\n";
+    std::cerr << "  --metacellScale   | -mc     Specify the metacell scale. See comments in |genGridInfo|. Default is 4.\n";
 
     exit( 0 );
 }
@@ -316,6 +318,22 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
           if (state.gsrRatio <= 0)
               printUsageAndExit( argv[0] );
       }
+      else if( arg == "--metacellScale" || arg == "-mc" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.mcScale = atoi(argv[++i]);
+      }
+      else if( arg == "--crStep " || arg == "-crs" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.crStep = std::stof(argv[++i]);
+          if (state.crStep <= 1) {
+              fprintf(stderr, "crStep has to be greater than 1.\n");
+              printUsageAndExit( argv[0] );
+          }
+      }
       else
       {
           std::cerr << "Unknown option '" << argv[i] << "'\n";
@@ -390,9 +408,10 @@ float calcCRRatio(RTNNState& state) {
   // +1 to include the space for initial search which always returns 1 element
   float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
 
-  // for sorting and partitioning, we will have to allocate 3 arrays that have
-  // numOfCell elements (2 for sorting and 1 for partition) and 7 arrays that
-  // have N elements (3 for sorting and 4 for partition).
+  // for sorting and partitioning, we will have to allocate 3(with
+  // partition)/2(sorting only) arrays that have numOfCell elements and 7(
+  // partition+sorting)/6(partition only)/3(sorting only) arrays that have N
+  // elements.
   // TODO: so maybe a more fine-grained estimation here based on partition or not.
   float particleArraysSize = 7 * N * sizeof(unsigned int) * scale;
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
@@ -437,7 +456,7 @@ float calcCRRatio(RTNNState& state) {
   float curTotalSize = 0;
   while (1) {
     numOfBatches = state.radius / (sqrt(3) * cellSize) + 1;
-    curGASSize = numOfBatches * gasSize;
+    curGASSize = numOfBatches * gasSize; // TODO: should be the max of all gas and the space needed to build one gas
 
     GridInfo gridInfo;
     state.crRatio = state.radius / cellSize;
@@ -449,7 +468,7 @@ float calcCRRatio(RTNNState& state) {
     curTotalSize = curGASSize + curSortingSize;
     fprintf(stdout, "%f+%f=%f, %f\n", curGASSize/1024/1024, curSortingSize/1024/1024, curTotalSize/1024/1024, spaceAvail/1024/1024);
     if (curTotalSize < spaceAvail) break;
-    cellSize *= 1.05;
+    cellSize *= state.crStep;
   }
 
   float ratio = state.radius / cellSize;

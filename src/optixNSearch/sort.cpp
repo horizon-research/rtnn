@@ -93,14 +93,18 @@ unsigned int genGridInfo(RTNNState& state, unsigned int N, GridInfo& gridInfo) {
   gridInfo.GridDelta.z = gridInfo.GridDimension.z / gridSize.z;
 
   // morton code can only be correctly calcuated for a cubic, where each
-  // dimension is of the same size and the dimension is a power of 2. if we
-  // were to generate one single morton code for the entire grid, this would
-  // waste a lot of space since a lot of empty cells will have to be padded.
-  // the strategy is to divide the grid into smaller equal-dimension-power-of-2
-  // smaller grids (meta_grid here). the order within each meta_grid is morton,
-  // but the order across meta_grids is raster order. the current
-  // implementation uses a heuristics. TODO: revisit this later.
-  gridInfo.meta_grid_dim = (int)pow(2, floorf(log2(std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z}))))/4;
+  //   dimension is of the same size and the dimension is a power of 2. if we
+  //   were to generate one single morton code for the entire grid, this would
+  //   waste a lot of space since a lot of empty cells will have to be padded.
+  //   the strategy is to divide the grid into smaller equal-dimension-power-of-2
+  //   smaller grids (meta_grid here). the order within each meta_grid is morton,
+  //   but the order across meta_grids is raster order.
+  // TODO: the current implementation uses a heuristics. we get the largest
+  //   power of 2 that doesn't exceed the shortest side, and then divide it by a
+  //   scaling factor. the result becomes the size of a meta grid. the smaller
+  //   the scaling factor, the more space waste (which limits the number of
+  //   cells) but enforces a more global order; maybe a better strategy?
+  gridInfo.meta_grid_dim = (int)pow(2, floorf(log2(std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z}))))/state.mcScale;
   gridInfo.meta_grid_size = gridInfo.meta_grid_dim * gridInfo.meta_grid_dim * gridInfo.meta_grid_dim;
 
   // One meta grid cell contains meta_grid_dim^3 cells. The morton curve is

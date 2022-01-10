@@ -90,6 +90,8 @@ struct RTNNState
     bool                        autoNB                    = true;
     bool                        autoCR                    = true;
     int                         approxMode                = 2;
+    int                         mcScale                   = 4;
+    float                       crStep                    = 1.01;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
