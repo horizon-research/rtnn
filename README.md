@@ -57,7 +57,9 @@ See `samplepc.txt` for an example. Each point takes a line. Each line has three 
 
 ### Simple run
 
-To get started, in the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
+Assuming the code is located at `$HOME/rtnn`, add `$HOME/rtnn/src/build/lib` to `LD_LIBRARY_PATH`.
+
+In the `build` directory run: `bin/optixNSearch -f ../samplepc.txt`. `-f` specifies the input file. This runs a range search using a radius of 2; points in `samplepc.txt` are used as both queries and search points. See the information printed in the terminal for the exact run configuration.
 
 ### Common configurations
 
