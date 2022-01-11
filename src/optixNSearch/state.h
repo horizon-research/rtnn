@@ -85,6 +85,7 @@ struct RTNNState
     float                       gsrRatio                  = 1;
     bool                        toGather                  = false;
     bool                        samepq                    = false;
+    bool                        sameData                  = false;
     bool                        interleave                = true;
     bool                        partition                 = true;
     bool                        autoNB                    = true;

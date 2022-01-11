@@ -345,7 +345,7 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
   if (state.searchMode == "knn")
     state.knn = K; // a macro
 
-  bool sameData = (state.qfile.empty() || (state.qfile == state.pfile));
+  state.sameData = (state.qfile.empty() || (state.qfile == state.pfile));
   bool sameSortMode = (state.pointSortMode == state.querySortMode);
 
   // samepq indicates whether queries and points share the same host and device
@@ -354,7 +354,7 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
   // share the same device memory since sorting is in-place; they can't share
   // the same host memory either since host memory layout will be mutated to be
   // in-sync with device memory layout for sanity check purpose.
-  if (sameSortMode && sameData) {
+  if (sameSortMode && state.sameData) {
     state.samepq = true;
   }
 }
@@ -414,7 +414,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
 
   if (qP && !qS && !pS) {
     qNArrayCount = 6;
-    cellArrayCount = state.samepq ? 3 : 4;
+    cellArrayCount = state.sameData ? 3 : 4;
   } else if (qP && qS && !pS) {
     qNArrayCount = 7;
     cellArrayCount = 4;
@@ -443,7 +443,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     cellArrayCount = 2;
   } else if (qP && qS && pS) {
     qNArrayCount = 7;
-    cellArrayCount = state.samepq ? 3 : 4;
+    cellArrayCount = state.sameData ? 3 : 4;
 
     if (!state.samepq) {
       // this case we could reuse the same grid (since qP will insert points to

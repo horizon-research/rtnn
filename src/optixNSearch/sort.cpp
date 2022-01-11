@@ -548,14 +548,12 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
 
   if (toPartition) {
-
-    // default is samepq, in which case we simply use the pointers created from queries.
-    // TODO: should check sameData not samepq
+    // default is sameData, in which case we simply use the pointers created from queries.
     thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_p = d_ParticleCellIndices_ptr;
     thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr_p = d_CellParticleCounts_ptr;
     thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr_p = d_LocalSortedIndices_ptr;
 
-    if (!state.samepq) { // then we need to create these pointers from points
+    if (!state.sameData) { // then we need to create these pointers from points
       d_ParticleCellIndices_ptr_p = nullptr;
       d_LocalSortedIndices_ptr_p = nullptr;
 
@@ -563,15 +561,16 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
       fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
       state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p));
 
+      // normally for partitioning we care only about
+      // |d_CellParticleCounts_ptr_p|, but if we have to sort points later,
+      // then piggyback on |kInsertParticles| to generate the other two
+      // metadata. this saves one |kInsertParticles| call and, more
+      // importantly, one allocation of |d_CellParticleCounts_ptr| during point sort.
       if (state.pointSortMode != 0) {
         allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints);
         allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints);
         state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p));
         state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p));
-
-        state.d_ParticleCellIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p);
-        state.d_LocalSortedIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p);
-        state.d_CellParticleCounts_ptr_p = (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p);
       }
 
       // insert points to the unioned grid. properly set numOfBlocks and
@@ -590,6 +589,12 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
       gridInfo.ParticleCount = N;
       numOfBlocks = N / threadsPerBlock + 1;
     }
+    // set these _p pointers so that when sorting points we can use them. if no
+    // sorting, two of the three points are nullptr, but that's OK because we
+    // won't use them.
+    state.d_ParticleCellIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p);
+    state.d_CellParticleCounts_ptr_p = (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p);
+    state.d_LocalSortedIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p);
 
     sortGenBatch(state,
                  N,
