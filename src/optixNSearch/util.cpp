@@ -401,7 +401,6 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
   // for sorting and partitioning, we will have to:
   // allocate 4(with partition)/2(sorting only) arrays that have numOfCell elements and
   // 7(partition+sorting)/6(partition only)/3(sorting only) arrays that have N/Q elements.
-  // also one or two more Q arrays if gas sort is enabled.
 
   bool qP = state.partition;
   bool qS = (state.querySortMode != 0); // TODO: 1D sort doesn't need that many.
@@ -459,8 +458,12 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     assert(0);
   }
 
+  // one or two more Q arrays if gas sort is enabled.
   if (state.qGasSortMode == 2) qNArrayCount++;
   else if (state.qGasSortMode == 1) qNArrayCount += 2;
+
+  // one Q array if gather is enabled.
+  if (state.toGather) qNArrayCount++;
 
   return true;
 }

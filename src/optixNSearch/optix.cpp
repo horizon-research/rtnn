@@ -596,7 +596,6 @@ void cleanupState( RTNNState& state )
 
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_res[i] ) );
-      CUDA_CHECK( cudaFree( state.d_actQs[i] ) );
       delete state.h_actQs[i];
 
       //CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
