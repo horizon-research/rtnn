@@ -149,7 +149,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
     std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
     std::cerr << "  --check           | -c      Enable sanity check? Default is false.\n";
-    std::cerr << "  --deferFree       | -df     Enable deferred free of intermediate device memory? Default is false. Enable this for large datasets (e.g., >10 M points).\n";
+    std::cerr << "  --deferFree       | -df     Enable deferred free of intermediate device memory? Default is true. Disable this for large datasets (e.g., >10 M points).\n";
 
     std::cerr << "  --help            | -h      Print this usage message\n";
 
@@ -578,9 +578,10 @@ float calcCRRatio(RTNNState& state) {
     float curTotalSize = 0;
     float numOfBatches, numOfSortingCells;
     bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
+    float instScale = 20.0; // instantaneous memory required in building gas
     while (1) {
       numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
-      curGASSize = numOfBatches * gasSize; // TODO: should be the max of all gas and the space needed to build one gas
+      curGASSize = std::max(numOfBatches, instScale) * gasSize;
 
       GridInfo gridInfo;
       state.crRatio = state.radius / cellSize;

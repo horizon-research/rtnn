@@ -91,7 +91,7 @@ struct RTNNState
     int                         approxMode                = 2;
     int                         mcScale                   = 4;
     float                       crStep                    = 1.01;
-    bool                        deferFree                 = false;
+    bool                        deferFree                 = true;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
