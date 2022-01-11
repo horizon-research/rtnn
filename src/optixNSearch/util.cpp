@@ -416,20 +416,23 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     cellArrayCount = state.sameData ? 3 : 4;
   } else if (qP && qS && !pS) {
     qNArrayCount = 7;
-    cellArrayCount = 4;
+    cellArrayCount = state.sameData ? 3 : 4;
   } else if (qP && !qS && pS) {
     qNArrayCount = 6;
-    cellArrayCount = 4;
+    cellArrayCount = state.sameData ? 3 : 4;
 
-    // this case we could reuse the same grid (since qP will insert points to
-    // the grid), and so we save one cellArray (d_CellParticleCounts_ptr_p).
-    // also 2 of the 3 pNArrays are allocated during partitioning
+    // additional allocation for pS. in this case since points are already
+    // inserted in the grid during partitioning, we can reuse both cellArrays
+    // that are needed for sorting. note 2 of the 3 pNArrays are allocated
+    // during partitioning.
     pNArrayCount = 3;
-    cellArrayCount += 1;
+    cellArrayCount += 0;
   } else if (!qP && qS && pS) {
     qNArrayCount = 3;
     cellArrayCount = 2;
 
+    // additional allocation for pS, but if samepq then no pS will be triggered
+    // so no additional allocation at all.
     if (!state.samepq) {
       pNArrayCount = 3;
       cellArrayCount += 2;
@@ -445,11 +448,13 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     cellArrayCount = state.sameData ? 3 : 4;
 
     if (!state.samepq) {
-      // this case we could reuse the same grid (since qP will insert points to
-      // the grid), and so we save one cellArray (d_CellParticleCounts_ptr_p).
-      // also 2 of the 3 pNArrays are allocated during partitioning
+      // additional allocation for pS. if samepq then no pS will be triggered
+      // so no additional allocation at all. otherwise, since points are
+      // already inserted in the grid during partitioning, we can reuse both
+      // cellArrays that are needed for sorting. note 2 of the 3 pNArrays are
+      // allocated during partitioning.
       pNArrayCount = 3;
-      cellArrayCount += 1;
+      cellArrayCount += 0;
     }
   } else if (!qP && !qS && !pS) {
     // no need to create a grid
@@ -480,6 +485,7 @@ float calcCRRatio(RTNNState& state) {
   int pNArrayCount, qNArrayCount;
   int cellArrayCount;
   if (!estimateArrayCounts(state, pNArrayCount, qNArrayCount, cellArrayCount)) return 0;
+  fprintf(stdout, "pNArrayCount: %d\nqNArrayCount: %d\ncellArrayCount: %d\n", pNArrayCount, qNArrayCount, cellArrayCount);
 
   float particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)

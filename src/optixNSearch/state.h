@@ -108,6 +108,7 @@ struct RTNNState
     void*                       d_ParticleCellIndices_ptr_p = nullptr;
     void*                       d_CellParticleCounts_ptr_p = nullptr;
     void*                       d_LocalSortedIndices_ptr_p = nullptr;
+    void*                       d_CellOffsets_ptr_p       = nullptr;
 
     std::unordered_set<void*>   d_pointers;
 
