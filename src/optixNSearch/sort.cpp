@@ -511,11 +511,24 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   unsigned int numOfBlocks = N / threadsPerBlock + 1;
   if ((type == POINT) && state.partition) {
     // indicating that this is a point sort after the query partitioning, in
-    // which case the three pointers are initialized in the query partitioning
-    // process and we have loaded them already. but if the point sort order is
+    // which case the four pointers are initialized in the query partitioning
+    // process and we can reuse their space. but if the point sort order is
     // different from the query sort order, we still have to call
-    // kInsertParticles using the correct |morton|.
-    // TODO: implement this
+    // kInsertParticles using the correct |morton| to update them.
+
+    bool queryMorton = (state.querySortMode == 1); // the order that the *_p pointers are generated
+    if (queryMorton != morton) { // |morton| is the order they should be generated for point sorting
+      kInsertParticles(numOfBlocks,
+                       threadsPerBlock,
+                       gridInfo,
+                       particles,
+                       thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
+                       thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
+                       thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
+                       morton
+                      );
+    }
+
     fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // zero it out again for points
     exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
   } else {
@@ -569,8 +582,8 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
       // normally for partitioning we care only about
       // |d_CellParticleCounts_ptr_p|, but if we have to sort points later,
       // then piggyback on |kInsertParticles| to generate the other two
-      // metadata. this saves one |kInsertParticles| call and, more
-      // importantly, one allocation of |d_CellParticleCounts_ptr| during point sort.
+      // metadata. note that we might still have to run the insert function if
+      // the point sort mode is different from query sort mode.
       if (state.pointSortMode != 0) {
         allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints, &state.d_pointers);
         allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints, &state.d_pointers);
