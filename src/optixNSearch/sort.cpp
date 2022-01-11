@@ -548,39 +548,48 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
 
   if (toPartition) {
-    thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_p = nullptr;
-    thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr_p = nullptr;
 
-    thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr_p;
-    allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells); // this takes a lot of memory
-    fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
-    state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p));
+    // default is samepq, in which case we simply use the pointers created from queries.
+    // TODO: should check sameData not samepq
+    thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_p = d_ParticleCellIndices_ptr;
+    thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr_p = d_CellParticleCounts_ptr;
+    thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr_p = d_LocalSortedIndices_ptr;
 
-    if (state.pointSortMode != 0) {
-      allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints);
-      allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints);
-      state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p));
-      state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p));
+    if (!state.samepq) { // then we need to create these pointers from points
+      d_ParticleCellIndices_ptr_p = nullptr;
+      d_LocalSortedIndices_ptr_p = nullptr;
 
-      state.d_ParticleCellIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p);
-      state.d_LocalSortedIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p);
+      allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells);
+      fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
+      state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p));
+
+      if (state.pointSortMode != 0) {
+        allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints);
+        allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints);
+        state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p));
+        state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p));
+
+        state.d_ParticleCellIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p);
+        state.d_LocalSortedIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p);
+        state.d_CellParticleCounts_ptr_p = (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p);
+      }
+
+      // insert points to the unioned grid. properly set numOfBlocks and
+      // ParticleCount so that the kernel does work for all points (not queries)
+      numOfBlocks = state.numPoints / threadsPerBlock + 1;
+      gridInfo.ParticleCount = state.numPoints;
+      kInsertParticles(numOfBlocks,
+                       threadsPerBlock,
+                       gridInfo,
+                       state.params.points,
+                       thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p),
+                       thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p),
+                       thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p),
+                       morton // it's necessary to use the same |morton| as inserting queries
+                      );
+      gridInfo.ParticleCount = N;
+      numOfBlocks = N / threadsPerBlock + 1;
     }
-
-    // insert points to the unioned grid. properly set numOfBlocks and
-    // ParticleCount so that the kernel does work for all points (not queries)
-    numOfBlocks = state.numPoints / threadsPerBlock + 1;
-    gridInfo.ParticleCount = state.numPoints;
-    kInsertParticles(numOfBlocks,
-                     threadsPerBlock,
-                     gridInfo,
-                     state.params.points,
-                     thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p),
-                     thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p),
-                     thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p),
-                     morton
-                    );
-    gridInfo.ParticleCount = N;
-    numOfBlocks = N / threadsPerBlock + 1;
 
     sortGenBatch(state,
                  N,

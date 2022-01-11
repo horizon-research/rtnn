@@ -414,7 +414,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
 
   if (qP && !qS && !pS) {
     qNArrayCount = 6;
-    cellArrayCount = 4;
+    cellArrayCount = state.samepq ? 3 : 4;
   } else if (qP && qS && !pS) {
     qNArrayCount = 7;
     cellArrayCount = 4;
@@ -443,7 +443,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     cellArrayCount = 2;
   } else if (qP && qS && pS) {
     qNArrayCount = 7;
-    cellArrayCount = 4;
+    cellArrayCount = state.samepq ? 3 : 4;
 
     if (!state.samepq) {
       // this case we could reuse the same grid (since qP will insert points to
@@ -530,6 +530,7 @@ float calcCRRatio(RTNNState& state) {
 
   float ratio = state.radius / cellSize;
   fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, curGASSize/1024/1024, curSortingSize/1024/1024);
+  fprintf(stdout, "\tCalculated maxBatches: %.3f\n", numOfBatches);
   fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curTotalSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
 
   return ratio;
