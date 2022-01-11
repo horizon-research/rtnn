@@ -105,9 +105,7 @@ struct RTNNState
     void**                      d_temp_buffer_gas         = nullptr;
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
     int*                        d_cellMask                = nullptr;
-    void*                       d_ParticleCellIndices_ptr_p = nullptr;
     void*                       d_CellParticleCounts_ptr_p = nullptr;
-    void*                       d_LocalSortedIndices_ptr_p = nullptr;
     void*                       d_CellOffsets_ptr_p       = nullptr;
 
     std::unordered_set<void*>   d_pointers;

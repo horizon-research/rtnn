@@ -21,7 +21,7 @@ void sanityCheckKNN( RTNNState& state, int batch_id ) {
   bool printRes = false;
   srand(time(NULL));
   std::vector<unsigned int> randQ {rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries, rand() % state.numQueries};
-  //std::vector<unsigned int> randQ {163455};
+  //std::vector<unsigned int> randQ {3515};
   //std::vector<unsigned int> randQ {2522634};
 
   for (unsigned int q = 0; q < state.numQueries; q++) {

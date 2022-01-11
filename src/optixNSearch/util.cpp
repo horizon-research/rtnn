@@ -423,8 +423,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
 
     // additional allocation for pS. in this case since points are already
     // inserted in the grid during partitioning, we can reuse both cellArrays
-    // that are needed for sorting. note 2 of the 3 pNArrays are allocated
-    // during partitioning.
+    // that are needed for sorting.
     pNArrayCount = 3;
     cellArrayCount += 0;
   } else if (!qP && qS && pS) {
@@ -451,8 +450,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
       // additional allocation for pS. if samepq then no pS will be triggered
       // so no additional allocation at all. otherwise, since points are
       // already inserted in the grid during partitioning, we can reuse both
-      // cellArrays that are needed for sorting. note 2 of the 3 pNArrays are
-      // allocated during partitioning.
+      // cellArrays that are needed for sorting.
       pNArrayCount = 3;
       cellArrayCount += 0;
     }

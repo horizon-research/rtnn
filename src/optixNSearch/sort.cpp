@@ -502,57 +502,43 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   GridInfo gridInfo;
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
-  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr = thrust::device_pointer_cast(state.d_ParticleCellIndices_ptr_p);
+  thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr;
   thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = thrust::device_pointer_cast(state.d_CellParticleCounts_ptr_p);
-  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr = thrust::device_pointer_cast(state.d_LocalSortedIndices_ptr_p);
+  thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr;
   thrust::device_ptr<unsigned int> d_CellOffsets_ptr = thrust::device_pointer_cast(state.d_CellOffsets_ptr_p);
+  thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
+
+  allocThrustDevicePtr(&d_ParticleCellIndices_ptr, N, &state.d_pointers);
+  allocThrustDevicePtr(&d_LocalSortedIndices_ptr, N, &state.d_pointers);
+  allocThrustDevicePtr(&d_posInSortedPoints_ptr, N, &state.d_pointers);
 
   unsigned int threadsPerBlock = 64;
   unsigned int numOfBlocks = N / threadsPerBlock + 1;
   if ((type == POINT) && state.partition) {
     // indicating that this is a point sort after the query partitioning, in
-    // which case the four pointers are initialized in the query partitioning
-    // process and we can reuse their space. but if the point sort order is
-    // different from the query sort order, we still have to call
-    // kInsertParticles using the correct |morton| to update them.
-
-    bool queryMorton = (state.querySortMode == 1); // the order that the *_p pointers are generated
-    if (queryMorton != morton) { // |morton| is the order they should be generated for point sorting
-      kInsertParticles(numOfBlocks,
-                       threadsPerBlock,
-                       gridInfo,
-                       particles,
-                       thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
-                       thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
-                       thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
-                       morton
-                      );
-    }
-
-    fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // zero it out again for points
-    exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
+    // which case the two cellArrays are created in the query partitioning
+    // process and we can reuse their space so no allocation. we still have to
+    // call kInsertParticles using the correct |morton| to update them (since
+    // the query morton order and point order might be different) as well as
+    // initializing the two N arrays.
   } else {
-    allocThrustDevicePtr(&d_ParticleCellIndices_ptr, N, &state.d_pointers);
-
-    allocThrustDevicePtr(&d_CellParticleCounts_ptr, numberOfCells, &state.d_pointers); // this takes a lot of memory
-    fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
-
-    allocThrustDevicePtr(&d_LocalSortedIndices_ptr, N, &state.d_pointers);
-
-    kInsertParticles(numOfBlocks,
-                     threadsPerBlock,
-                     gridInfo,
-                     particles,
-                     thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
-                     thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
-                     thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
-                     morton
-                    );
-
+    // numberOfCells takes a lot of memory
+    allocThrustDevicePtr(&d_CellParticleCounts_ptr, numberOfCells, &state.d_pointers);
     allocThrustDevicePtr(&d_CellOffsets_ptr, numberOfCells, &state.d_pointers);
-    fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
-    exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
   }
+
+  kInsertParticles(numOfBlocks,
+                   threadsPerBlock,
+                   gridInfo,
+                   particles,
+                   thrust::raw_pointer_cast(d_ParticleCellIndices_ptr),
+                   thrust::raw_pointer_cast(d_CellParticleCounts_ptr),
+                   thrust::raw_pointer_cast(d_LocalSortedIndices_ptr),
+                   morton
+                  );
+
+  fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
+  exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
 
   // good debugging code; find the cell id for the wrong query
   //thrust::host_vector<unsigned int> test(N);
@@ -561,33 +547,16 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   //  if (i == 2522634) printf("cellId: %u\n", test[i]);
   //}
 
-  thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
-  allocThrustDevicePtr(&d_posInSortedPoints_ptr, N, &state.d_pointers);
-
   if (toPartition) {
-    // default is sameData, in which case we simply use the pointers created from queries.
-    thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_p = d_ParticleCellIndices_ptr;
+    // default is sameData, in which case we simply use the pointer created from queries.
     thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr_p = d_CellParticleCounts_ptr;
-    thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr_p = d_LocalSortedIndices_ptr;
 
     if (!state.sameData) {
-      // then we need to create these pointers from points. note that we don't
+      // then we need to create the pointer from points. note that we don't
       // need samepq to trigger this. sameData is enough.
-      d_ParticleCellIndices_ptr_p = nullptr;
-      d_LocalSortedIndices_ptr_p = nullptr;
 
       allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells, &state.d_pointers);
       fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
-
-      // normally for partitioning we care only about
-      // |d_CellParticleCounts_ptr_p|, but if we have to sort points later,
-      // then piggyback on |kInsertParticles| to generate the other two
-      // metadata. note that we might still have to run the insert function if
-      // the point sort mode is different from query sort mode.
-      if (state.pointSortMode != 0) {
-        allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints, &state.d_pointers);
-        allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints, &state.d_pointers);
-      }
 
       // insert points to the unioned grid. properly set numOfBlocks and
       // ParticleCount so that the kernel does work for all points (not queries)
@@ -597,20 +566,16 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
                        threadsPerBlock,
                        gridInfo,
                        state.params.points,
-                       thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p),
+                       nullptr,
                        thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p),
-                       thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p),
+                       nullptr,
                        morton // it's necessary to use the same |morton| as inserting queries
                       );
       gridInfo.ParticleCount = N;
       numOfBlocks = N / threadsPerBlock + 1;
     }
-    // set these _p pointers so that when sorting points we can use them. if no
-    // sorting, two of the three points are nullptr, but that's OK because we
-    // won't use them.
-    state.d_ParticleCellIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p);
+    // set these _p pointers so that when sorting points we can use their space.
     state.d_CellParticleCounts_ptr_p = (void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p);
-    state.d_LocalSortedIndices_ptr_p = (void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p);
     state.d_CellOffsets_ptr_p = (void*)thrust::raw_pointer_cast(d_CellOffsets_ptr);
 
     sortGenBatch(state,
