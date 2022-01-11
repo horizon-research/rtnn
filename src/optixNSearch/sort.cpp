@@ -438,7 +438,8 @@ void sortGenBatch(RTNNState& state,
 
     // TODO: generate the sorted indices, and also set the rayMask according to
     //   cellMask. the sorted indices |d_posInSortedPoints_ptr| is not useful
-    //   unless we do a sort later. create a dedicated |setRayMask| function?
+    //   unless we do a sort later. this would avoid creating the large
+    //   |d_CellOffsets_ptr| array. create a dedicated |setRayMask| function?
     // TODO: if partition is enabled, the grid is generated from the union of
     //   point and query scene, where the cell might be too large and thus
     //   degrades the efficiency of query sorting. we should consider creating a
@@ -502,8 +503,10 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   GridInfo gridInfo;
   unsigned int numberOfCells = genGridInfo(state, N, gridInfo);
 
+  // need for both sorting and partitioning
   thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr;
   thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = thrust::device_pointer_cast(state.d_CellParticleCounts_ptr_p);
+  // only need for sorting
   thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr;
   thrust::device_ptr<unsigned int> d_CellOffsets_ptr = thrust::device_pointer_cast(state.d_CellOffsets_ptr_p);
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
