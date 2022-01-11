@@ -404,6 +404,18 @@ float radiusEquiVolume(float width, int dim) {
   else assert(0);
 }
 
+int countFromGasSort(RTNNState& state) {
+  int count = 0;
+  // one or two more Q arrays if gas sort is enabled.
+  if (state.qGasSortMode == 2) count++;
+  else if (state.qGasSortMode == 1) count += 2;
+
+  // one Q array if gather is enabled.
+  if (state.toGather) count++;
+
+  return count;
+}
+
 bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount, int& cellArrayCount) {
   // for sorting and partitioning, we will have to:
   // allocate 3(with partition)/2(sorting only) arrays that have numOfCell elements and
@@ -468,12 +480,8 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     assert(0);
   }
 
-  // one or two more Q arrays if gas sort is enabled.
-  if (state.qGasSortMode == 2) qNArrayCount++;
-  else if (state.qGasSortMode == 1) qNArrayCount += 2;
-
-  // one Q array if gather is enabled.
-  if (state.toGather) qNArrayCount++;
+  int qCountFromGasSort = countFromGasSort(state);
+  qNArrayCount += qCountFromGasSort;
 
   return true;
 }
@@ -484,7 +492,12 @@ float estGASLtdSize(RTNNState& state,
   // set numOfBatches to 1 if no partitioning or nb==1
   bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
   float numOfBatches = spaceAvail / gasSize;
-  return isOneBatch ? 0 : state.radius / (sqrt(3) * (numOfBatches - 1));
+  float cellSize = isOneBatch ? 0 : state.radius / (sqrt(3) * (numOfBatches - 1));
+  fprintf(stdout, "spaceAvail for GAS: %f\n", spaceAvail/1024/1024);
+  fprintf(stdout, "max numofBatches: %f\n", numOfBatches);
+  fprintf(stdout, "GAS limited cellSize: %f\n", cellSize);
+
+  return cellSize;
 }
 
 float estSortLtdSize(RTNNState& state,
@@ -508,6 +521,7 @@ float estSortLtdSize(RTNNState& state,
       if (curSortingSize < spaceAvail) break;
       cellSize *= state.crStep;
     }
+    fprintf(stdout, "Sorting limited cellSize: %f\n", cellSize);
     fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curSortingSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
   }
 
@@ -519,7 +533,12 @@ float calcCRRatio(RTNNState& state) {
   unsigned int Q = state.numQueries;
 
   // conservatively include both points and queries and one more copy for partitioned queries
-  float particleDataSize = (N + 2 * Q) * sizeof(float3);
+  int count = Q;
+  if (!state.samepq) count += N;
+  if (state.partition) count += Q;
+  float particleDataSize = count * sizeof(float3);
+  //float particleDataSize = (N + 2 * Q) * sizeof(float3);
+
   // +1 to include the space for initial search which always returns 1 element
   float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
 
@@ -541,10 +560,15 @@ float calcCRRatio(RTNNState& state) {
                      returnDataSize/1024/1024,
                      state.gpuMemUsed,
                      gasSize/1024/1024);
-    float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - state.gpuMemUsed * 1024 * 1024;
+    float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
+        particleArraysSize - particleDataSize - state.gpuMemUsed * 1024 * 1024;
     float cellSizeLimitedBySort = estSortLtdSize(state, spaceAvail, cellArrayCount, true);
 
-    spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+    // NArrays from gas sort won't be early-freed
+    qNArrayCount = countFromGasSort(state);
+    particleArraysSize = qNArrayCount * Q * sizeof(unsigned int);
+    spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
+        particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
     float cellSizeLimitedByGAS = estGASLtdSize(state, spaceAvail, gasSize);
 
     cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
@@ -552,7 +576,8 @@ float calcCRRatio(RTNNState& state) {
     ratio = state.radius / cellSize;
     fprintf(stdout, "\tCalculated cellRadiusRatio: %f\n", ratio);
   } else {
-    float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+    float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
+        particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
     fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
                      spaceAvail/1024/1024,
                      particleArraysSize/1024/1024,
@@ -578,7 +603,9 @@ float calcCRRatio(RTNNState& state) {
     float curTotalSize = 0;
     float numOfBatches, numOfSortingCells;
     bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
-    float instScale = 20.0; // instantaneous memory required in building gas
+    // instantaneous memory required in building gas.
+    // TODO: revisit this. when it's too large (e.g., 10) it's possible that there is no solution.
+    float instScale = 1.0;
     while (1) {
       numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
       curGASSize = std::max(numOfBatches, instScale) * gasSize;

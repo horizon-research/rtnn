@@ -89,7 +89,6 @@ void uploadData ( RTNNState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
     thrust::device_ptr<float3> d_points_ptr;
-    printf("here1\n");
     state.params.points = allocThrustDevicePtr(&d_points_ptr, state.numPoints, &state.d_pointers);
 
     thrust::copy(state.h_points, state.h_points + state.numPoints, d_points_ptr);
@@ -105,7 +104,6 @@ void uploadData ( RTNNState& state ) {
       state.qMax = state.pMax;
     } else {
       thrust::device_ptr<float3> d_queries_ptr;
-      printf("here2\n");
       state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numQueries, &state.d_pointers);
       
       thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
@@ -627,6 +625,7 @@ void cleanupState( RTNNState& state )
     for (auto it = state.d_pointers.begin(); it != state.d_pointers.end(); it++) {
       CUDA_CHECK( cudaFree( *it ) );
     }
+    if (state.deferFree) freeGridPointers(state);
 }
 
 void setupOptiX( RTNNState& state ) {

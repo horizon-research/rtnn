@@ -110,6 +110,7 @@ void parseArgs(RTNNState&, int, char**);
 void readData(RTNNState&);
 void initBatches(RTNNState&);
 bool isClose(float3, float3);
+void freeGridPointers(RTNNState&);
 
 void search(RTNNState&, int);
 void gasSortSearch(RTNNState&, int);

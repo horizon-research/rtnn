@@ -19,20 +19,15 @@ void setDevice ( RTNNState& state ) {
   std::cerr << "\tMemory: " << state.totDRAMSize << " GB" << std::endl;
 }
 
-void earlyFree( RTNNState& state ) {
-  void* array2Free[] = {state.d_cellMask_p, state.d_CellParticleCounts_ptr_p, state.d_CellOffsets_ptr_p};
-
-  for (int i = 0; i <= 2; i++) {
-    auto it = state.d_pointers.find(array2Free[i]);
-    if (it != state.d_pointers.end()) {
-      CUDA_CHECK( cudaFree( *it ) );
-      state.d_pointers.erase(it);
-    }
+void freeGridPointers( RTNNState& state ) {
+  for (auto it = state.d_gridPointers.begin(); it != state.d_gridPointers.end(); it++) {
+    CUDA_CHECK( cudaFree( *it ) );
   }
+  //fprintf(stdout, "Finish early free\n");
 }
 
 void setupSearch( RTNNState& state ) {
-  if (!state.deferFree) earlyFree(state);
+  if (!state.deferFree) freeGridPointers(state);
 
   if (state.partition) return;
 
@@ -98,6 +93,7 @@ int main( int argc, char* argv[] )
     // queries have been sorted so no need to sort them again.
     if (!state.samepq) sortParticles(state, POINT, state.pointSortMode);
 
+    // early free done here too
     setupSearch(state);
 
     if (state.interleave) {

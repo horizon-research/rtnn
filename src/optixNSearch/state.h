@@ -104,11 +104,11 @@ struct RTNNState
     void**                      d_aabb                    = nullptr;
     void**                      d_temp_buffer_gas         = nullptr;
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
-    void*                       d_cellMask_p              = nullptr;
     void*                       d_CellParticleCounts_ptr_p = nullptr;
     void*                       d_CellOffsets_ptr_p       = nullptr;
 
     std::unordered_set<void*>   d_pointers;
+    std::unordered_set<void*>   d_gridPointers;
 
     int                         numOfBatches              = -1;
     int                         maxBatchCount             = 1;
