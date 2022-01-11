@@ -44,11 +44,15 @@ unsigned int thrustGenHist(const thrust::device_ptr<int>, thrust::device_vector<
 // take an unallocated thrust device pointer, allocate device memory and set the thrust pointer and return the raw pointer.
 // https://stackoverflow.com/questions/353180/how-do-i-find-the-name-of-the-calling-function/378165
 // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
-template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N, const char* str = __builtin_FUNCTION()) {
+// const char* str = __builtin_FUNCTION()
+template <typename T> T* allocThrustDevicePtr(thrust::device_ptr<T>* d_memory, unsigned int N, std::unordered_set<void*>* pSet=nullptr) {
   T* d_memory_raw;
   CUDA_CHECK( cudaMalloc(reinterpret_cast<void**>(&d_memory_raw),
              N * sizeof(T) ) );
   *d_memory = thrust::device_pointer_cast(d_memory_raw);
+  if (pSet) {
+     pSet->insert((void*)thrust::raw_pointer_cast(d_memory_raw));
+  }
 
   return d_memory_raw;
 }

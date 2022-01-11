@@ -558,13 +558,11 @@ void initBatches(RTNNState& state) {
   state.d_r2q_map = new unsigned int*[maxBatchCount]();
   state.numActQueries = new unsigned int[maxBatchCount];
   state.launchRadius = new float[maxBatchCount];
-  state.partThd = new float[maxBatchCount];
   state.h_res = new void*[maxBatchCount]();
   state.d_res = new void*[maxBatchCount]();
   state.d_actQs = new float3*[maxBatchCount]();
   state.h_actQs = new float3*[maxBatchCount]();
   state.d_aabb = new void*[maxBatchCount]();
-  state.d_firsthit_idx = new void*[maxBatchCount]();
   state.d_temp_buffer_gas = new void*[maxBatchCount]();
   state.d_buffer_temp_output_gas_and_compacted_size = new void*[maxBatchCount]();
   state.pipeline = new OptixPipeline[maxBatchCount];

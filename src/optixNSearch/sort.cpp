@@ -152,7 +152,8 @@ thrust::device_ptr<int> genCellMask (RTNNState& state, unsigned int* d_repQuerie
   float maxWidth = maxInscribedWidth(state.radius, 3);
 
   thrust::device_ptr<int> d_cellMask;
-  allocThrustDevicePtr(&d_cellMask, numberOfCells); // no need to memset this since every single cell will be updated.
+  // no need to memset this since every single cell will be updated.
+  allocThrustDevicePtr(&d_cellMask, numberOfCells, &state.d_pointers);
   //CUDA_CHECK( cudaMemset ( thrust::raw_pointer_cast(d_cellMask), 0xFF, numberOfCells * sizeof(int) ) );
 
   //test(gridInfo); // to demonstrate the weird parameter passing bug.
@@ -404,10 +405,10 @@ void sortGenBatch(RTNNState& state,
 {
     // pick one particle from each cell, and store all their indices in |d_repQueries|
     thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr_copy;
-    allocThrustDevicePtr(&d_ParticleCellIndices_ptr_copy, N);
+    allocThrustDevicePtr(&d_ParticleCellIndices_ptr_copy, N, &state.d_pointers);
     thrustCopyD2D(d_ParticleCellIndices_ptr_copy, d_ParticleCellIndices_ptr, N);
     thrust::device_ptr<unsigned int> d_repQueries;
-    allocThrustDevicePtr(&d_repQueries, N);
+    allocThrustDevicePtr(&d_repQueries, N, &state.d_pointers);
     genSeqDevice(d_repQueries, N);
     sortByKey(d_ParticleCellIndices_ptr_copy, d_repQueries, N);
     unsigned int numUniqQs = uniqueByKey(d_ParticleCellIndices_ptr_copy, N, d_repQueries);
@@ -433,7 +434,7 @@ void sortGenBatch(RTNNState& state,
     //}
 
     thrust::device_ptr<int> d_rayMask;
-    allocThrustDevicePtr(&d_rayMask, N);
+    allocThrustDevicePtr(&d_rayMask, N, &state.d_pointers);
 
     // TODO: generate the sorted indices, and also set the rayMask according to
     //   cellMask. the sorted indices |d_posInSortedPoints_ptr| is not useful
@@ -477,12 +478,11 @@ void sortGenBatch(RTNNState& state,
       // queries are gauranteed to be sorted in exactly the same way.
       // TODO: Can we do away with the extra copy by replacing sort by key with scatter? That'll need new space too...
       thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr_copy;
-      allocThrustDevicePtr(&d_posInSortedPoints_ptr_copy, N);
+      allocThrustDevicePtr(&d_posInSortedPoints_ptr_copy, N, &state.d_pointers);
       thrustCopyD2D(d_posInSortedPoints_ptr_copy, d_posInSortedPoints_ptr, N);
 
       sortByKey(d_posInSortedPoints_ptr_copy, d_rayMask, N);
       sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
-      state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr_copy));
     }
 
     // |batches| will contain the last mask of each batch.
@@ -493,8 +493,7 @@ void sortGenBatch(RTNNState& state,
 
     genBatches(state, batches, h_rayHist, particles, N, d_rayMask);
 
-    state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_rayMask));
-    state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_cellMask));
+    //state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_cellMask));
 }
 
 void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_particles, bool morton, ParticleType type) {
@@ -514,12 +513,12 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
     // which case the three pointers are initialized in the query partitioning
     // process and we have loaded them already.
   } else {
-    allocThrustDevicePtr(&d_ParticleCellIndices_ptr, N);
+    allocThrustDevicePtr(&d_ParticleCellIndices_ptr, N, &state.d_pointers);
 
-    allocThrustDevicePtr(&d_CellParticleCounts_ptr, numberOfCells); // this takes a lot of memory
+    allocThrustDevicePtr(&d_CellParticleCounts_ptr, numberOfCells, &state.d_pointers); // this takes a lot of memory
     fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
 
-    allocThrustDevicePtr(&d_LocalSortedIndices_ptr, N);
+    allocThrustDevicePtr(&d_LocalSortedIndices_ptr, N, &state.d_pointers);
 
     kInsertParticles(numOfBlocks,
                      threadsPerBlock,
@@ -540,12 +539,12 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   //}
 
   thrust::device_ptr<unsigned int> d_CellOffsets_ptr;
-  allocThrustDevicePtr(&d_CellOffsets_ptr, numberOfCells);
+  allocThrustDevicePtr(&d_CellOffsets_ptr, numberOfCells, &state.d_pointers);
   fillByValue(d_CellOffsets_ptr, numberOfCells, 0); // need to initialize it even for exclusive scan
   exclusiveScan(d_CellParticleCounts_ptr, numberOfCells, d_CellOffsets_ptr);
 
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
-  allocThrustDevicePtr(&d_posInSortedPoints_ptr, N);
+  allocThrustDevicePtr(&d_posInSortedPoints_ptr, N, &state.d_pointers);
 
   if (toPartition) {
     // default is sameData, in which case we simply use the pointers created from queries.
@@ -557,9 +556,8 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
       d_ParticleCellIndices_ptr_p = nullptr;
       d_LocalSortedIndices_ptr_p = nullptr;
 
-      allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells);
+      allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells, &state.d_pointers);
       fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
-      state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p));
 
       // normally for partitioning we care only about
       // |d_CellParticleCounts_ptr_p|, but if we have to sort points later,
@@ -567,10 +565,8 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
       // metadata. this saves one |kInsertParticles| call and, more
       // importantly, one allocation of |d_CellParticleCounts_ptr| during point sort.
       if (state.pointSortMode != 0) {
-        allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints);
-        allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints);
-        state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr_p));
-        state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr_p));
+        allocThrustDevicePtr(&d_ParticleCellIndices_ptr_p, state.numPoints, &state.d_pointers);
+        allocThrustDevicePtr(&d_LocalSortedIndices_ptr_p, state.numPoints, &state.d_pointers);
       }
 
       // insert points to the unioned grid. properly set numOfBlocks and
@@ -629,11 +625,10 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 
-  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_ParticleCellIndices_ptr));
-  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_posInSortedPoints_ptr));
-  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellOffsets_ptr));
-  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_LocalSortedIndices_ptr));
-  state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr));
+  // TODO: can't just free them here anymore
+  //state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellOffsets_ptr));
+  //state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr));
+  //state.d_pointers.insert((void*)thrust::raw_pointer_cast(d_CellParticleCounts_ptr_p));
 }
 
 void oneDSort ( RTNNState& state, unsigned int N, float3* particles, float3* h_particles ) {
@@ -647,7 +642,7 @@ void oneDSort ( RTNNState& state, unsigned int N, float3* particles, float3* h_p
   }
 
   thrust::device_ptr<float> d_key_ptr;
-  state.d_1dsort_key = allocThrustDevicePtr(&d_key_ptr, state.numQueries);
+  allocThrustDevicePtr(&d_key_ptr, state.numQueries, &state.d_pointers);
   thrust::copy(h_key.begin(), h_key.end(), d_key_ptr);
 
   // actual sort
@@ -708,7 +703,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( RTNNState& state, thrust:
   Timing::startTiming("gas-sort queries init");
     // allocate device memory for storing the keys, which will be generated by a gather and used in sort_by_keys
     thrust::device_ptr<float> d_key_ptr;
-    state.d_fhsort_key = allocThrustDevicePtr(&d_key_ptr, numQueries);
+    allocThrustDevicePtr(&d_key_ptr, numQueries, &state.d_pointers);
   
     // create keys (1d coordinate), which will become the source of gather, the
     // result of which will be the keys for sort; the size must be
@@ -724,7 +719,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( RTNNState& state, thrust:
 
     // initialize a sequence to be sorted, which will become the r2q map.
     thrust::device_ptr<unsigned int> d_r2q_map_ptr;
-    allocThrustDevicePtr(&d_r2q_map_ptr, numQueries);
+    allocThrustDevicePtr(&d_r2q_map_ptr, numQueries, &state.d_pointers);
     genSeqDevice(d_r2q_map_ptr, numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
  
@@ -765,7 +760,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHIdx( RTNNState& state, thrust::d
   // initialize a sequence to be sorted, which will become the r2q map
   Timing::startTiming("gas-sort queries init");
     thrust::device_ptr<unsigned int> d_r2q_map_ptr;
-    allocThrustDevicePtr(&d_r2q_map_ptr, numQueries);
+    allocThrustDevicePtr(&d_r2q_map_ptr, numQueries, &state.d_pointers);
     genSeqDevice(d_r2q_map_ptr, numQueries, state.stream[batch_id]);
   Timing::stopTiming(true);
 
@@ -832,7 +827,7 @@ void gatherQueries( RTNNState& state, thrust::device_ptr<unsigned int> d_indices
 
     // allocate device memory for reordered/gathered queries
     thrust::device_ptr<float3> d_reord_queries_ptr;
-    allocThrustDevicePtr(&d_reord_queries_ptr, numQueries);
+    allocThrustDevicePtr(&d_reord_queries_ptr, numQueries, &state.d_pointers);
 
     // get pointer to original queries in device memory
     thrust::device_ptr<float3> d_orig_queries_ptr = thrust::device_pointer_cast(state.d_actQs[batch_id]);

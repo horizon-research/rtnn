@@ -62,8 +62,6 @@ struct RTNNState
     Params                      params;
     Params*                     d_params                  = nullptr;
 
-    float*                      d_1dsort_key              = nullptr;
-    float*                      d_fhsort_key              = nullptr;
     float3*                     h_points                  = nullptr;
     float3*                     h_queries                 = nullptr;
     float3**                    h_ndpoints                = nullptr;
@@ -99,13 +97,11 @@ struct RTNNState
     unsigned int**              d_r2q_map                 = nullptr;
     unsigned int*               numActQueries             = nullptr;
     float*                      launchRadius              = nullptr;
-    float*                      partThd                   = nullptr;
     void**                      h_res                     = nullptr;
     void**                      d_res                     = nullptr;
     float3**                    d_actQs                   = nullptr;
     float3**                    h_actQs                   = nullptr;
     void**                      d_aabb                    = nullptr;
-    void**                      d_firsthit_idx            = nullptr;
     void**                      d_temp_buffer_gas         = nullptr;
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
     int*                        d_cellMask                = nullptr;

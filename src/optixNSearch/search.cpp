@@ -65,7 +65,7 @@ thrust::device_ptr<unsigned int> initialTraversal(RTNNState& state, int batch_id
 
     state.params.limit = 1;
     thrust::device_ptr<unsigned int> output_buffer;
-    allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit);
+    allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit, &state.d_pointers);
 
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
     state.params.mode = NOTEST;
@@ -94,7 +94,6 @@ void gasSortSearch(RTNNState& state, int batch_id) {
     d_indices_ptr = sortQueriesByFHCoord(state, d_firsthit_idx_ptr, batch_id);
   else if (state.qGasSortMode == 2)
     d_indices_ptr = sortQueriesByFHIdx(state, d_firsthit_idx_ptr, batch_id);
-  state.d_firsthit_idx[batch_id] = reinterpret_cast<void*>(thrust::raw_pointer_cast(d_firsthit_idx_ptr));
 
   // Actually sort queries in memory if toGather is enabled
   if (state.toGather)

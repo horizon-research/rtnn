@@ -89,7 +89,7 @@ void uploadData ( RTNNState& state ) {
   Timing::startTiming("upload points and/or queries");
     // Allocate device memory for points/queries
     thrust::device_ptr<float3> d_points_ptr;
-    state.params.points = allocThrustDevicePtr(&d_points_ptr, state.numPoints);
+    state.params.points = allocThrustDevicePtr(&d_points_ptr, state.numPoints, &state.d_pointers);
 
     thrust::copy(state.h_points, state.h_points + state.numPoints, d_points_ptr);
     computeMinMax(state.numPoints, state.params.points, state.pMin, state.pMax);
@@ -104,7 +104,7 @@ void uploadData ( RTNNState& state ) {
       state.qMax = state.pMax;
     } else {
       thrust::device_ptr<float3> d_queries_ptr;
-      state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numQueries);
+      state.params.queries = allocThrustDevicePtr(&d_queries_ptr, state.numQueries, &state.d_pointers);
       
       thrust::copy(state.h_queries, state.h_queries + state.numQueries, d_queries_ptr);
       computeMinMax(state.numQueries, state.params.queries, state.qMin, state.qMax);
@@ -557,7 +557,7 @@ void launchSubframe( unsigned int* output_buffer, RTNNState& state, int batch_id
     fprintf(stdout, "\tSearch mode: %d\n", state.params.mode);
 
     thrust::device_ptr<Params> d_params_ptr;
-    state.d_params = allocThrustDevicePtr(&d_params_ptr, 1);
+    state.d_params = allocThrustDevicePtr(&d_params_ptr, 1, &state.d_pointers);
     CUDA_CHECK( cudaMemcpyAsync( reinterpret_cast<void*>( state.d_params ),
                                  &state.params,
                                  sizeof( Params ),
@@ -596,13 +596,8 @@ void cleanupState( RTNNState& state )
 
       CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
       CUDA_CHECK( cudaFree( state.d_res[i] ) );
-      if (state.d_firsthit_idx[i]) // cuda is happy to free nullptr, but check anyways
-        CUDA_CHECK( cudaFree( state.d_firsthit_idx[i] ) );
       CUDA_CHECK( cudaFree( state.d_actQs[i] ) );
       delete state.h_actQs[i];
-      //CUDA_CHECK( cudaFree( state.d_aabb[i] ) );
-      if (state.d_r2q_map[i])
-        CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_r2q_map[i]     ) ) );
 
       //CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
       // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
@@ -616,29 +611,18 @@ void cleanupState( RTNNState& state )
     delete state.stream;
     delete state.numActQueries;
     delete state.launchRadius;
-    delete state.partThd;
     delete state.h_res;
     delete state.d_actQs;
     delete state.h_actQs;
     delete state.d_aabb;
-    delete state.d_firsthit_idx;
     delete state.d_temp_buffer_gas;
     delete state.d_buffer_temp_output_gas_and_compacted_size;
     delete state.d_r2q_map;
+    //delete state.h_points;
 
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.raygenRecord       ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.missRecordBase     ) ) );
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.sbt.hitgroupRecordBase ) ) );
-    CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_params               ) ) );
-    // device queries and host queries have been freed before.
-    if ((state.partition && state.pointSortMode) || !state.samepq) {
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.params.points        ) ) );
-      //delete state.h_points;
-    }
-    if (state.d_1dsort_key)
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_1dsort_key         ) ) );
-    if (state.d_fhsort_key)
-      CUDA_CHECK( cudaFree( reinterpret_cast<void*>( state.d_fhsort_key         ) ) );
 
     for (auto it = state.d_pointers.begin(); it != state.d_pointers.end(); it++) {
       CUDA_CHECK( cudaFree( *it ) );
