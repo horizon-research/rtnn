@@ -527,6 +527,7 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
     allocThrustDevicePtr(&d_CellOffsets_ptr, numberOfCells, &state.d_pointers);
   }
 
+  fillByValue(d_CellParticleCounts_ptr, numberOfCells, 0);
   kInsertParticles(numOfBlocks,
                    threadsPerBlock,
                    gridInfo,
@@ -548,14 +549,15 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   //}
 
   if (toPartition) {
-    // default is sameData, in which case we simply use the pointer created from queries.
+    // we can always reuse the |d_CellParticleCounts_ptr| space allocated for
+    // queries. |d_CellParticleCounts_ptr| is used only to generate
+    // |d_CellOffsets_ptr|.
     thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr_p = d_CellParticleCounts_ptr;
 
     if (!state.sameData) {
-      // then we need to create the pointer from points. note that we don't
-      // need samepq to trigger this. sameData is enough.
+      // but if !sameData we need to update the content since we are now
+      // inserting points. we don't need samepq to trigger this. sameData is enough.
 
-      allocThrustDevicePtr(&d_CellParticleCounts_ptr_p, numberOfCells, &state.d_pointers);
       fillByValue(d_CellParticleCounts_ptr_p, numberOfCells, 0);
 
       // insert points to the unioned grid. properly set numOfBlocks and

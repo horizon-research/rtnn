@@ -399,7 +399,7 @@ float radiusEquiVolume(float width, int dim) {
 
 bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount, int& cellArrayCount) {
   // for sorting and partitioning, we will have to:
-  // allocate 4(with partition)/2(sorting only) arrays that have numOfCell elements and
+  // allocate 3(with partition)/2(sorting only) arrays that have numOfCell elements and
   // 7(partition+sorting)/6(partition only)/3(sorting only) arrays that have N/Q elements.
 
   bool qP = state.partition;
@@ -413,13 +413,13 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
 
   if (qP && !qS && !pS) {
     qNArrayCount = 6;
-    cellArrayCount = state.sameData ? 3 : 4;
+    cellArrayCount = 3;
   } else if (qP && qS && !pS) {
     qNArrayCount = 7;
-    cellArrayCount = state.sameData ? 3 : 4;
+    cellArrayCount = 3;
   } else if (qP && !qS && pS) {
     qNArrayCount = 6;
-    cellArrayCount = state.sameData ? 3 : 4;
+    cellArrayCount = 3;
 
     // additional allocation for pS. in this case since points are already
     // inserted in the grid during partitioning, we can reuse both cellArrays
@@ -444,7 +444,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     cellArrayCount = 2;
   } else if (qP && qS && pS) {
     qNArrayCount = 7;
-    cellArrayCount = state.sameData ? 3 : 4;
+    cellArrayCount = 3;
 
     if (!state.samepq) {
       // additional allocation for pS. if samepq then no pS will be triggered
