@@ -149,6 +149,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
     std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
     std::cerr << "  --check           | -c      Enable sanity check? Default is false.\n";
+    std::cerr << "  --deferFree       | -df     Enable deferred free of intermediate device memory? Default is false. Enable this for large datasets (e.g., >10 M points).\n";
 
     std::cerr << "  --help            | -h      Print this usage message\n";
 
@@ -223,6 +224,12 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.msr = (bool)(atoi(argv[++i]));
+      }
+      else if( arg == "--deferFree" || arg == "-df" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.deferFree = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--numbatch" || arg == "-nb" )
       {
@@ -471,12 +478,48 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
   return true;
 }
 
+float estGASLtdSize(RTNNState& state,
+                float spaceAvail,
+                float gasSize) {
+  // set numOfBatches to 1 if no partitioning or nb==1
+  bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
+  float numOfBatches = spaceAvail / gasSize;
+  return isOneBatch ? 0 : state.radius / (sqrt(3) * (numOfBatches - 1));
+}
+
+float estSortLtdSize(RTNNState& state,
+                float spaceAvail,
+                int cellArrayCount,
+                bool refine = false) {
+  // could |genGridInfo| too but doesn't matter
+  float sceneVolume = (state.Max.x - state.Min.x) * (state.Max.y - state.Min.y) * (state.Max.z - state.Min.z);
+  float numOfSortingCells = spaceAvail / (cellArrayCount * sizeof(unsigned int));
+  float cellSize = cbrt(sceneVolume / numOfSortingCells);
+
+  if (refine) {
+    float curSortingSize = numOfSortingCells * (cellArrayCount * sizeof(unsigned int));
+    while (1) {
+      GridInfo gridInfo;
+      state.crRatio = state.radius / cellSize;
+      float numOfSortingCells = genGridInfo(state, state.numPoints, gridInfo);
+      curSortingSize = numOfSortingCells * (cellArrayCount * sizeof(unsigned int));
+
+      fprintf(stdout, "%f, %f\n", curSortingSize/1024/1024, spaceAvail/1024/1024);
+      if (curSortingSize < spaceAvail) break;
+      cellSize *= state.crStep;
+    }
+    fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curSortingSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
+  }
+
+  return cellSize;
+}
+
 float calcCRRatio(RTNNState& state) {
   unsigned int N = state.numPoints;
   unsigned int Q = state.numQueries;
 
   // conservatively include both points and queries and one more copy for partitioned queries
-  float particleDataSize = 3 * N * sizeof(float3);
+  float particleDataSize = (N + 2 * Q) * sizeof(float3);
   // +1 to include the space for initial search which always returns 1 element
   float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
 
@@ -488,57 +531,73 @@ float calcCRRatio(RTNNState& state) {
   float particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
-  float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
-  fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
-                   spaceAvail/1024/1024,
-                   particleArraysSize/1024/1024,
-                   particleDataSize/1024/1024,
-                   returnDataSize/1024/1024,
-                   state.gpuMemUsed,
-                   gasSize/1024/1024);
 
-  // algorithm to estimate the cellSize
-  //   total gas size + total sorting structure size <= avail mem
-  //   total gas size = (state.radius / (sqrt(3) * cellSize) + 1) * gasSize; // TODO (sqrt(2) for 2D)
-  //   total sorting structure size = sceneVolume / power(cellSize, 3) * (cellArrayCount * sizeof(unsigned int));
-  //   it's a cubic equation. don't want to solve it analytically. let's do that
-  //   iteratively. the initial size is the smallest cell size that can
-  //   accommodate the entire gas or the entire sorting structures.
+  float cellSize, ratio;
 
-  // set numOfBatches to 1 if no partitioning or nb==1
-  bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
-  float numOfBatches = spaceAvail / gasSize;
-  float cellSizeLimitedByGAS = isOneBatch ? 0 : state.radius / (sqrt(3) * (numOfBatches - 1));
+  if (!state.deferFree) {
+    fprintf(stdout, "\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
+                     particleArraysSize/1024/1024,
+                     particleDataSize/1024/1024,
+                     returnDataSize/1024/1024,
+                     state.gpuMemUsed,
+                     gasSize/1024/1024);
+    float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - state.gpuMemUsed * 1024 * 1024;
+    float cellSizeLimitedBySort = estSortLtdSize(state, spaceAvail, cellArrayCount, true);
 
-  // could |genGridInfo| too but doesn't matter
-  float sceneVolume = (state.Max.x - state.Min.x) * (state.Max.y - state.Min.y) * (state.Max.z - state.Min.z);
-  float numOfSortingCells = spaceAvail / (cellArrayCount * sizeof(unsigned int));
-  float cellSizeLimitedBySort = cbrt(sceneVolume / numOfSortingCells);
+    spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+    float cellSizeLimitedByGAS = estGASLtdSize(state, spaceAvail, gasSize);
 
-  float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
+    cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
 
-  float curGASSize = 0;
-  float curSortingSize = 0;
-  float curTotalSize = 0;
-  while (1) {
-    numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
-    curGASSize = numOfBatches * gasSize; // TODO: should be the max of all gas and the space needed to build one gas
+    ratio = state.radius / cellSize;
+    fprintf(stdout, "\tCalculated cellRadiusRatio: %f\n", ratio);
+  } else {
+    float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 - particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+    fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
+                     spaceAvail/1024/1024,
+                     particleArraysSize/1024/1024,
+                     particleDataSize/1024/1024,
+                     returnDataSize/1024/1024,
+                     state.gpuMemUsed,
+                     gasSize/1024/1024);
 
-    GridInfo gridInfo;
-    state.crRatio = state.radius / cellSize;
-    numOfSortingCells = genGridInfo(state, N, gridInfo);
-    curSortingSize = numOfSortingCells * (cellArrayCount * sizeof(unsigned int));
+    // algorithm to estimate the cellSize
+    //   total gas size + total sorting structure size <= avail mem
+    //   total gas size = (state.radius / (sqrt(3) * cellSize) + 1) * gasSize; // TODO (sqrt(2) for 2D)
+    //   total sorting structure size = sceneVolume / power(cellSize, 3) * (cellArrayCount * sizeof(unsigned int));
+    //   it's a cubic equation. don't want to solve it analytically. let's do that
+    //   iteratively. the initial size is the smallest cell size that can
+    //   accommodate the entire gas or the entire sorting structures.
 
-    curTotalSize = curGASSize + curSortingSize;
-    fprintf(stdout, "%f+%f=%f, %f\n", curGASSize/1024/1024, curSortingSize/1024/1024, curTotalSize/1024/1024, spaceAvail/1024/1024);
-    if (curTotalSize < spaceAvail) break;
-    cellSize *= state.crStep;
+    float cellSizeLimitedByGAS = estGASLtdSize(state, spaceAvail, gasSize);
+    float cellSizeLimitedBySort = estSortLtdSize(state, spaceAvail, cellArrayCount);
+    float cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
+
+    float curGASSize = 0;
+    float curSortingSize = 0;
+    float curTotalSize = 0;
+    float numOfBatches, numOfSortingCells;
+    bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
+    while (1) {
+      numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
+      curGASSize = numOfBatches * gasSize; // TODO: should be the max of all gas and the space needed to build one gas
+
+      GridInfo gridInfo;
+      state.crRatio = state.radius / cellSize;
+      numOfSortingCells = genGridInfo(state, N, gridInfo);
+      curSortingSize = numOfSortingCells * (cellArrayCount * sizeof(unsigned int));
+
+      curTotalSize = curGASSize + curSortingSize;
+      fprintf(stdout, "%f+%f=%f, %f\n", curGASSize/1024/1024, curSortingSize/1024/1024, curTotalSize/1024/1024, spaceAvail/1024/1024);
+      if (curTotalSize < spaceAvail) break;
+      cellSize *= state.crStep;
+    }
+
+    ratio = state.radius / cellSize;
+    fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, curGASSize/1024/1024, curSortingSize/1024/1024);
+    fprintf(stdout, "\tCalculated maxBatches: %.3f\n", numOfBatches);
+    fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curTotalSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
   }
-
-  float ratio = state.radius / cellSize;
-  fprintf(stdout, "\tCalculated cellRadiusRatio: %f (%f, %f)\n", ratio, curGASSize/1024/1024, curSortingSize/1024/1024);
-  fprintf(stdout, "\tCalculated maxBatches: %.3f\n", numOfBatches);
-  fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curTotalSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
 
   return ratio;
 }

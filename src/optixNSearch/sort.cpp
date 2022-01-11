@@ -154,6 +154,7 @@ thrust::device_ptr<int> genCellMask (RTNNState& state, unsigned int* d_repQuerie
   thrust::device_ptr<int> d_cellMask;
   // no need to memset this since every single cell will be updated.
   allocThrustDevicePtr(&d_cellMask, numberOfCells, &state.d_pointers);
+  state.d_cellMask_p = (void*)thrust::raw_pointer_cast(d_cellMask);
   //CUDA_CHECK( cudaMemset ( thrust::raw_pointer_cast(d_cellMask), 0xFF, numberOfCells * sizeof(int) ) );
 
   //test(gridInfo); // to demonstrate the weird parameter passing bug.

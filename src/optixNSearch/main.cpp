@@ -19,7 +19,21 @@ void setDevice ( RTNNState& state ) {
   std::cerr << "\tMemory: " << state.totDRAMSize << " GB" << std::endl;
 }
 
+void earlyFree( RTNNState& state ) {
+  void* array2Free[] = {state.d_cellMask_p, state.d_CellParticleCounts_ptr_p, state.d_CellOffsets_ptr_p};
+
+  for (int i = 0; i <= 2; i++) {
+    auto it = state.d_pointers.find(array2Free[i]);
+    if (it != state.d_pointers.end()) {
+      CUDA_CHECK( cudaFree( *it ) );
+      state.d_pointers.erase(it);
+    }
+  }
+}
+
 void setupSearch( RTNNState& state ) {
+  if (!state.deferFree) earlyFree(state);
+
   if (state.partition) return;
 
   assert(state.numOfBatches == -1);
@@ -44,6 +58,7 @@ int main( int argc, char* argv[] )
   std::cout << "numQueries: " << state.numQueries << std::endl;
   std::cout << "searchMode: " << state.searchMode << std::endl;
   std::cout << "radius: " << state.radius << std::endl;
+  std::cout << "Deferred free? " << std::boolalpha << state.deferFree << std::endl;
   std::cout << "E2E Measure? " << std::boolalpha << state.msr << std::endl;
   std::cout << "K: " << state.knn << std::endl;
   std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;

@@ -91,6 +91,7 @@ struct RTNNState
     int                         approxMode                = 2;
     int                         mcScale                   = 4;
     float                       crStep                    = 1.01;
+    bool                        deferFree                 = false;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
@@ -104,7 +105,7 @@ struct RTNNState
     void**                      d_aabb                    = nullptr;
     void**                      d_temp_buffer_gas         = nullptr;
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
-    int*                        d_cellMask                = nullptr;
+    void*                       d_cellMask_p              = nullptr;
     void*                       d_CellParticleCounts_ptr_p = nullptr;
     void*                       d_CellOffsets_ptr_p       = nullptr;
 
