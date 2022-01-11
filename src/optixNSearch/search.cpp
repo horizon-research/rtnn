@@ -13,7 +13,7 @@ void search(RTNNState& state, int batch_id) {
 
       state.params.limit = state.knn;
       thrust::device_ptr<unsigned int> output_buffer;
-      allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit);
+      allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit, &state.d_pointers);
 
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map[batch_id];
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
@@ -56,7 +56,6 @@ void search(RTNNState& state, int batch_id) {
 
   // this frees device memory but will block until the previous optix launch finish and the res is written back.
   //CUDA_CHECK( cudaFree( (void*)thrust::raw_pointer_cast(output_buffer) ) );
-  state.d_res[batch_id] = (void*)thrust::raw_pointer_cast(output_buffer);
 }
 
 thrust::device_ptr<unsigned int> initialTraversal(RTNNState& state, int batch_id) {
