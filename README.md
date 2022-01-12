@@ -49,6 +49,8 @@ The executable is `bin/optixNSearch`.
 
 `-DKNN=5` specifies that the maximum number of returned neighbors is 5 by passing a preprocessor macro through cmake. See `optixNSearch/CMakeLists.txt`. This `K` number is used only in the KNN search and will be overwritten by a run-time commandline flag for range search (see the description [here](#specify-maximum-returned-neighbors)), but you have to give a number here nevertheless.
 
+One common build problem is that cmake can't find CUDA if it's installed at a non-standard location. If so, specify `CUDA_TOOLKIT_ROOT_DIR` to cmake. See `CMake/FindCUDA.cmake` for details.
+
 ## Run
 
 ### Input format

@@ -7,7 +7,7 @@ This will build a dynamic library that intercepts CUDA calls to dump memory allo
 ```
 cd ..
 cmake -DUSE_SHARED_CUDA_LIBS=ON -DKNN=5 ..
-LIBRARY_PATH=~/rtnn/src/memstablib make
+LIBRARY_PATH=~/rtnn/src/memstatlib make
 ```
 
 Make sure `LIBRARY_PATH` point to where the library is built.
