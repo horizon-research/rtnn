@@ -16,7 +16,7 @@ Why do we need to bound `K` (even in range searches)? In practical applications 
 
 ### Requirements
 
-* CUDA. Tested on 11.3.109 and 11.4.48.
+* NVCC. Tested on 11.3.109 and 11.4.48.
 * CMake. Tested on 3.20.5.
 * g++. Tested on 7.5.0.
 * [Thrust](https://github.com/NVIDIA/thrust). Tested on v10.11.00.
