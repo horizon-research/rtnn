@@ -16,7 +16,7 @@ Why do we need to bound `K` (even in range searches)? In practical applications 
 
 ### Requirements
 
-* NVCC. Tested on 11.3.109 and 11.4.48.
+* CUDA. Tested on 11.3.109 and 11.4.48.
 * CMake. Tested on 3.20.5.
 * g++. Tested on 7.5.0.
 * [Thrust](https://github.com/NVIDIA/thrust). Tested on v10.11.00.
@@ -48,6 +48,8 @@ make
 The executable is `bin/optixNSearch`.
 
 `-DKNN=5` specifies that the maximum number of returned neighbors is 5 by passing a preprocessor macro through cmake. See `optixNSearch/CMakeLists.txt`. This `K` number is used only in the KNN search and will be overwritten by a run-time commandline flag for range search (see the description [here](#specify-maximum-returned-neighbors)), but you have to give a number here nevertheless.
+
+One common build problem is that cmake can't find CUDA if it's installed at a non-standard location. If so, specify `CUDA_TOOLKIT_ROOT_DIR` to cmake. See `CMake/FindCUDA.cmake` for details.
 
 ## Run
 
