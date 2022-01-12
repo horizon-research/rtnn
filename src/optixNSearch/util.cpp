@@ -404,16 +404,16 @@ float radiusEquiVolume(float width, int dim) {
   else assert(0);
 }
 
-int countFromGasSort(RTNNState& state) {
-  int count = 0;
+void countFromGasSort(RTNNState& state, int& qCount, int& pCount) {
   // one or two more Q arrays if gas sort is enabled.
-  if (state.qGasSortMode == 2) count++;
-  else if (state.qGasSortMode == 1) count += 2;
+  if (state.qGasSortMode == 2) qCount++;
+  else if (state.qGasSortMode == 1) {
+    qCount += 2;
+    pCount++;
+  }
 
   // one Q array if gather is enabled.
-  if (state.toGather) count++;
-
-  return count;
+  if (state.toGather) qCount++;
 }
 
 bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount, int& cellArrayCount) {
@@ -480,8 +480,7 @@ bool estimateArrayCounts(RTNNState& state, int& pNArrayCount, int& qNArrayCount,
     assert(0);
   }
 
-  int qCountFromGasSort = countFromGasSort(state);
-  qNArrayCount += qCountFromGasSort;
+  countFromGasSort(state, qNArrayCount, pNArrayCount);
 
   return true;
 }
@@ -537,7 +536,6 @@ float calcCRRatio(RTNNState& state) {
   if (!state.samepq) count += N;
   if (state.partition) count += Q;
   float particleDataSize = count * sizeof(float3);
-  //float particleDataSize = (N + 2 * Q) * sizeof(float3);
 
   // +1 to include the space for initial search which always returns 1 element
   float returnDataSize = Q * (state.knn + 1) * sizeof(unsigned int);
@@ -565,8 +563,10 @@ float calcCRRatio(RTNNState& state) {
     float cellSizeLimitedBySort = estSortLtdSize(state, spaceAvail, cellArrayCount, true);
 
     // NArrays from gas sort won't be early-freed
-    qNArrayCount = countFromGasSort(state);
-    particleArraysSize = qNArrayCount * Q * sizeof(unsigned int);
+    qNArrayCount = 0;
+    pNArrayCount = 0;
+    countFromGasSort(state, qNArrayCount, pNArrayCount);
+    particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
     spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
         particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
     float cellSizeLimitedByGAS = estGASLtdSize(state, spaceAvail, gasSize);

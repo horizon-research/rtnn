@@ -701,7 +701,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord( RTNNState& state, thrust:
     for (unsigned int i = 0; i < state.numPoints; i++) {
       h_orig_points_1d[i] = state.h_points[i].z; // could be other dimensions
     }
-    thrust::device_vector<float> d_orig_points_1d = h_orig_points_1d;
+    thrust::device_vector<float> d_orig_points_1d = h_orig_points_1d; // one P NArray
 
     // initialize a sequence to be sorted, which will become the r2q map.
     thrust::device_ptr<unsigned int> d_r2q_map_ptr;
