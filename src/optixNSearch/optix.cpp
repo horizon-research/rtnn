@@ -543,13 +543,7 @@ void launchSubframe( unsigned int* output_buffer, RTNNState& state, int batch_id
     unsigned int numQueries = state.numActQueries[batch_id];
     state.params.handle = state.gas_handle[batch_id];
     state.params.queries = state.d_actQs[batch_id];
-
     state.params.frame_buffer = output_buffer;
-    // unused slots will become UINT_MAX
-    // TODO: change it to use thrust vector? also move it to search functions so that the caller of search can directly set the size of the buffer rather than relying on numQueries -- useful for ubenchmarking.
-    CUDA_CHECK( cudaMemsetAsync ( state.params.frame_buffer, 0xFF,
-                                  numQueries * state.params.limit * sizeof(unsigned int),
-                                  state.stream[batch_id] ) );
 
     fprintf(stdout, "\tLaunch %u (%.4f%%) queries\n", numQueries, (float)numQueries/(float)state.numQueries*100.0);
     fprintf(stdout, "\tSearch radius: %f\n", state.params.radius);

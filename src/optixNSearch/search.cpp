@@ -14,6 +14,8 @@ void search(RTNNState& state, int batch_id) {
       state.params.limit = state.knn;
       thrust::device_ptr<unsigned int> output_buffer;
       allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit, &state.d_pointers);
+      // unused slots will become UINT_MAX
+      fillByValue(output_buffer, numQueries * state.params.limit, UINT_MAX);
 
       if (state.qGasSortMode && !state.toGather) state.params.d_r2q_map = state.d_r2q_map[batch_id];
       else state.params.d_r2q_map = nullptr; // if no GAS-sorting or has done gather, this map is null.
@@ -65,6 +67,11 @@ thrust::device_ptr<unsigned int> initialTraversal(RTNNState& state, int batch_id
     state.params.limit = 1;
     thrust::device_ptr<unsigned int> output_buffer;
     allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit, &state.d_pointers);
+    // for initial sort fill with 0. it's possible that a query has no
+    // neighbors (no intersection with any of the AABB), in which case during
+    // gas-sort using FHCoord, gather might use UINT_MAX as a key if filled
+    // with UINT_MAX.
+    fillByValue(output_buffer, numQueries * state.params.limit, 0);
 
     state.params.d_r2q_map = nullptr; // contains the index to reorder rays
     state.params.mode = NOTEST;
