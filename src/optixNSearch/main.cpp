@@ -17,6 +17,10 @@ void setDevice ( RTNNState& state ) {
   std::cerr << "\tUsing [" << state.device_id << "]: " << prop.name << std::endl;
   state.totDRAMSize = (double)prop.totalGlobalMem/1024/1024/1024;
   std::cerr << "\tMemory: " << state.totDRAMSize << " GB" << std::endl;
+  // conservatively reduce dram size by 150 MB as the usable memory appears to
+  // be that much smaller than what is reported, presumably to store data
+  // structures that are hidden from us.
+  state.totDRAMSize -= 0.15;
 }
 
 void freeGridPointers( RTNNState& state ) {

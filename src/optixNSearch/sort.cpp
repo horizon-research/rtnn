@@ -503,10 +503,12 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
 
   // need for both sorting and partitioning
   thrust::device_ptr<unsigned int> d_ParticleCellIndices_ptr;
-  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr = thrust::device_pointer_cast(state.d_CellParticleCounts_ptr_p);
+  thrust::device_ptr<unsigned int> d_CellParticleCounts_ptr =
+      thrust::device_pointer_cast(reinterpret_cast<unsigned int*>(state.d_CellParticleCounts_ptr_p));
   // only need for sorting
   thrust::device_ptr<unsigned int> d_LocalSortedIndices_ptr;
-  thrust::device_ptr<unsigned int> d_CellOffsets_ptr = thrust::device_pointer_cast(state.d_CellOffsets_ptr_p);
+  thrust::device_ptr<unsigned int> d_CellOffsets_ptr =
+      thrust::device_pointer_cast(reinterpret_cast<unsigned int*>(state.d_CellOffsets_ptr_p));
   thrust::device_ptr<unsigned int> d_posInSortedPoints_ptr;
 
   allocThrustDevicePtr(&d_ParticleCellIndices_ptr, N, &state.d_gridPointers);
