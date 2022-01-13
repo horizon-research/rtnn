@@ -204,6 +204,7 @@ CUdeviceptr createAABB( RTNNState& state, int batch_id, float radius )
   OptixAabb* d_aabb;
   if (state.d_aabb[batch_id] == nullptr) {
     thrust::device_ptr<OptixAabb> d_aabb_ptr;
+    // do not track it so that we can free it early
     d_aabb = allocThrustDevicePtr(&d_aabb_ptr, numPrims);
   } else {
     // if pointers are not null, simply reuse the previously allocated device
@@ -256,7 +257,7 @@ void createGeometry( RTNNState& state, int batch_id, float radius )
         state.d_gas_output_buffer[batch_id],
         batch_id);
 
-    //state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
+    state.d_aabb[batch_id] = reinterpret_cast<void*>(d_aabb);
     CUDA_CHECK( cudaFree( reinterpret_cast<void*>(d_aabb) ) );
     OMIT_ON_E2EMSR( CUDA_CHECK( cudaStreamSynchronize( state.stream[batch_id] ) ) );
   Timing::stopTiming(true);

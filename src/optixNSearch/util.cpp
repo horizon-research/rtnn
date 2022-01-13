@@ -149,7 +149,7 @@ void printUsageAndExit( const char* argv0 )
     std::cerr << "  --interleave      | -i      Allow interleaving kernel launches? Enable it for better performance. Default is true.\n";
     std::cerr << "  --msr             | -m      Enable end-to-end measurement? If true, disable CUDA synchronizations for more accurate time measurement (and higher performance). Default is true.\n";
     std::cerr << "  --check           | -c      Enable sanity check? Default is false.\n";
-    std::cerr << "  --deferFree       | -df     Enable deferred free of intermediate device memory? Default is true. Disable this for large datasets (e.g., >10 M points).\n";
+    std::cerr << "  --deferFree       | -df     Defer free-ing intermediate device memory? Default is true.\n";
 
     std::cerr << "  --help            | -h      Print this usage message\n";
 
@@ -548,16 +548,30 @@ float calcCRRatio(RTNNState& state) {
   float particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
+  float aabbSize = state.numPoints * sizeof(OptixAabb);
+  // instGasSize is the temporary memory required when building a GAS (not
+  // including the GAS itself). 8x is for |d_temp_buffer_gas| and
+  // |d_buffer_temp_output_gas_and_compacted_size|, an empirical fit.
+  float instGasSize = 8 * gasSize + aabbSize;
 
   float cellSize, ratio;
 
+  // Sources of over-estimation of memory usage: gas size (probably lower than
+  // 1.5 times), instGasSize (mostly about 6.6 times from what's observed), the
+  // actual # of batches could be much smaller than the theoretical maximal.
+  // the last one we just really can't control since it's a run-time decision.
+  // if a similar dataset is to be used over and over again, one could estimate
+  // the memory waste and supply a negative -gmu accordingly. We could also
+  // delay freeing gas-related temporary structures if we realize that we won't
+  // have a memory problem (e.g., actual batch # << theoretical maximal).
   if (!state.deferFree) {
-    fprintf(stdout, "\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
+    fprintf(stdout, "\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n\tinstGasSize: %.3f\n",
                      particleArraysSize/1024/1024,
                      particleDataSize/1024/1024,
                      returnDataSize/1024/1024,
                      state.gpuMemUsed,
-                     gasSize/1024/1024);
+                     gasSize/1024/1024,
+                     instGasSize/1024/1024);
     float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
         particleArraysSize - particleDataSize - state.gpuMemUsed * 1024 * 1024;
     float cellSizeLimitedBySort = estSortLtdSize(state, spaceAvail, cellArrayCount, true);
@@ -568,7 +582,7 @@ float calcCRRatio(RTNNState& state) {
     countFromGasSort(state, qNArrayCount, pNArrayCount);
     particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
     spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
-        particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
+        particleArraysSize - particleDataSize - std::max(returnDataSize, instGasSize) - state.gpuMemUsed * 1024 * 1024;
     float cellSizeLimitedByGAS = estGASLtdSize(state, spaceAvail, gasSize);
 
     cellSize = std::max(cellSizeLimitedBySort, cellSizeLimitedByGAS);
@@ -576,15 +590,17 @@ float calcCRRatio(RTNNState& state) {
     ratio = state.radius / cellSize;
     fprintf(stdout, "\tCalculated cellRadiusRatio: %f\n", ratio);
   } else {
+    // the max reflects the fact that the return data and temp gas structures won't co-exist
     float spaceAvail = state.totDRAMSize * 1024 * 1024 * 1024 -
-        particleArraysSize - particleDataSize - returnDataSize - state.gpuMemUsed * 1024 * 1024;
-    fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n",
+        particleArraysSize - particleDataSize - std::max(returnDataSize, instGasSize) - state.gpuMemUsed * 1024 * 1024;
+    fprintf(stdout, "\tspaceAval: %.3f\n\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n\tinstGasSize: %.3f\n",
                      spaceAvail/1024/1024,
                      particleArraysSize/1024/1024,
                      particleDataSize/1024/1024,
                      returnDataSize/1024/1024,
                      state.gpuMemUsed,
-                     gasSize/1024/1024);
+                     gasSize/1024/1024,
+                     instGasSize/1024/1024);
 
     // algorithm to estimate the cellSize
     //   total gas size + total sorting structure size <= avail mem
@@ -603,12 +619,9 @@ float calcCRRatio(RTNNState& state) {
     float curTotalSize = 0;
     float numOfBatches, numOfSortingCells;
     bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
-    // instantaneous memory required in building gas.
-    // TODO: revisit this. when it's too large (e.g., 10) it's possible that there is no solution.
-    float instScale = 1.0;
     while (1) {
       numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
-      curGASSize = std::max(numOfBatches, instScale) * gasSize;
+      curGASSize = numOfBatches * gasSize;
 
       GridInfo gridInfo;
       state.crRatio = state.radius / cellSize;
