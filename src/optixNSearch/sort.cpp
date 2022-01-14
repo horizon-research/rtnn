@@ -379,7 +379,7 @@ void genBatches(RTNNState& state,
     state.d_actQs[batchId] = thrust::raw_pointer_cast(d_actQs);
 
     // Copy the active queries to host (for sanity check).
-    // TODO: is this redundant given the copy at the end of |gridSort|?
+    // TODO: disable this when no sanity check. dedup the copy at the end of |gridSort|.
     state.h_actQs[batchId] = new float3[numActQs];
     thrust::copy(d_actQs, d_actQs + numActQs, state.h_actQs[batchId]);
     //fprintf(stdout, "!!!%f, %f, %f\n", state.h_actQs[batchId][163455].x, state.h_actQs[batchId][163455].y, state.h_actQs[batchId][163455].z);
@@ -613,6 +613,9 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   // copy particles to host, regardless of partition. for POINT, this makes
   // sure the points in device are consistent with the host points used to
   // build the GAS. for QUERY and POINT, this sets up data for sanity check.
+  // TODO: when sanity check is disabled and partitioning is enabled, we can
+  // save this copy for QUERY since the in-sync host queries will be found in
+  // state.h_actQs.
   thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 }

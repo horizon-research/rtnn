@@ -107,6 +107,18 @@ struct is_nonzero
     }
 };
 
+__host__ __device__
+  bool operator>=(float3 p1, float3 p2)
+  {
+    return ((p1.x >= p2.x) && (p1.y >= p2.y) && (p1.z >= p2.z));
+  }
+
+__host__ __device__
+  bool operator<=(float3 p1, float3 p2)
+  {
+    return ((p1.x <= p2.x) && (p1.y <= p2.y) && (p1.z <= p2.z));
+  }
+
 // https://forums.developer.nvidia.com/t/using-thrust-copy-if-with-a-parameter/119735/6
 // https://www.bu.edu/pasi/files/2011/01/NathanBell3-12-1000.pdf#page=18
 struct isSameID
@@ -117,7 +129,7 @@ struct isSameID
   __host__ __device__
     bool operator()(const int x)
     {
-        return (x == kID);
+      return (x == kID);
     }
 };
 
@@ -129,7 +141,21 @@ struct isInRange
   __host__ __device__
     bool operator()(const int x)
     {
-        return ((x >= kmin) && (x <= kmax));
+      return ((x >= kmin) && (x <= kmax));
+    }
+};
+
+struct isInRange3D
+{
+    float3 kmin, kmax;
+    bool kcond;
+    isInRange3D(float3 min, float3 max, bool cond) {kmin = min; kmax = max; kcond = cond;}
+
+  __host__ __device__
+    bool operator()(const float3 point)
+    {
+      if (kcond) return (point <= kmax && point >= kmin);
+      else return !(point <= kmax && point >= kmin);
     }
 };
 
@@ -137,6 +163,18 @@ void copyIfIdMatch(float3* source, unsigned int N, thrust::device_ptr<int> mask,
     thrust::copy_if(thrust::device_pointer_cast(source),
                     thrust::device_pointer_cast(source) + N,
                     mask, dest, isSameID(id));
+}
+
+void copyIfNotInRange(float3* source, unsigned int N, float3* mask, float3* dest, float3 min, float3 max) {
+    thrust::copy_if(source,
+                    source + N,
+                    mask, dest, isInRange3D(min, max, false));
+}
+
+void copyIfInRange(float3* source, unsigned int N, thrust::device_ptr<float3> mask, thrust::device_ptr<float3> dest, float3 min, float3 max) {
+    thrust::copy_if(thrust::device_pointer_cast(source),
+                    thrust::device_pointer_cast(source) + N,
+                    mask, dest, isInRange3D(min, max, true));
 }
 
 void copyIfIdInRange(float3* source, unsigned int N, thrust::device_ptr<int> mask, thrust::device_ptr<float3> dest, int min, int max) {
@@ -154,6 +192,11 @@ void copyIfNonZero(float3* source, unsigned int N, thrust::device_ptr<bool> mask
 unsigned int countById(thrust::device_ptr<int> val, unsigned int N, int id) {
   unsigned int numOfActiveQueries = thrust::count(val, val + N, id);
   return numOfActiveQueries;
+}
+
+unsigned int countIfInRange(thrust::device_ptr<float3> val, unsigned int N, float3 min, float3 max) {
+  unsigned int count = thrust::count_if(val, val + N, isInRange3D(min, max, true));
+  return count;
 }
 
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int> key, unsigned int N, thrust::device_ptr<unsigned int> dest) {

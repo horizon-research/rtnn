@@ -156,6 +156,7 @@ void printUsageAndExit( const char* argv0 )
 
     std::cerr << "\n\e[1mAdvanced Options:\e[0m\n";
 
+    std::cerr << "  --filterQueries   | -fq     Filter remote queries that are impossible to reach any point? Default is false.\n";
     std::cerr << "  --partition       | -p      Allow query partitioning? Enable it for better performance. Default is true.\n";
     std::cerr << "  --approx          | -a      Approximate query partitioning mode for KNN search. Range search is always exact. {0: no approx, i.e., 3D circumRadius for 3D search; 1: 2D circumRadius for 3D search; 2: equiVol approx in query partitioning)} See |radiusFromMegacell| function. Default is 2.\n";
 
@@ -230,6 +231,12 @@ void parseArgs( RTNNState& state,  int argc, char* argv[] ) {
           if( i >= argc - 1 )
               printUsageAndExit( argv[0] );
           state.deferFree = (bool)(atoi(argv[++i]));
+      }
+      else if( arg == "--filterQueries" || arg == "-fq" )
+      {
+          if( i >= argc - 1 )
+              printUsageAndExit( argv[0] );
+          state.filterQueries = (bool)(atoi(argv[++i]));
       }
       else if( arg == "--numbatch" || arg == "-nb" )
       {
@@ -520,9 +527,9 @@ float estSortLtdSize(RTNNState& state,
       if (curSortingSize < spaceAvail) break;
       cellSize *= state.crStep;
     }
-    fprintf(stdout, "Sorting limited cellSize: %f\n", cellSize);
     fprintf(stdout, "\tMemory utilization: %.3f%%\n", (1 - (spaceAvail-curSortingSize)/(state.totDRAMSize*1024*1024*1024))*100.0);
   }
+  fprintf(stdout, "Sorting limited cellSize: %f\n", cellSize);
 
   return cellSize;
 }
@@ -619,6 +626,12 @@ float calcCRRatio(RTNNState& state) {
     float curTotalSize = 0;
     float numOfBatches, numOfSortingCells;
     bool isOneBatch = (!state.partition || (!state.autoNB && state.numOfBatches == 1));
+    // TODO: the strategy here is to find the smallest cell size, which could
+    // lead to a high batch number (>100) and thus increase the
+    // |kCalcSearchSize| cost. this is particularly an issue when -df is
+    // enabled and filters the vast majority of queries, in which case there
+    // will be huge memory space left to find a very small cell size. an
+    // example is: -f data/buddha.txt -q data/kitti6m.txt -fq 0
     while (1) {
       numOfBatches = isOneBatch ? 1.0 : state.radius / (sqrt(3) * cellSize) + 1;
       curGASSize = numOfBatches * gasSize;

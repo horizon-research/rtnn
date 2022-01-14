@@ -65,21 +65,45 @@ typedef Record<MissData>        MissRecord;
 typedef Record<HitGroupData>    HitGroupRecord;
 
 void filterRemoteQueries ( RTNNState& state ) {
-  // filter out queries that are theorerically impossible to reach any search
-  // points given the search radius, then create a unified grid. why? query
-  // partition in theory will need a unified grid anyways, and if without
-  // filtering the grid could be overly large such that the cells are big. the
-  // unified grid after filtering will have desirable size for partitioning and
-  // point sorting. the only concern is for query partitioning, where is query
-  // density is much smaller the unified grid could be too coarse-grained.
-  // could generate a dedicated query grid for query sorting.
-  // TODO: implement this
-
   // TODO: another idea is that the grid doesn't HAVE to be union. it just
   // needs to include the query scene, and we can collapse all out-of-boundary
   // points to the edge cells. this would allow us to potentially have
   // finer-grained cells, but edge cells can have lots of points that generate
   // some overly dense partitions.
+
+  if ((state.qMin >= state.pMin) && (state.qMax <= state.pMax)) return;
+
+  float3 tMin = {state.pMin.x - state.radius, state.pMin.y - state.radius, state.pMin.z - state.radius};
+  float3 tMax = {state.pMax.x + state.radius, state.pMax.y + state.radius, state.pMax.z + state.radius};
+
+  unsigned int count = countIfInRange(thrust::device_pointer_cast(state.params.queries), state.numQueries, tMin, tMax);
+  thrust::device_ptr<float3> tQueries;
+  allocThrustDevicePtr(&tQueries, count, &state.d_pointers);
+  copyIfInRange(state.params.queries, state.numQueries, thrust::device_pointer_cast(state.params.queries), tQueries, tMin, tMax);
+  fprintf(stdout, "Filter queries: %u (%.3f)\n", state.numQueries - count, (1 - (float)count/state.numQueries)*100);
+
+  // set up filtered queries on the host for sanity check
+  if (state.sanCheck) {
+    state.numFltQs = state.numQueries - count;
+    state.h_fltQs = new float3[state.numFltQs];
+    // quite heavy
+    copyIfNotInRange(state.h_queries, state.numQueries, state.h_queries, state.h_fltQs, tMin, tMax);
+  }
+
+  assert(state.params.points != state.params.queries); // otherwise it's samepq, which wouldn't pass the test earlier
+  state.d_pointers.erase(state.d_pointers.find(state.params.queries));
+  CUDA_CHECK( cudaFree( state.params.queries ) );
+
+  state.params.queries = thrust::raw_pointer_cast(tQueries);
+  state.numQueries = count;
+  // Just for sanity check purpose. TODO: Really only needed when there's no
+  // partition and no query sorting, both of which will update state.h_queries
+  // using the queries from the device.
+  if (state.sanCheck) {
+    thrust::copy(thrust::device_pointer_cast(state.params.queries),
+        thrust::device_pointer_cast(state.params.queries) + state.numQueries, state.h_queries);
+  }
+  computeMinMax(state.numQueries, state.params.queries, state.qMin, state.qMax);
 
   state.Min = fminf(state.qMin, state.pMin);
   state.Max = fmaxf(state.qMax, state.pMax);
@@ -110,7 +134,22 @@ void uploadData ( RTNNState& state ) {
       computeMinMax(state.numQueries, state.params.queries, state.qMin, state.qMax);
     }
 
-    filterRemoteQueries(state);
+    Timing::startTiming("filter queries");
+      // filter out queries that are theorerically impossible to reach any search
+      // points given the search radius, then create a unified grid. why? query
+      // partition in theory will need a unified grid anyways, and if without
+      // filtering the grid could be overly large such that the cells are big. the
+      // unified grid after filtering will have desirable size for partitioning and
+      // point sorting. the only concern is for query partitioning, where is query
+      // density is much smaller the unified grid could be too coarse-grained.
+      // could generate a dedicated query grid for query sorting.
+
+      state.Min = fminf(state.qMin, state.pMin);
+      state.Max = fmaxf(state.qMax, state.pMax);
+
+      if (state.filterQueries) filterRemoteQueries(state);
+    Timing::stopTiming(true);
+
   Timing::stopTiming(true);
 }
 

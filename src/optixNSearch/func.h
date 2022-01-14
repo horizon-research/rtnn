@@ -33,13 +33,18 @@ void exclusiveScan(thrust::device_ptr<unsigned int>, unsigned int, thrust::devic
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int, cudaStream_t);
 void fillByValue(thrust::device_ptr<unsigned int>, unsigned int, int);
 void copyIfIdMatch(float3*, unsigned int, thrust::device_ptr<int>, thrust::device_ptr<float3>, int);
+void copyIfInRange(float3*, unsigned int, thrust::device_ptr<float3>, thrust::device_ptr<float3>, float3, float3);
+void copyIfNotInRange(float3*, unsigned int, float3*, float3*, float3, float3);
 void copyIfIdInRange(float3*, unsigned int, thrust::device_ptr<int>, thrust::device_ptr<float3>, int, int);
 void copyIfNonZero(float3*, unsigned int, thrust::device_ptr<bool>, thrust::device_ptr<float3>);
 unsigned int countById(thrust::device_ptr<int>, unsigned int, int);
+unsigned int countIfInRange(thrust::device_ptr<float3>, unsigned int, float3, float3);
 unsigned int uniqueByKey(thrust::device_ptr<unsigned int>, unsigned int N, thrust::device_ptr<unsigned int> dest);
 unsigned int countUniq(thrust::device_ptr<unsigned int>, unsigned int);
 void thrustCopyD2D(thrust::device_ptr<unsigned int>, thrust::device_ptr<unsigned int>, unsigned int N);
 unsigned int thrustGenHist(const thrust::device_ptr<int>, thrust::device_vector<unsigned int>&, unsigned int);
+bool operator<=(float3, float3);
+bool operator>=(float3, float3);
 
 // take an unallocated thrust device pointer, allocate device memory and set the thrust pointer and return the raw pointer.
 // https://stackoverflow.com/questions/353180/how-do-i-find-the-name-of-the-calling-function/378165

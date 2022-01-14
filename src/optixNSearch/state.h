@@ -92,6 +92,7 @@ struct RTNNState
     int                         mcScale                   = 4;
     float                       crStep                    = 1.01;
     bool                        deferFree                 = true;
+    bool                        filterQueries             = false;
 
     unsigned int                numPoints                 = 0;
     unsigned int                numQueries                = 0;
@@ -106,6 +107,8 @@ struct RTNNState
     void**                      d_buffer_temp_output_gas_and_compacted_size = nullptr;
     void*                       d_CellParticleCounts_ptr_p = nullptr;
     void*                       d_CellOffsets_ptr_p       = nullptr;
+    float3*                     h_fltQs                   = nullptr;
+    unsigned int                numFltQs                  = 0;
 
     std::unordered_set<void*>   d_pointers;
     std::unordered_set<void*>   d_gridPointers;

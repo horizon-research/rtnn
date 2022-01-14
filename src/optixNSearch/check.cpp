@@ -96,7 +96,7 @@ void sanityCheckKNN( RTNNState& state, int batch_id ) {
             std::cout << "\n\n";
     }
   }
-  std::cerr << "\tSanity check done." << std::endl;
+  std::cerr << "Sanity check done." << std::endl;
 }
 
 void sanityCheckRadius( RTNNState& state, int batch_id ) {
@@ -129,10 +129,29 @@ void sanityCheckRadius( RTNNState& state, int batch_id ) {
     }
     //std::cout << "\n";
   }
+
   std::cerr << "Sanity check done." << std::endl;
   std::cerr << "Avg neighbor/query: " << (float)totalNeighbors/state.numQueries << std::endl;
   std::cerr << "Total wrong neighbors: " << totalWrongNeighbors << std::endl;
   if (totalWrongNeighbors != 0) std::cerr << "Avg wrong dist: " << totalWrongDist / totalWrongNeighbors << std::endl;
+}
+
+void checkFilteredQueries(RTNNState& state) {
+  // sanity check for filtered queries
+  for (unsigned int q = 0; q < state.numFltQs; q++) {
+    for (unsigned int p = 0; p < state.numPoints; p++) {
+      float3 diff = state.h_points[p] - state.h_fltQs[q];
+      float dists = dot(diff, diff);
+      if (dists < state.radius * state.radius) {
+        fprintf(stdout, "Query %u [%f, %f, %f] shouldn't be filtered; conflicting query %u [%f, %f, %f]. Dist is %lf.\n",
+          q, state.h_queries[q].x, state.h_queries[q].y, state.h_queries[q].z,
+          p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z,
+          sqrt(dists));
+      }
+    }
+  }
+
+  std::cerr << "Filtered queries sanity check done." << std::endl;
 }
 
 void sanityCheck(RTNNState& state) {
@@ -146,5 +165,7 @@ void sanityCheck(RTNNState& state) {
 
     if (state.searchMode == "radius") sanityCheckRadius( state, i );
     else sanityCheckKNN( state, i );
+
   }
+  //checkFilteredQueries(state);
 }
