@@ -153,9 +153,9 @@ int main( int argc, char* argv[] )
   }
   catch( std::exception& e )
   {
-      std::cerr << "Caught exception: " << e.what() << "\n";
-      return 1;
+    std::cerr << "Caught exception: " << e.what() << "\n";
+    exit(1);
   }
 
-  return 0;
+  exit(0);
 }

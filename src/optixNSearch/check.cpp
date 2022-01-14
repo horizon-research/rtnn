@@ -94,6 +94,7 @@ void sanityCheckKNN( RTNNState& state, int batch_id ) {
             gpu_dists.end(),
             std::ostream_iterator<float>(std::cout, " "));
             std::cout << "\n\n";
+      exit(1);
     }
   }
   std::cerr << "Sanity check done." << std::endl;
@@ -122,6 +123,7 @@ void sanityCheckRadius( RTNNState& state, int batch_id ) {
             sqrt(dists));
           totalWrongNeighbors++;
           totalWrongDist += sqrt(dists);
+          exit(1);
         }
         //std::cout << sqrt(dists) << " ";
       }

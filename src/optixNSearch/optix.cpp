@@ -82,6 +82,11 @@ void filterRemoteQueries ( RTNNState& state ) {
   copyIfInRange(state.params.queries, state.numQueries, thrust::device_pointer_cast(state.params.queries), tQueries, tMin, tMax);
   fprintf(stdout, "Filter queries: %u (%.3f)\n", state.numQueries - count, (1 - (float)count/state.numQueries)*100);
 
+  if (count == 0) {
+    fprintf(stdout, "no queries left after filtering\n");
+    exit(0);
+  }
+
   // set up filtered queries on the host for sanity check
   if (state.sanCheck) {
     state.numFltQs = state.numQueries - count;

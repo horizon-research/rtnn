@@ -388,6 +388,11 @@ void readData(RTNNState& state) {
       thrust::copy(state.h_points, state.h_points+state.numQueries, state.h_queries);
     }
   }
+
+  if (state.numPoints == 0 || state.numQueries == 0) {
+    fprintf(stdout, "empty query and/or points\n");
+    exit(0);
+  }
 }
 
 // this function returns the width of the inscribed cube (square) of a sphere (circle)
