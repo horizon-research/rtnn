@@ -379,10 +379,10 @@ void genBatches(RTNNState& state,
     state.d_actQs[batchId] = thrust::raw_pointer_cast(d_actQs);
 
     // Copy the active queries to host (for sanity check).
-    // TODO: disable this when no sanity check. dedup the copy at the end of |gridSort|.
-    state.h_actQs[batchId] = new float3[numActQs];
-    thrust::copy(d_actQs, d_actQs + numActQs, state.h_actQs[batchId]);
-    //fprintf(stdout, "!!!%f, %f, %f\n", state.h_actQs[batchId][163455].x, state.h_actQs[batchId][163455].y, state.h_actQs[batchId][163455].z);
+    if (state.sanCheck) {
+      state.h_actQs[batchId] = new float3[numActQs];
+      thrust::copy(d_actQs, d_actQs + numActQs, state.h_actQs[batchId]);
+    }
 
     lastMask = maxMask;
   }
@@ -610,12 +610,14 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
     sortByKey(d_posInSortedPoints_ptr, thrust::device_pointer_cast(particles), N);
   }
 
-  // copy particles to host, regardless of partition. for POINT, this makes
-  // sure the points in device are consistent with the host points used to
-  // build the GAS. for QUERY and POINT, this sets up data for sanity check.
-  // TODO: when sanity check is disabled and partitioning is enabled, we can
-  // save this copy for QUERY since the in-sync host queries will be found in
-  // state.h_actQs.
+  // copy particles to host. for POINT, this makes sure the points in device
+  // are consistent with the host points used to 1) build the GAS and 2)
+  // perform sanity check. for QUERY, the host and device query consistency is
+  // needed for sanity check --- when there is no partitioning. with
+  // partitioning, the copy is done from d_actQs to h_actQs in |genBatches|.
+  // so regardless of sanity check we must do this copy for POINT.
+
+  if ((type == QUERY) && (!state.sanCheck || toPartition)) return;
   thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 }
@@ -829,11 +831,11 @@ void gatherQueries( RTNNState& state, thrust::device_ptr<unsigned int> d_indices
   Timing::stopTiming(true);
 
   // Copy reordered queries to host for sanity check
-  // if not samepq, free the original query host memory first
-  if (!state.samepq || state.partition) delete state.h_actQs[batch_id];
-  state.h_actQs[batch_id] = new float3[numQueries]; // don't overwrite h_points
-  thrust::host_vector<float3> host_reord_queries(numQueries);
-  thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+numQueries, state.h_actQs[batch_id]);
-  //assert (state.h_points != state.h_queries);
+  if (state.sanCheck) {
+    // if not samepq, free the original query host memory first
+    if (!state.samepq || state.partition) delete state.h_actQs[batch_id];
+    state.h_actQs[batch_id] = new float3[numQueries]; // don't overwrite h_points
+    thrust::copy(d_reord_queries_ptr, d_reord_queries_ptr+numQueries, state.h_actQs[batch_id]);
+  }
 }
 
