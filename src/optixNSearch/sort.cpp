@@ -617,7 +617,9 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
   // partitioning, the copy is done from d_actQs to h_actQs in |genBatches|.
   // so regardless of sanity check we must do this copy for POINT.
 
-  if ((type == QUERY) && (!state.sanCheck || toPartition)) return;
+  // if samepq, then even if it's a QUERY without sanity check or being
+  // partitioned we still have to copy since this copy is for POINT.
+  if ((type == QUERY) && !state.samepq && (!state.sanCheck || toPartition)) return;
   thrust::device_ptr<float3> d_particles_ptr = thrust::device_pointer_cast(particles);
   thrust::copy(d_particles_ptr, d_particles_ptr + N, h_particles);
 }
