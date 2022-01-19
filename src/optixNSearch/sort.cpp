@@ -104,7 +104,9 @@ unsigned int genGridInfo(RTNNState& state, unsigned int N, GridInfo& gridInfo) {
   //   scaling factor. the result becomes the size of a meta grid. the smaller
   //   the scaling factor, the more space waste (which limits the number of
   //   cells) but enforces a more global order; maybe a better strategy?
-  gridInfo.meta_grid_dim = (int)pow(2, floorf(log2(std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z}))))/state.mcScale;
+  unsigned int shortestSide = std::min({gridInfo.GridDimension.x, gridInfo.GridDimension.y, gridInfo.GridDimension.z});
+  // dim should at least be 1; otherwise we won't get 0 cells.
+  gridInfo.meta_grid_dim = std::max((int)pow(2, floorf(log2(shortestSide)))/state.mcScale, 1);
   gridInfo.meta_grid_size = gridInfo.meta_grid_dim * gridInfo.meta_grid_dim * gridInfo.meta_grid_dim;
 
   // One meta grid cell contains meta_grid_dim^3 cells. The morton curve is

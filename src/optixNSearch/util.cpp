@@ -559,6 +559,7 @@ float calcCRRatio(RTNNState& state) {
 
   float particleArraysSize = pNArrayCount * N * sizeof(unsigned int) + qNArrayCount * Q * sizeof(unsigned int);
   // TODO: conservatively estimate the gas size as 1.5 times the point size (better fit?)
+  // in cases where search radius is very small, the GAS size can be much larger than 1.5X.
   float gasSize = state.numPoints * sizeof(float3) * 1.5;
   float aabbSize = state.numPoints * sizeof(OptixAabb);
   // instGasSize is the temporary memory required when building a GAS (not
