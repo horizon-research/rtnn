@@ -153,6 +153,15 @@ void uploadData ( RTNNState& state ) {
       state.Max = fmaxf(state.qMax, state.pMax);
 
       if (state.filterQueries) filterRemoteQueries(state);
+
+      // reduce the search radius since it's meaningless to have a radius
+      // greater than the scene diagonal.
+      state.gRadius = state.radius;
+      float3 O = state.Min - state.Max;
+      float dist = sqrtf(dot(O, O));
+      state.radius = std::min(state.radius, dist);
+      fprintf(stdout, "\tGiven radius: %f\n", state.gRadius);
+      fprintf(stdout, "\tActual radius: %f\n", state.radius);
     Timing::stopTiming(true);
 
   Timing::stopTiming(true);

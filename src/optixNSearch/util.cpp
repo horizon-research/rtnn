@@ -571,12 +571,14 @@ float calcCRRatio(RTNNState& state) {
 
   // Sources of over-estimation of memory usage: gas size (probably lower than
   // 1.5 times), instGasSize (mostly about 6.6 times from what's observed), the
-  // actual # of batches could be much smaller than the theoretical maximal.
-  // the last one we just really can't control since it's a run-time decision.
+  // actual # of batches could be much smaller than the theoretical maximal,
+  // which would happen, for instance, when the point distribution is uniform.
+  // Try: -f data/buddha.txt -sm radius -r 64 -k 200 -d 0 -a 0 -c 1.
+  // The last one we just really can't control since it's a run-time decision.
   // if a similar dataset is to be used over and over again, one could estimate
-  // the memory waste and supply a negative -gmu accordingly. We could also
-  // delay freeing gas-related temporary structures if we realize that we won't
-  // have a memory problem (e.g., actual batch # << theoretical maximal).
+  // the memory waste and supply a negative -gmu accordingly. We could delay
+  // freeing gas-related temporary structures if we realize that we won't have
+  // a memory problem (e.g., actual batch # << theoretical maximal).
   if (!state.deferFree) {
     fprintf(stdout, "\tparticleArray: %.3f\n\tparticleData: %.3f\n\treturnData: %.3f\n\tgpuMemused: %.3f\n\tgasSize: %.3f\n\tinstGasSize: %.3f\n",
                      particleArraysSize/1024/1024,

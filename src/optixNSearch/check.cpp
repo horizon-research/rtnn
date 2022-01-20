@@ -35,7 +35,7 @@ void sanityCheckKNN( RTNNState& state, int batch_id ) {
       float3 point = state.h_points[p];
       float3 diff = query - point;
       float dists = dot(diff, diff);
-      if ((dists > 0) && (dists < state.radius * state.radius)) {
+      if ((dists > 0) && (dists < state.gRadius * state.gRadius)) {
         knn_res_t res = std::make_pair(dists, p);
         if (size < state.knn) {
           topKQ.push(res);
@@ -116,7 +116,7 @@ void sanityCheckRadius( RTNNState& state, int batch_id ) {
         totalNeighbors++;
         float3 diff = state.h_points[p] - state.h_queries[q];
         float dists = dot(diff, diff);
-        if (dists > state.radius * state.radius) {
+        if (dists > state.gRadius * state.gRadius) {
           fprintf(stdout, "Point %u [%f, %f, %f] is not a neighbor of query %u [%f, %f, %f]. Dist is %lf.\n",
             p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z,
             q, state.h_queries[q].x, state.h_queries[q].y, state.h_queries[q].z,
@@ -144,7 +144,7 @@ void checkFilteredQueries(RTNNState& state) {
     for (unsigned int p = 0; p < state.numPoints; p++) {
       float3 diff = state.h_points[p] - state.h_fltQs[q];
       float dists = dot(diff, diff);
-      if (dists < state.radius * state.radius) {
+      if (dists < state.gRadius * state.gRadius) {
         fprintf(stdout, "Query %u [%f, %f, %f] shouldn't be filtered; conflicting query %u [%f, %f, %f]. Dist is %lf.\n",
           q, state.h_queries[q].x, state.h_queries[q].y, state.h_queries[q].z,
           p, state.h_points[p].x, state.h_points[p].y, state.h_points[p].z,
