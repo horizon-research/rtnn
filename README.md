@@ -138,3 +138,7 @@ Range search is always exact (it's fast enough). Whether/how to approximate KNN 
     organization={ACM}
 }
 ```
+
+## License
+
+The code is released under the MIT license. See the `LICENSE` file for the details.
