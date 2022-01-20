@@ -129,8 +129,6 @@ Range search is always exact (it's fast enough). Whether/how to approximate KNN 
 
 ## Publication
 
-The project contains the artifact of the PPoPP 2022 paper [RTNN: Accelerating Neighbor Search Using Hardware Ray Tracing](https://www.cs.rochester.edu/horizon/pubs/ppopp22.pdf).
-
 ```
 @inproceedings{zhu2022rtnn,
     title={RTNN: Accelerating Neighbor Search Using Hardware Ray Tracing},
