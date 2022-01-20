@@ -118,6 +118,7 @@ struct RTNNState
     int                         maxBatchCount             = 1;
     float                       totDRAMSize               = 0; // GB
     float                       gpuMemUsed                = 0; // MB
+    float                       estGasSize                = -1; // MB
 
     float3                      pMin;
     float3                      pMax;
