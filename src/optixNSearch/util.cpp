@@ -714,3 +714,9 @@ bool isClose(float3 a, float3 b) {
   if (fabs(a.x - b.x) < 0.001 && fabs(a.y - b.y) < 0.001 && fabs(a.z - b.z) < 0.001) return true;
   else return false;
 }
+
+bool Timing::m_dontPrintTimes = false;
+unsigned int Timing::m_startCounter = 0;
+unsigned int Timing::m_stopCounter = 0;
+std::stack<TimingHelper> Timing::m_timingStack;
+std::unordered_map<int, AverageTime> Timing::m_averageTimes;

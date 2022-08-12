@@ -60,6 +60,8 @@
 #include <vector>
 #if !defined( _WIN32 )
 #include <dirent.h>
+#else
+#include "windows.h"
 #endif
 
 namespace sutil
