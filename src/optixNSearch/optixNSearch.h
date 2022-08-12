@@ -33,7 +33,7 @@
 
 enum ParticleType
 {
-    POINT = 0,
+    POINT_TYPE = 0,
     QUERY = 1
 };
 

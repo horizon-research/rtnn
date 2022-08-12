@@ -8,6 +8,7 @@
 #include <thrust/copy.h>
 #include <thrust/sequence.h>
 #include <thrust/gather.h>
+#include <thrust/host_vector.h>
 
 #include <algorithm>
 #include <iomanip>
@@ -519,7 +520,7 @@ void gridSort(RTNNState& state, unsigned int N, float3* particles, float3* h_par
 
   unsigned int threadsPerBlock = 64;
   unsigned int numOfBlocks = N / threadsPerBlock + 1;
-  if ((type == POINT) && state.partition) {
+  if ((type == POINT_TYPE) && state.partition) {
     // indicating that this is a point sort after the query partitioning, in
     // which case the two cellArrays are created in the query partitioning
     // process and we can reuse their space so no allocation. we still have to
@@ -659,12 +660,12 @@ void sortParticles ( RTNNState& state, ParticleType type, int sortMode ) {
   // 3: 1D sort; doesn't do query partitioning
 
   if ((type == QUERY) && !state.partition && !sortMode) return;
-  else if ((type == POINT) && !sortMode) return;
+  else if ((type == POINT_TYPE) && !sortMode) return;
 
   unsigned int N;
   float3* particles;
   float3* h_particles;
-  if (type == POINT) {
+  if (type == POINT_TYPE) {
     N = state.numPoints;
     particles = state.params.points;
     h_particles = state.h_points;

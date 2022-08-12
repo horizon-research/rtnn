@@ -3,6 +3,10 @@
 
 #include <stdio.h>
 
+#ifdef _WIN32
+typedef unsigned int uint;
+#endif
+
 //https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
 // "Insert" a 0 bit after each of the 16 low bits of x
 __host__ __device__ inline uint Part1By1(uint x)
