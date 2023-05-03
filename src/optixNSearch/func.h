@@ -99,7 +99,7 @@ thrust::device_ptr<unsigned int> sortQueriesByFHCoord(RTNNState&, thrust::device
 thrust::device_ptr<unsigned int> sortQueriesByFHIdx(RTNNState&, thrust::device_ptr<unsigned int>, int);
 void gatherQueries(RTNNState&, thrust::device_ptr<unsigned int>, int);
 
-void kGenAABB(float3*, float, unsigned int, OptixAabb*, cudaStream_t);
+void kGenAABB(float3*, float, float*, unsigned int, OptixAabb*, cudaStream_t);
 void uploadData(RTNNState&);
 void createGeometry(RTNNState&, int, float);
 void launchSubframe(unsigned int*, RTNNState&, int);
