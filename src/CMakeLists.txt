@@ -340,7 +340,13 @@ function(OPTIX_add_sample_executable target_name_base target_name_var)
   # Here is where we create the rule to make the executable.  We define a target name and
   # list all the source files used to create the target.  In addition we also pass along
   # the cmake_options parsed out of the arguments.
-  add_executable(${target_name}
+  # add_executable(${target_name}
+  #   ${source_files}
+  #   ${generated_files}
+  #   ${cmake_options}
+  #   )
+
+  add_library(${target_name} SHARED
     ${source_files}
     ${generated_files}
     ${cmake_options}
