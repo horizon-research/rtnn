@@ -25,55 +25,32 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+
 #pragma once
 
-#include <vector_types.h>
-#include <optix_types.h>
-#include <sutil/vec_math.h>
+#define SAMPLES_DIR "/home/mkotlerb/sph/rtnn/src"
+#define SAMPLES_PTX_DIR "/home/mkotlerb/sph/rtnn/src/build/lib/ptx"
 
-enum ParticleType
-{
-    POINT = 0,
-    QUERY = 1
-};
+// Include directories
+#define SAMPLES_RELATIVE_INCLUDE_DIRS \
+  "sutil", \
+  ".", 
+#define SAMPLES_ABSOLUTE_INCLUDE_DIRS \
+  "/home/mkotlerb/sph/rtnn/include", \
+  "/usr/local/cuda-11.7/include", 
 
-// TODO: really only need 1.
-enum RayType
-{
-    RAY_TYPE_RADIANCE  = 0,
-    RAY_TYPE_OCCLUSION = 1,
-    RAY_TYPE_COUNT
-};
+// Signal whether to use NVRTC or not
+#define CUDA_NVRTC_ENABLED 1
 
-enum SearchType
-{
-    PRECISE = 0, // test against the sphere
-    AABBTEST = 1, // test against the AABB
-    NOTEST = 2 // test against nothing
-};
-
-struct Params
-{
-    unsigned int*    frame_buffer;
-    float3*          points;
-    float3*          queries;
-    float            radius;
-    float*           radii;
-    unsigned int*    d_r2q_map;
-    unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
-    SearchType       mode;
-
-    OptixTraversableHandle handle;
-};
-
-struct MissData
-{
-};
-
-struct GeomData
-{
-};
-
-struct HitGroupData
-{
-};
+// NVRTC compiler options
+#define CUDA_NVRTC_OPTIONS  \
+  "-std=c++11", \
+  "-arch", \
+  "compute_60", \
+  "-use_fast_math", \
+  "-lineinfo", \
+  "-default-device", \
+  "-rdc", \
+  "true", \
+  "-D__x86_64", \
+  "-DK=5",

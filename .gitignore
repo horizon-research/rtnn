@@ -1,0 +1,4 @@
+src/build/CMakeFiles
+src/build/sutil/CMakeFiles
+src/build/optixNSearch/CMakeFiles
+src/build/lib
