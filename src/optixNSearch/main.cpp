@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <sutil/Exception.h>
 #include <sutil/Timing.h>
 
@@ -44,51 +46,19 @@ void setupSearch( RTNNState& state ) {
   state.launchRadius[0] = state.radius;
 }
 
-int main( int argc, char* argv[] )
+void executeSearch(RTNNState& state)
 {
-  RTNNState state;
 
-  parseArgs( state, argc, argv );
-
-  readData(state);
-
-  std::cout << "========================================" << std::endl;
-  std::cout << "numPoints: " << state.numPoints << std::endl;
-  std::cout << "numQueries: " << state.numQueries << std::endl;
-  std::cout << "searchMode: " << state.searchMode << std::endl;
-  std::cout << "radius: " << state.radius << std::endl;
-  std::cout << "Deferred free? " << std::boolalpha << state.deferFree << std::endl;
-  std::cout << "E2E Measure? " << std::boolalpha << state.msr << std::endl;
-  std::cout << "K: " << state.knn << std::endl;
-  std::cout << "Same P and Q? " << std::boolalpha << state.samepq << std::endl;
-  std::cout << "Query partition? " << std::boolalpha << state.partition << std::endl;
-  std::cout << "Approx query partition mode: " << state.approxMode << std::endl;
-  std::cout << "Auto batching? " << std::boolalpha << state.autoNB << std::endl;
-  std::cout << "Auto crRatio? " << std::boolalpha << state.autoCR << std::endl;
-  std::cout << "cellRadiusRatio: " << std::boolalpha << state.crRatio << std::endl; // only useful when preSort == 1/2 and autoCR is false
-  std::cout << "mcScale: " << state.mcScale << std::endl;
-  std::cout << "crStep: " << state.crStep << std::endl;
-  std::cout << "Interleave? " << std::boolalpha << state.interleave << std::endl;
-  std::cout << "qGasSortMode: " << state.qGasSortMode << std::endl;
-  std::cout << "pointSortMode: " << state.pointSortMode << std::endl;
-  std::cout << "querySortMode: " << state.querySortMode << std::endl;
-  std::cout << "gsrRatio: " << state.gsrRatio << std::endl; // only useful when qGasSortMode != 0
-  std::cout << "Gather after gas sort? " << std::boolalpha << state.toGather << std::endl;
-  std::cout << "========================================" << std::endl << std::endl;
-
-  try
-  {
+  try {
     setDevice(state);
 
-    Timing::reset();
+    // Timing::reset();
     uploadData(state);
 
     // call this after set device.
     initBatches(state);
 
     setupOptiX(state);
-
-    Timing::startTiming("total search time");
 
     // TODO: streamline the logic of partition and sorting.
     sortParticles(state, QUERY, state.querySortMode);
@@ -145,10 +115,8 @@ int main( int argc, char* argv[] )
     }
 
     CUDA_SYNC_CHECK();
-    Timing::stopTiming(true);
 
     if(state.sanCheck) sanityCheck(state);
-
     cleanupState(state);
   }
   catch( std::exception& e )
@@ -156,6 +124,112 @@ int main( int argc, char* argv[] )
     std::cerr << "Caught exception: " << e.what() << "\n";
     exit(1);
   }
+}
 
-  exit(0);
+/**
+@param points: null-terminated array of points in flat float array.
+  for each pair of floats at index [i, i + 1, i + 2] in the points array,
+  the three elements are the x, y, z of the point
+@param numPoints: number of points in the points array
+@param radius: radius limit for all points
+@param radii: null-terminated array of radius limits for each point in points
+  if radii is NULL, the constant radius is used.
+  if radii is not NULL, the radius parameter is ignored and the radii array is used.
+@param max_interactions: maximum number of interactions to return
+
+@returns: null-terminated array of neighbor pairs in float array.
+  for each float[] in the main array,
+  the first three elements are the x, y, z of the first point
+  and the last three elements are the x, y, z of the second point
+  radii[i] is the radius limit for points[i]
+**/
+float** getNeighborList(float* points, int numPoints, float radius, float* radii, double max_interactions) {
+  float3* t_points = new float3[numPoints];
+
+  // turn flat array of floats into array of float3's
+  for (int i = 0; i < numPoints; i++) {
+    int index = i * 3;
+    t_points[i] = make_float3(points[index], points[index + 1], points[index + 2]);
+  }
+
+  RTNNState state;
+
+  char* argv[] = {};
+  parseArgs(state, 0, argv);
+
+  // manually set state parameters
+  state.numPoints = numPoints;
+  state.numQueries = numPoints;
+  state.h_points = t_points;
+  state.h_queries = t_points;
+  state.h_radii = radii;
+  state.searchMode = "radius";
+  state.sanCheck = false;
+  state.params.radius = radius;
+  state.radius = radius;
+  state.samepq = true;
+  state.knn = max_interactions;
+
+  // enable optimizations
+  state.querySortMode = 1;
+  state.pointSortMode = 1;
+  state.interleave = true;
+  state.qGasSortMode = 2;
+
+  if (state.radii == NULL) {
+    state.autoNB = false; // keep batching and partitioning off, as it doesn't make sense for variable radii
+    state.numOfBatches = -1;
+    state.partition = false;
+  } else {
+    state.autoNB = true;
+    state.partition = true;
+  }
+
+  executeSearch(state);
+
+  float** neighbors = new float*[numPoints * numPoints]; // size of max amount of neighbor pairs
+  int processed_count = 0;
+
+  // extract result from the state
+  // rtnn stores as a flat array of ints, where each point has max k neighbors
+  // this converts to an array of neighbor pairs, described above
+  for (int batch_id = 0; batch_id < state.numOfBatches; batch_id++) {
+    
+    unsigned int* result = (unsigned int*) state.h_res[batch_id];
+    for (int p = 0; p < numPoints; p++) {
+      float3 point = state.h_points[p];
+      unsigned int prev_q = -1;
+
+      for (int n = 1; n <= state.knn; n++) { // start at 1 to skip index fields
+        unsigned long index = p * state.knn + n;
+        unsigned int q = static_cast<unsigned int*>(state.h_res[batch_id])[index];
+ 
+        // if q == UINT_MAX, that point has no more neighbors, and the rest of the qs in that section will all be UINT_MAX
+        if (q == UINT_MAX) {
+          break;
+        }
+
+        // prevent in-order duplicates, which rtnn occasionally generates
+        if (q == prev_q) {
+          continue;
+        }
+
+        float3 query = state.h_points[q];
+        neighbors[processed_count] = new float[6];
+        neighbors[processed_count][0] = query.x;
+        neighbors[processed_count][1] = query.y;
+        neighbors[processed_count][2] = query.z;
+        neighbors[processed_count][3] = point.x;
+        neighbors[processed_count][4] = point.y;
+        neighbors[processed_count][5] = point.z;
+        
+        processed_count++;
+        prev_q = q;
+      }
+    }
+  }
+
+  // null-terminate the return array
+  neighbors[processed_count] = NULL;
+  return neighbors;
 }

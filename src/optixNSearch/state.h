@@ -66,6 +66,7 @@ struct RTNNState
     float3*                     h_queries                 = nullptr;
     float3**                    h_ndpoints                = nullptr;
     float3**                    h_ndqueries               = nullptr;
+    float*                      h_radii                   = nullptr;
     int                         dim;
     bool                        msr                       = true;
     bool                        sanCheck                  = false;
@@ -77,6 +78,7 @@ struct RTNNState
     unsigned int                knn                       = 50;
     float                       gRadius                   = 2.0;
     float                       radius                    = 2.0;
+    float*                      radii                     = nullptr;
     int                         qGasSortMode              = 2; // no GAS-based sort vs. 1D vs. ID
     int                         pointSortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order
     int                         querySortMode             = 1; // no sort vs. morton order vs. raster order vs. 1D order

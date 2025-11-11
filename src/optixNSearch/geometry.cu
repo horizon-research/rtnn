@@ -39,12 +39,16 @@ extern "C" __device__ bool check_intersect(SearchType mode)
 {
   unsigned int primIdx = optixGetPrimitiveIndex();
   const float3 center = params.points[primIdx];
+
+  // if radii is null, use constant radius for all queries
+  const float radius = params.radii == NULL ? params.radius : params.radii[primIdx];
+
   const float3 ray_orig = optixGetWorldRayOrigin();
 
   bool intersect = false;
   if (mode == AABBTEST) {
-    float3 topRight = center + params.radius;
-    float3 bottomLeft = center - params.radius;
+    float3 topRight = center + radius;
+    float3 bottomLeft = center - radius;
     if ((ray_orig > bottomLeft) && (ray_orig < topRight))
       intersect = true;
 
@@ -62,7 +66,7 @@ extern "C" __device__ bool check_intersect(SearchType mode)
     float sqdist = dot(O, O);
 
     // first check excludes the query itself; same as (ray_orig != center)
-    if (sqdist < params.radius * params.radius)
+    if (sqdist <= radius * radius)
       intersect = true;
   }
 
@@ -71,14 +75,26 @@ extern "C" __device__ bool check_intersect(SearchType mode)
 
 extern "C" __device__ void write_res_radius()
 {
+ 
   unsigned int id = optixGetPayload_1();
+
   if (id < params.limit) {
     unsigned int queryIdx = optixGetPayload_0();
     unsigned int primIdx = optixGetPrimitiveIndex();
-    params.frame_buffer[queryIdx * params.limit + id] = primIdx;
-    if (id + 1 == params.limit)
-      optixReportIntersection( 0, 0 );
-    else optixSetPayload_1( id+1 );
+
+    // current index of point is stored in the first element of the results buffer
+    // if uninitialized, old_index == UINT_MAX, which will overflow to zero during the first increment
+    // operation must be atomic because multiple threads may be writing to the same index
+    unsigned int old_index = atomicAdd(&params.frame_buffer[primIdx * params.limit], 1);
+    unsigned int new_index = old_index + 1;
+
+    if (new_index < params.limit) {
+      // extra +1 needed to skip index field
+      // write query index to results buffer, in the next available slot
+      params.frame_buffer[primIdx * params.limit + new_index + 1] = queryIdx;
+    }
+
+    optixSetPayload_1( id+1 );
   }
 }
 
@@ -88,7 +104,6 @@ extern "C" __global__ void __intersection__sphere_radius()
   // bbox (even if the actual intersections are beyond the tmin and tmax).
 
   SearchType mode = params.mode;
-
   if (mode == NOTEST) {
     write_res_radius();
   } else {
@@ -103,6 +118,7 @@ extern "C" __global__ void __intersection__sphere_radius()
       write_res_radius();
     }
   }
+  
 }
 
 extern "C" __device__ void insertTopKQ(float key, unsigned int val)

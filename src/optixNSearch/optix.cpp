@@ -116,9 +116,15 @@ void filterRemoteQueries ( RTNNState& state ) {
 
 void uploadData ( RTNNState& state ) {
   Timing::startTiming("upload points and/or queries");
-    // Allocate device memory for points/queries
+    // Allocate device memory for points/queries and radaii
     thrust::device_ptr<float3> d_points_ptr;
+    thrust::device_ptr<float> d_radii_ptr;
     state.params.points = allocThrustDevicePtr(&d_points_ptr, state.numPoints, &state.d_pointers);
+
+    if (state.h_radii != NULL) {
+      state.params.radii = allocThrustDevicePtr(&d_radii_ptr, state.numPoints, &state.d_pointers);
+      thrust::copy(state.h_radii, state.h_radii + state.numPoints, d_radii_ptr); // num points is the same number of radii
+    }
 
     thrust::copy(state.h_points, state.h_points + state.numPoints, d_points_ptr);
     computeMinMax(state.numPoints, state.params.points, state.pMin, state.pMax);
@@ -159,7 +165,7 @@ void uploadData ( RTNNState& state ) {
       state.gRadius = state.radius;
       float3 O = state.Min - state.Max;
       float dist = sqrtf(dot(O, O));
-      state.radius = std::min(state.radius, dist);
+      state.radius = std::min(state.radius, dist); 
       fprintf(stdout, "\tGiven radius: %f\n", state.gRadius);
       fprintf(stdout, "\tActual radius: %f\n", state.radius);
     Timing::stopTiming(true);
@@ -265,9 +271,10 @@ CUdeviceptr createAABB( RTNNState& state, int batch_id, float radius )
     // when |gsrRatio| isn't 1.
     d_aabb = reinterpret_cast<OptixAabb*>(state.d_aabb[batch_id]);
   }
-
+  
   kGenAABB(state.params.points,
-           radius,
+          radius,
+           state.params.radii,
            numPrims,
            d_aabb,
            state.stream[batch_id]
@@ -276,7 +283,7 @@ CUdeviceptr createAABB( RTNNState& state, int batch_id, float radius )
   return reinterpret_cast<CUdeviceptr>(d_aabb);
 }
 
-void createGeometry( RTNNState& state, int batch_id, float radius )
+void createGeometry( RTNNState& state, int batch_id, float radius)
 {
   Timing::startTiming("create and upload geometry");
     CUdeviceptr d_aabb = createAABB(state, batch_id, radius);
@@ -642,8 +649,6 @@ void cleanupState( RTNNState& state )
 
       CUDA_CHECK( cudaStreamDestroy(state.stream[i]) );
 
-      CUDA_CHECK( cudaFreeHost(state.h_res[i] ) );
-      delete state.h_actQs[i];
 
       //CUDA_CHECK( cudaFree( state.d_temp_buffer_gas[i] ) );
       // if compaction isn't successful, d_gas and d_buffer_temp point will point to the same device memory.
@@ -657,7 +662,6 @@ void cleanupState( RTNNState& state )
     delete state.stream;
     delete state.numActQueries;
     delete state.launchRadius;
-    delete state.h_res;
     delete state.d_actQs;
     delete state.h_actQs;
     delete state.d_aabb;

@@ -58,6 +58,7 @@ struct Params
     float3*          points;
     float3*          queries;
     float            radius;
+    float*           radii;
     unsigned int*    d_r2q_map;
     unsigned int     limit; // 1 for the initial run to sort indices; knn for future runs.
     SearchType       mode;

@@ -4,6 +4,7 @@
 __global__ void kGenAABB_t (
       const float3* points,
       float radius,
+      float* radii,
       unsigned int N,
       OptixAabb* aabb
 )
@@ -12,9 +13,10 @@ __global__ void kGenAABB_t (
   if (particleIndex >= N) return;
 
   float3 center = points[particleIndex];
+  float actual_radius = radii == NULL ? radius : radii[particleIndex];
 
-  float3 m_min = center - radius;
-  float3 m_max = center + radius;
+  float3 m_min = center - actual_radius;
+  float3 m_max = center + actual_radius;
 
   aabb[particleIndex] =
   {
@@ -23,13 +25,21 @@ __global__ void kGenAABB_t (
   };
 }
 
-void kGenAABB(float3* points, float radius, unsigned int numPrims, OptixAabb* d_aabb, cudaStream_t stream) {
+void kGenAABB(
+  float3* points, 
+  float radius,
+  float* radii, 
+  unsigned int numPrims, 
+  OptixAabb* d_aabb, 
+  cudaStream_t stream
+) {
   unsigned int threadsPerBlock = 64;
   unsigned int numOfBlocks = numPrims / threadsPerBlock + 1;
 
   kGenAABB_t <<<numOfBlocks, threadsPerBlock, 0, stream>>> (
       points,
       radius,
+      radii,
       numPrims,
       d_aabb
      );

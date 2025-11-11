@@ -13,7 +13,12 @@ void search(RTNNState& state, int batch_id) {
 
       state.params.limit = state.knn;
       thrust::device_ptr<unsigned int> output_buffer;
-      allocThrustDevicePtr(&output_buffer, numQueries * state.params.limit, &state.d_pointers);
+
+      // every sub-array has a slot at the begining used for storing the current index
+      // so total size is (output slots) + numQueries
+      unsigned int output_buffer_size = (numQueries * state.params.limit) + numQueries;
+
+      allocThrustDevicePtr(&output_buffer, output_buffer_size, &state.d_pointers);
       // unused slots will become UINT_MAX
       fillByValue(output_buffer, numQueries * state.params.limit, UINT_MAX);
 
@@ -43,6 +48,7 @@ void search(RTNNState& state, int batch_id) {
     Timing::startTiming("result copy D2H");
       void* data;
       cudaMallocHost(reinterpret_cast<void**>(&data), numQueries * state.params.limit * sizeof(unsigned int));
+      
       state.h_res[batch_id] = data;
 
       CUDA_CHECK( cudaMemcpyAsync(
