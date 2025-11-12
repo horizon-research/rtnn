@@ -95,7 +95,7 @@ int main( int argc, char* argv[] )
 
     // samepq indicates same underlying data and sorting mode, in which case
     // queries have been sorted so no need to sort them again.
-    if (!state.samepq) sortParticles(state, POINT, state.pointSortMode);
+    if (!state.samepq) sortParticles(state, POINT_TYPE, state.pointSortMode);
 
     // early free done here too
     setupSearch(state);
