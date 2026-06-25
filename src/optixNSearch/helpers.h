@@ -138,3 +138,13 @@ __forceinline__ __device__ float3 exp( const float3& x )
     reinterpret_cast<unsigned int&>((u).y), \
     reinterpret_cast<unsigned int&>((u).z)
 
+/* Bit-cast helpers used in insertTopKQ (not in CUDA SDK headers for NVRTC). */
+static __forceinline__ __device__ float uint_as_float(unsigned int x)
+{
+    union { unsigned int i; float f; } u; u.i = x; return u.f;
+}
+static __forceinline__ __device__ unsigned int float_as_uint(float x)
+{
+    union { float f; unsigned int i; } u; u.f = x; return u.i;
+}
+

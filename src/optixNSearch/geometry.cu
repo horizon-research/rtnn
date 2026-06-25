@@ -105,6 +105,10 @@ extern "C" __global__ void __intersection__sphere_radius()
   }
 }
 
+#ifndef K
+#define K 1
+#endif
+
 extern "C" __device__ void insertTopKQ(float key, unsigned int val)
 {
   const unsigned int u0 = optixGetPayload_1();
