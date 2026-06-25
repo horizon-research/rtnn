@@ -32,6 +32,10 @@
 #include "optixNSearch.h"
 #include "helpers.h"
 
+#ifndef K
+#define K 1
+#endif
+
 extern "C" {
 __constant__ Params params;
 }
